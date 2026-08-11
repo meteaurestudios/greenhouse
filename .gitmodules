@@ -1,0 +1,3 @@
+[submodule "external/aap-core"]
+	path = external/aap-core
+	url = git@github.com:atsushieno/aap-core.git
