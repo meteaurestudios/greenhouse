@@ -5,10 +5,12 @@ import android.content.Context
 import android.media.AudioManager
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlin.math.sin
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +23,12 @@ import org.androidaudioplugin.host.core.AapHostEngine
 import org.androidaudioplugin.host.data.PluginCategory
 import org.androidaudioplugin.host.data.PluginRepository
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
+
+enum class StudioRackViewMode(val title: String) {
+    PARAMETERS("Parameter Controls"),
+    NATIVE_SURFACE("Native Plugin GUI"),
+    SPECS("Ports & Details")
+}
 
 class HostViewModel(application: Application) : AndroidViewModel(application) {
     private val tag = "HostViewModel"
@@ -41,6 +49,9 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     var activeInstance by mutableStateOf<NativeRemotePluginInstance?>(null)
+        private set
+
+    var currentViewMode by mutableStateOf(StudioRackViewMode.PARAMETERS)
         private set
 
     var audioPlayer by mutableStateOf<AapAudioPlayer?>(null)
@@ -85,6 +96,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    fun updateViewMode(mode: StudioRackViewMode) {
+        currentViewMode = mode
     }
 
     fun selectCategory(category: PluginCategory) {

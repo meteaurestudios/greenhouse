@@ -1,36 +1,41 @@
 package org.androidaudioplugin.host.ui.screens
 
+import android.os.Build
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.launch
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.composeaudiocontrols.DiatonicKeyboard
 import org.androidaudioplugin.composeaudiocontrols.DiatonicKeyboardMoveAction
 import org.androidaudioplugin.host.ui.HostViewModel
+import org.androidaudioplugin.host.ui.StudioRackViewMode
 import org.androidaudioplugin.host.ui.theme.*
+import org.androidaudioplugin.hosting.GuiHelper
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,16 +67,17 @@ fun StudioRackScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Status & Presets Strip
-        StatusAndPresetBar(
-            statusMessage = viewModel.statusMessage ?: "",
+        // Status & View Mode Selector Strip
+        StatusAndModeSelectorBar(
+            currentMode = viewModel.currentViewMode,
+            onModeSelected = { viewModel.updateViewMode(it) },
             selectedPresetIndex = viewModel.selectedPresetIndex,
             onPresetSelected = { viewModel.setPreset(it) }
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Parameters Control Rack Grid
+        // Dynamic Main Panel (Parameter Rack / Native GUI / Specs)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -81,39 +87,29 @@ fun StudioRackScreen(
                 .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp))
                 .padding(12.dp)
         ) {
-            if (activePlugin.parameters.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "This plugin exposes no adjustable parameters.",
-                        color = TextSecondary,
-                        fontSize = 14.sp
+            when (viewModel.currentViewMode) {
+                StudioRackViewMode.PARAMETERS -> {
+                    ParameterControlRack(
+                        parameters = activePlugin.parameters,
+                        parameterValues = viewModel.parameterValues,
+                        onValueChange = { param, valDouble ->
+                            viewModel.setParameterValue(param, valDouble)
+                        }
                     )
                 }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(activePlugin.parameters, key = { it.id }) { param ->
-                        val currentValue = viewModel.parameterValues[param.id] ?: param.defaultValue
-                        ParameterCard(
-                            parameter = param,
-                            value = currentValue,
-                            onValueChange = { newValue ->
-                                viewModel.setParameterValue(param, newValue)
-                            }
-                        )
-                    }
+                StudioRackViewMode.NATIVE_SURFACE -> {
+                    NativePluginSurfaceContainer(
+                        viewModel = viewModel,
+                        plugin = activePlugin
+                    )
+                }
+                StudioRackViewMode.SPECS -> {
+                    PluginPortsAndSpecsView(plugin = activePlugin)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // On-screen Live Interactive MIDI Keyboard
         MidiKeyboardSection(
@@ -170,7 +166,6 @@ private fun MasterControlBanner(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Audio Sample Test Trigger Button
                 Button(
                     onClick = onTriggerAudioSample,
                     colors = ButtonDefaults.buttonColors(
@@ -185,7 +180,6 @@ private fun MasterControlBanner(
                     Text("SAMPLE TEST", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
 
-                // Processing Power Switch Button
                 IconButton(
                     onClick = onToggleProcessing,
                     modifier = Modifier
@@ -205,8 +199,9 @@ private fun MasterControlBanner(
 }
 
 @Composable
-private fun StatusAndPresetBar(
-    statusMessage: String,
+private fun StatusAndModeSelectorBar(
+    currentMode: StudioRackViewMode,
+    onModeSelected: (StudioRackViewMode) -> Unit,
     selectedPresetIndex: Int,
     onPresetSelected: (Int) -> Unit
 ) {
@@ -215,16 +210,29 @@ private fun StatusAndPresetBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = statusMessage,
-            fontSize = 11.sp,
-            color = NeonCyan,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        // Mode Selector Chips
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            StudioRackViewMode.values().forEach { mode ->
+                val isSelected = currentMode == mode
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) ElectricBlue else StudioSurface)
+                        .border(1.dp, if (isSelected) NeonCyan else StudioPanelBorder, RoundedCornerShape(8.dp))
+                        .clickable { onModeSelected(mode) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = mode.title,
+                        fontSize = 11.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) TextPrimary else TextSecondary
+                    )
+                }
+            }
+        }
 
-        // Simple preset stepper
+        // Preset Stepper
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -233,7 +241,7 @@ private fun StatusAndPresetBar(
                 .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
                 .padding(horizontal = 6.dp, vertical = 2.dp)
         ) {
-            Text("Preset: #$selectedPresetIndex", fontSize = 11.sp, color = TextPrimary)
+            Text("Preset #$selectedPresetIndex", fontSize = 11.sp, color = TextPrimary)
             Spacer(modifier = Modifier.width(4.dp))
             IconButton(
                 onClick = { if (selectedPresetIndex > 0) onPresetSelected(selectedPresetIndex - 1) },
@@ -246,6 +254,170 @@ private fun StatusAndPresetBar(
                 modifier = Modifier.size(20.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Next Preset", tint = NeonCyan)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParameterControlRack(
+    parameters: List<ParameterInformation>,
+    parameterValues: Map<Int, Double>,
+    onValueChange: (ParameterInformation, Double) -> Unit
+) {
+    if (parameters.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "This plugin exposes no adjustable parameters.",
+                color = TextSecondary,
+                fontSize = 14.sp
+            )
+        }
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 160.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(parameters, key = { it.id }) { param ->
+                val currentValue = parameterValues[param.id] ?: param.defaultValue
+                ParameterCard(
+                    parameter = param,
+                    value = currentValue,
+                    onValueChange = { newValue -> onValueChange(param, newValue) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NativePluginSurfaceContainer(
+    viewModel: HostViewModel,
+    plugin: PluginInformation
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val activeInstance = viewModel.activeInstance
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && activeInstance != null) {
+        var surfaceHost by remember { mutableStateOf<GuiHelper.NativeEmbeddedSurfaceControlHost?>(null) }
+
+        DisposableEffect(activeInstance.instanceId) {
+            val host = GuiHelper.NativeEmbeddedSurfaceControlHost(
+                context = context,
+                pluginPackageName = plugin.packageName,
+                pluginId = plugin.pluginId ?: "",
+                instanceId = activeInstance.instanceId
+            )
+            surfaceHost = host
+
+            coroutineScope.launch {
+                try {
+                    val size = host.getPreferredSizeOrFallback(800, 600)
+                    host.connect(size.width, size.height)
+                    host.show()
+                } catch (e: Throwable) {
+                    viewModel.updateViewMode(StudioRackViewMode.PARAMETERS)
+                }
+            }
+
+            onDispose {
+                try {
+                    host.close()
+                } catch (e: Throwable) {
+                    // Ignore disposal errors
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            surfaceHost?.let { host ->
+                AndroidView(
+                    factory = { ctx ->
+                        FrameLayout(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            val surfaceView = host.surfaceView
+                            if (surfaceView.parent != null) {
+                                (surfaceView.parent as ViewGroup).removeView(surfaceView)
+                            }
+                            addView(surfaceView)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    } else {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.Layers, contentDescription = null, tint = TextMuted, modifier = Modifier.size(48.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Native Surface GUI container requires Android 11+ (API 30+).",
+                    color = TextSecondary,
+                    fontSize = 13.sp
+                )
+                Text(
+                    text = "Use the Parameter Controls tab to tweak plugin values.",
+                    color = TextMuted,
+                    fontSize = 11.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PluginPortsAndSpecsView(plugin: PluginInformation) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        item {
+            Text("PLUGIN SPECIFICATIONS", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("ID: ${plugin.pluginId ?: "N/A"}", fontSize = 12.sp, color = TextPrimary)
+            Text("Package: ${plugin.packageName}", fontSize = 12.sp, color = TextSecondary)
+            Text("Category: ${plugin.category ?: "Unspecified"}", fontSize = 12.sp, color = TextSecondary)
+            Divider(modifier = Modifier.padding(vertical = 8.dp), color = StudioPanelBorder)
+            Text("AUDIO & MIDI PORTS (${plugin.ports.size})", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = SignalGreen)
+        }
+
+        items(plugin.ports) { port ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp)),
+                colors = CardDefaults.cardColors(containerColor = StudioSurfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(port.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(
+                        text = "Dir: ${if (port.direction == 0) "IN" else "OUT"} | Type: ${port.content}",
+                        fontSize = 11.sp,
+                        color = TextSecondary
+                    )
+                }
             }
         }
     }
@@ -347,7 +519,6 @@ private fun MidiKeyboardSection(
                 .fillMaxWidth()
                 .padding(10.dp)
         ) {
-            // Keyboard Header Control Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -361,7 +532,6 @@ private fun MidiKeyboardSection(
                     letterSpacing = 1.sp
                 )
 
-                // Octave Selector Buttons
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "[\u25C0]",
@@ -388,9 +558,8 @@ private fun MidiKeyboardSection(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // Diatonic Piano Component
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
