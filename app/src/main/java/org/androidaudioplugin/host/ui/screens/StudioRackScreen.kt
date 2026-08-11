@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -21,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,11 +48,6 @@ fun StudioRackScreen(
 ) {
     val activePlugin = viewModel.selectedPlugin
 
-    if (activePlugin == null) {
-        NoPluginLoadedView(onNavigateToBrowser = onNavigateToBrowser)
-        return
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -61,13 +58,14 @@ fun StudioRackScreen(
         MasterControlBanner(
             plugin = activePlugin,
             isProcessing = viewModel.isProcessing,
+            isSamplePressed = viewModel.isSamplePressed,
             onToggleProcessing = { viewModel.toggleAudioPlayback() },
             onTriggerAudioSample = { viewModel.triggerSampleAudio() }
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Status & View Mode Selector Strip
+        // View Mode Selector & Preset Bar
         StatusAndModeSelectorBar(
             currentMode = viewModel.currentViewMode,
             onModeSelected = { viewModel.updateViewMode(it) },
@@ -75,41 +73,45 @@ fun StudioRackScreen(
             onPresetSelected = { viewModel.setPreset(it) }
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Dynamic Main Panel (Parameter Rack / Native GUI / Specs)
+        // Dynamic Main Panel (Parameter Control Rack / Native Embedded GUI / Ports Spec)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(20.dp))
                 .background(StudioSurface)
-                .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp))
+                .border(1.dp, StudioPanelBorder, RoundedCornerShape(20.dp))
                 .padding(12.dp)
         ) {
-            when (viewModel.currentViewMode) {
-                StudioRackViewMode.PARAMETERS -> {
-                    ParameterControlRack(
-                        parameters = activePlugin.parameters,
-                        parameterValues = viewModel.parameterValues,
-                        onValueChange = { param, valDouble ->
-                            viewModel.setParameterValue(param, valDouble)
-                        }
-                    )
-                }
-                StudioRackViewMode.NATIVE_SURFACE -> {
-                    NativePluginSurfaceContainer(
-                        viewModel = viewModel,
-                        plugin = activePlugin
-                    )
-                }
-                StudioRackViewMode.SPECS -> {
-                    PluginPortsAndSpecsView(plugin = activePlugin)
+            if (activePlugin == null) {
+                NoPluginLoadedView(onNavigateToBrowser = onNavigateToBrowser)
+            } else {
+                when (viewModel.currentViewMode) {
+                    StudioRackViewMode.PARAMETERS -> {
+                        ParameterControlRack(
+                            parameters = activePlugin.parameters,
+                            parameterValues = viewModel.parameterValues,
+                            onValueChange = { param, valDouble ->
+                                viewModel.setParameterValue(param, valDouble)
+                            }
+                        )
+                    }
+                    StudioRackViewMode.NATIVE_SURFACE -> {
+                        NativePluginSurfaceContainer(
+                            viewModel = viewModel,
+                            plugin = activePlugin
+                        )
+                    }
+                    StudioRackViewMode.SPECS -> {
+                        PluginPortsAndSpecsView(plugin = activePlugin)
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // On-screen Live Interactive MIDI Keyboard
         MidiKeyboardSection(
@@ -121,79 +123,143 @@ fun StudioRackScreen(
 
 @Composable
 private fun MasterControlBanner(
-    plugin: PluginInformation,
+    plugin: PluginInformation?,
     isProcessing: Boolean,
+    isSamplePressed: Boolean,
     onToggleProcessing: () -> Unit,
     onTriggerAudioSample: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(20.dp))
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(20.dp)),
         colors = CardDefaults.cardColors(containerColor = StudioSurfaceVariant)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(14.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            // Header Info: Status Badge, Full Plugin Title & Developer
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(if (isProcessing) SignalGreen else DangerRed)
+                            .background(if (isProcessing && plugin != null) SignalGreen else DangerRed)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = plugin.displayName,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Text(
-                    text = "${plugin.developer ?: "Unknown Vendor"} • ${plugin.category ?: "Audio Plugin"}",
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onTriggerAudioSample,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ElectricBlue,
-                        contentColor = TextPrimary
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("SAMPLE TEST", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (plugin != null) AccentGold.copy(alpha = 0.15f) else StudioSurface)
+                            .border(1.dp, if (plugin != null) AccentGold.copy(alpha = 0.4f) else StudioPanelBorder, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = plugin?.category?.uppercase(Locale.US) ?: "NO PLUGIN",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (plugin != null) AccentGold else TextMuted
+                        )
+                    }
                 }
 
-                IconButton(
-                    onClick = onToggleProcessing,
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(if (isProcessing) SignalGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f))
-                        .border(1.dp, if (isProcessing) SignalGreen else DangerRed, CircleShape)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PowerSettingsNew,
-                        contentDescription = "Toggle Audio Engine",
-                        tint = if (isProcessing) SignalGreen else DangerRed
-                    )
+                    val isEffect = plugin != null &&
+                            (plugin.category?.contains("Synth", ignoreCase = true) != true &&
+                             plugin.category?.contains("Instrument", ignoreCase = true) != true)
+
+                    if (isEffect) {
+                        val activeColor = if (isSamplePressed) AccentGold.copy(alpha = 0.65f) else AccentGold
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(activeColor)
+                                .border(
+                                    width = 1.dp,
+                                    color = activeColor,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable { onTriggerAudioSample() }
+                                .padding(horizontal = 14.dp, vertical = 7.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VolumeUp,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = StudioBackground
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "SAMPLE TEST",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = StudioBackground,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(20.dp))
+                    }
+
+                    if (plugin != null) {
+                        IconButton(
+                            onClick = onToggleProcessing,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(if (isProcessing) SignalGreen.copy(alpha = 0.15f) else DangerRed.copy(alpha = 0.15f))
+                                .border(1.dp, if (isProcessing) SignalGreen else DangerRed, CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PowerSettingsNew,
+                                contentDescription = "Toggle Audio Engine",
+                                tint = if (isProcessing) SignalGreen else DangerRed,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Plugin Display Name
+            Text(
+                text = plugin?.displayName ?: "No AAP Plugin Loaded",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Developer / Vendor / Package ID
+            Text(
+                text = if (plugin != null)
+                    "${plugin.developer ?: "Unknown Vendor"} • ${plugin.packageName}"
+                else
+                    "Select a plugin from the Catalog tab",
+                fontSize = 11.sp,
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -210,50 +276,59 @@ private fun StatusAndModeSelectorBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Mode Selector Chips
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            StudioRackViewMode.values().forEach { mode ->
+        // Mode Selector Chips (Scrollable so it never squeezes the preset box)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(StudioRackViewMode.values()) { mode ->
                 val isSelected = currentMode == mode
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) ElectricBlue else StudioSurface)
-                        .border(1.dp, if (isSelected) NeonCyan else StudioPanelBorder, RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) Color(0xFF282D3B) else StudioSurface)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) AccentGold.copy(alpha = 0.6f) else StudioPanelBorder,
+                            shape = RoundedCornerShape(12.dp)
+                        )
                         .clickable { onModeSelected(mode) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
                 ) {
                     Text(
                         text = mode.title,
                         fontSize = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) TextPrimary else TextSecondary
                     )
                 }
             }
         }
 
-        // Preset Stepper
+        Spacer(modifier = Modifier.width(10.dp))
+
+        // Preset Stepper Box (Guaranteed un-squeezed layout)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(StudioSurface)
-                .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
-                .padding(horizontal = 6.dp, vertical = 2.dp)
+                .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
         ) {
-            Text("Preset #$selectedPresetIndex", fontSize = 11.sp, color = TextPrimary)
-            Spacer(modifier = Modifier.width(4.dp))
+            Text("Preset #$selectedPresetIndex", fontSize = 11.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.width(6.dp))
             IconButton(
                 onClick = { if (selectedPresetIndex > 0) onPresetSelected(selectedPresetIndex - 1) },
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(24.dp)
             ) {
-                Icon(Icons.Default.Remove, contentDescription = "Prev Preset", tint = NeonCyan)
+                Icon(Icons.Default.Remove, contentDescription = "Prev Preset", tint = AccentGold, modifier = Modifier.size(16.dp))
             }
             IconButton(
                 onClick = { onPresetSelected(selectedPresetIndex + 1) },
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(24.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Next Preset", tint = NeonCyan)
+                Icon(Icons.Default.Add, contentDescription = "Next Preset", tint = AccentGold, modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -510,8 +585,8 @@ private fun MidiKeyboardSection(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(20.dp))
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(20.dp)),
         colors = CardDefaults.cardColors(containerColor = StudioSurface)
     ) {
         Column(
@@ -601,10 +676,10 @@ private fun NoPluginLoadedView(onNavigateToBrowser: () -> Unit) {
             modifier = Modifier.padding(24.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.PlayArrow,
+                imageVector = Icons.Default.Tune,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
-                tint = TextMuted
+                tint = ElectricBlue
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
@@ -615,10 +690,9 @@ private fun NoPluginLoadedView(onNavigateToBrowser: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Open the Plugin Browser catalog to select and instantiate a synth or audio effect plugin.",
+                text = "Explore system-wide Audio Plugin Services (Instruments & Effects) from the catalog.",
                 fontSize = 13.sp,
-                color = TextSecondary,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                color = TextSecondary
             )
             Spacer(modifier = Modifier.height(20.dp))
             Button(
@@ -626,7 +700,7 @@ private fun NoPluginLoadedView(onNavigateToBrowser: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = StudioBackground),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("BROWSE PLUGINS", fontWeight = FontWeight.Bold)
+                Text("OPEN PLUGIN CATALOG", fontWeight = FontWeight.Bold)
             }
         }
     }

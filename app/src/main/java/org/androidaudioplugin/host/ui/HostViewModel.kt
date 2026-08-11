@@ -5,12 +5,10 @@ import android.content.Context
 import android.media.AudioManager
 import android.util.Log
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import kotlin.math.sin
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -60,10 +58,13 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     var isProcessing by mutableStateOf(false)
         private set
 
+    var isSamplePressed by mutableStateOf(false)
+        private set
+
     var isInstantiating by mutableStateOf(false)
         private set
 
-    var statusMessage by mutableStateOf<String?>("Scan complete. Select a plugin to load.")
+    var statusMessage by mutableStateOf<String?>("Scan complete. Select an AAP plugin from the catalog to load.")
         private set
 
     val parameterValues = mutableStateMapOf<Int, Double>()
@@ -136,31 +137,33 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             isInstantiating = true
             statusMessage = "Instantiating ${plugin.displayName}..."
 
-            // Teardown previous player and instance if any
             unloadActivePlugin()
 
             try {
                 selectedPlugin = plugin
 
-                // Create audio player for engine output
                 val player = AapAudioPlayer.create(sampleRate, framesPerCallback)
                 player.loadSampleAudio(getApplication())
 
-                // Instantiate native remote plugin instance
                 val instance = hostEngine.instantiatePlugin(plugin, sampleRate, framesPerCallback)
                 activeInstance = instance
 
-                // Attach plugin instance to audio player engine
                 player.attachPlugin(instance)
                 audioPlayer = player
 
-                // Initialize parameter defaults
                 parameterValues.clear()
                 plugin.parameters.forEach { param ->
                     parameterValues[param.id] = param.defaultValue
                 }
 
-                statusMessage = "Successfully loaded ${plugin.displayName}"
+                toggleAudioPlayback()
+
+                val category = repository.getPluginCategory(plugin)
+                statusMessage = if (category == PluginCategory.EFFECT) {
+                    "Loaded Effect: ${plugin.displayName}. Tap 'SAMPLE TEST' to hear audio effect!"
+                } else {
+                    "Loaded Instrument: ${plugin.displayName}. Play keys on the MIDI Keyboard!"
+                }
             } catch (e: Throwable) {
                 Log.e(tag, "Failed to load plugin ${plugin.displayName}", e)
                 statusMessage = "Error loading plugin: ${e.localizedMessage ?: e.message}"
@@ -178,17 +181,22 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         if (isProcessing) {
             player.pause()
             isProcessing = false
-            statusMessage = "Audio processing paused."
+            statusMessage = "Audio engine paused."
         } else {
             player.start()
             isProcessing = true
-            statusMessage = "Audio processing active."
+            statusMessage = "Audio engine ACTIVE (Low-latency Oboe running)."
         }
     }
 
     fun triggerSampleAudio() {
         audioPlayer?.playSampleAudio()
-        statusMessage = "Playing test sample audio through plugin..."
+        isSamplePressed = true
+        statusMessage = "Playing test sample audio..."
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(300)
+            isSamplePressed = false
+        }
     }
 
     fun sendNoteOn(note: Int, velocity: Float = 1.0f) {
@@ -217,9 +225,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             Log.e(tag, "Error closing audio player", e)
         }
         audioPlayer = null
-        activeInstance = null
         isProcessing = false
-        parameterValues.clear()
     }
 
     override fun onCleared() {

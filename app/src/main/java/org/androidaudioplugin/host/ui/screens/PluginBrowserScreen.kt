@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
@@ -24,10 +25,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.host.data.PluginCategory
+import java.util.Locale
 import org.androidaudioplugin.host.ui.HostViewModel
 import org.androidaudioplugin.host.ui.theme.*
 
@@ -57,14 +60,14 @@ fun PluginBrowserScreen(
         ) {
             Column {
                 Text(
-                    text = "PLUGIN BROWSER",
+                    text = "AAP PLUGIN CATALOG",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary,
                     letterSpacing = 1.5.sp
                 )
                 Text(
-                    text = "${viewModel.filteredPlugins.size} AAP plugin(s) available",
+                    text = "${viewModel.filteredPlugins.size} AAP plugin(s) available on system",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
@@ -92,9 +95,10 @@ fun PluginBrowserScreen(
             onValueChange = { viewModel.updateSearchQuery(it) },
             placeholder = { Text("Search by name, developer, or ID...", color = TextMuted) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = NeonCyan) },
+            shape = RoundedCornerShape(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(StudioSurface),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = NeonCyan,
@@ -114,23 +118,25 @@ fun PluginBrowserScreen(
         ) {
             items(categories) { category ->
                 val isSelected = viewModel.selectedCategory.id == category.id
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { viewModel.selectCategory(category) },
-                    label = { Text(category.title, fontSize = 13.sp) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = ElectricBlue,
-                        selectedLabelColor = TextPrimary,
-                        containerColor = StudioSurfaceVariant,
-                        labelColor = TextSecondary
-                    ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true,
-                        selected = isSelected,
-                        borderColor = StudioPanelBorder,
-                        selectedBorderColor = NeonCyan
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) Color(0xFF282D3B) else StudioSurface)
+                        .border(
+                            width = 1.dp,
+                            color = if (isSelected) AccentGold.copy(alpha = 0.6f) else StudioPanelBorder,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clickable { viewModel.selectCategory(category) }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = category.title,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) TextPrimary else TextSecondary
                     )
-                )
+                }
             }
         }
 
@@ -161,7 +167,7 @@ fun PluginBrowserScreen(
             }
         } else {
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -189,15 +195,24 @@ private fun PluginCard(
     isInstantiating: Boolean,
     onLoad: () -> Unit
 ) {
+    val catLower = plugin.category?.lowercase() ?: ""
+    val tagColor = when {
+        catLower.contains("synth") || catLower.contains("instrument") -> AccentViolet
+        catLower.contains("effect") || catLower.contains("delay") || catLower.contains("reverb") || catLower.contains("chorus") -> AccentCyan
+        else -> AccentGold
+    }
+    val tagBg = tagColor.copy(alpha = 0.12f)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .border(
                 width = if (isSelected) 1.5.dp else 1.dp,
-                color = if (isSelected) NeonCyan else StudioPanelBorder,
+                color = if (isSelected) AccentGold else StudioPanelBorder,
                 shape = RoundedCornerShape(16.dp)
-            ),
+            )
+            .clickable { onLoad() },
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) StudioSurfaceVariant else StudioSurface
         )
@@ -205,111 +220,113 @@ private fun PluginCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
+            // Main Row: Title & Dev + Category & Load Action Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = plugin.displayName,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(tagBg)
+                                .border(1.dp, tagColor.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = plugin.category?.uppercase(Locale.US) ?: "PLUGIN",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = tagColor,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
                     Text(
-                        text = plugin.displayName,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = plugin.developer ?: "Unknown Developer",
-                        fontSize = 12.sp,
-                        color = TextSecondary
+                        text = "${plugin.developer ?: "Unknown Vendor"} • ${plugin.parameters.size} params • ${plugin.ports.size} ports",
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Category Tag
+                Spacer(modifier = Modifier.width(12.dp))
+
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(
-                            if (plugin.category?.contains("Synth", ignoreCase = true) == true) NeonPurple.copy(alpha = 0.2f)
-                            else ElectricBlue.copy(alpha = 0.2f)
+                            if (isSelected) SignalGreen.copy(alpha = 0.15f) else Color(0xFF252A36)
                         )
                         .border(
-                            1.dp,
-                            if (plugin.category?.contains("Synth", ignoreCase = true) == true) NeonPurple else ElectricBlue,
-                            RoundedCornerShape(8.dp)
+                            width = 1.dp,
+                            color = if (isSelected) SignalGreen else Color(0xFF3B4356),
+                            shape = RoundedCornerShape(12.dp)
                         )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = plugin.category ?: "Plugin",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Badges Row (Parameters, Ports, Package)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SpecBadge(label = "${plugin.parameters.size} Params")
-                SpecBadge(label = "${plugin.ports.size} Ports")
-                if (plugin.extensions.isNotEmpty()) {
-                    SpecBadge(label = "${plugin.extensions.size} Exts", color = SignalGreen)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Action Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = plugin.packageName,
-                    fontSize = 10.sp,
-                    color = TextMuted,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Button(
-                    onClick = onLoad,
-                    enabled = !isInstantiating,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isSelected) SignalGreen else NeonCyan,
-                        contentColor = StudioBackground
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        .clickable(enabled = !isInstantiating) { onLoad() }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     if (isInstantiating) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = StudioBackground,
+                            modifier = Modifier.size(14.dp),
+                            color = if (isSelected) SignalGreen else TextPrimary,
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Icon(
-                            imageVector = if (isSelected) Icons.Default.Check else Icons.Default.MusicNote,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isSelected) "ACTIVE IN RACK" else "LOAD PLUGIN",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = SignalGreen
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Text(
+                                text = if (isSelected) "LOADED" else "LOAD",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) SignalGreen else TextPrimary,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Sub-row: Package Identifier
+            Text(
+                text = plugin.packageName,
+                fontSize = 9.sp,
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
