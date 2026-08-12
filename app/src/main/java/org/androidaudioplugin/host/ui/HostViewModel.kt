@@ -87,6 +87,51 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
     val slotParameterValues = Array(3) { mutableStateMapOf<Int, Double>() }
 
+    // Persistent Keyboard State (survives screen navigation and slot changes)
+    val keyboardNoteOnStates = mutableStateListOf<Long>().apply { addAll(List(128) { 0L }) }
+    var keyboardOctave by mutableIntStateOf(4)
+    var isKeyboardHoldActive by mutableStateOf(false)
+
+    fun toggleKeyboardHold() {
+        isKeyboardHoldActive = !isKeyboardHoldActive
+        if (!isKeyboardHoldActive) {
+            releaseAllKeyboardNotes()
+        }
+    }
+
+    fun releaseAllKeyboardNotes() {
+        for (i in 0..127) {
+            if (keyboardNoteOnStates[i] > 0L) {
+                keyboardNoteOnStates[i] = 0L
+                sendNoteOff(i)
+            }
+        }
+    }
+
+    fun onKeyboardNoteOn(note: Int) {
+        if (note !in 0..127) return
+        if (isKeyboardHoldActive) {
+            if (keyboardNoteOnStates[note] > 0L) {
+                keyboardNoteOnStates[note] = 0L
+                sendNoteOff(note)
+            } else {
+                keyboardNoteOnStates[note] = 1L
+                sendNoteOn(note)
+            }
+        } else {
+            keyboardNoteOnStates[note] = 1L
+            sendNoteOn(note)
+        }
+    }
+
+    fun onKeyboardNoteOff(note: Int) {
+        if (note !in 0..127) return
+        if (!isKeyboardHoldActive) {
+            keyboardNoteOnStates[note] = 0L
+            sendNoteOff(note)
+        }
+    }
+
     val sampleRate: Int
     val framesPerCallback: Int
 
@@ -113,6 +158,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     fun openBrowserForSlot(slotIndex: Int) {
         if (slotIndex in 0..2) {
             targetBrowserSlotIndex = slotIndex
+            activeSlotIndex = slotIndex
             selectedCategory = if (slotIndex == 0) PluginCategory.SYNTH else PluginCategory.EFFECT
         }
     }
@@ -165,6 +211,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadPluginIntoSlot(slotIndex: Int, plugin: PluginInformation) {
         if (slotIndex !in 0..2) return
+        activeSlotIndex = slotIndex
+        targetBrowserSlotIndex = slotIndex
 
         viewModelScope.launch {
             isInstantiating = true
@@ -189,6 +237,11 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
+                slotParameterValues[slotIndex].clear()
+                plugin.parameters.forEach { param ->
+                    slotParameterValues[slotIndex][param.id] = param.defaultValue
+                }
+
                 slots[slotIndex] = slots[slotIndex].copy(
                     pluginInfo = plugin,
                     instance = instance,
@@ -197,12 +250,6 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 audioPlayer?.setSlotPlugin(slotIndex, instance)
-
-                slotParameterValues[slotIndex].clear()
-                plugin.parameters.forEach { param ->
-                    slotParameterValues[slotIndex][param.id] = param.defaultValue
-                }
-
                 activeSlotIndex = slotIndex
 
                 if (!isProcessing) {

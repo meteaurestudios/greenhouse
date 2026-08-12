@@ -106,36 +106,38 @@ fun StudioRackScreen(
                 .border(1.dp, StudioPanelBorder, RoundedCornerShape(20.dp))
                 .padding(12.dp)
         ) {
-            if (activePlugin == null) {
-                NoPluginInSlotView(
-                    slot = activeSlot,
-                    onOpenBrowser = {
-                        viewModel.openBrowserForSlot(activeSlot.index)
-                        onNavigateToBrowser()
-                    }
-                )
-            } else {
-                when (viewModel.currentViewMode) {
-                    StudioRackViewMode.PARAMETERS -> {
-                        ParameterControlRack(
-                            slotIndex = activeSlot.index,
-                            pluginId = activePlugin.pluginId ?: "",
-                            parameters = activePlugin.parameters,
-                            parameterValues = viewModel.slotParameterValues[activeSlot.index],
-                            onValueChange = { param, valDouble ->
-                                viewModel.setParameterValue(activeSlot.index, param, valDouble)
-                            }
-                        )
-                    }
-                    StudioRackViewMode.NATIVE_SURFACE -> {
-                        NativePluginSurfaceContainer(
-                            viewModel = viewModel,
-                            slot = activeSlot,
-                            plugin = activePlugin
-                        )
-                    }
-                    StudioRackViewMode.SPECS -> {
-                        PluginPortsAndSpecsView(plugin = activePlugin)
+            key(activeSlot.index, activePlugin?.pluginId, activePlugin?.parameters?.size) {
+                if (activePlugin == null) {
+                    NoPluginInSlotView(
+                        slot = activeSlot,
+                        onOpenBrowser = {
+                            viewModel.openBrowserForSlot(activeSlot.index)
+                            onNavigateToBrowser()
+                        }
+                    )
+                } else {
+                    when (viewModel.currentViewMode) {
+                        StudioRackViewMode.PARAMETERS -> {
+                            ParameterControlRack(
+                                slotIndex = activeSlot.index,
+                                pluginId = activePlugin.pluginId ?: "",
+                                parameters = activePlugin.parameters,
+                                parameterValues = viewModel.slotParameterValues[activeSlot.index],
+                                onValueChange = { param, valDouble ->
+                                    viewModel.setParameterValue(activeSlot.index, param, valDouble)
+                                }
+                            )
+                        }
+                        StudioRackViewMode.NATIVE_SURFACE -> {
+                            NativePluginSurfaceContainer(
+                                viewModel = viewModel,
+                                slot = activeSlot,
+                                plugin = activePlugin
+                            )
+                        }
+                        StudioRackViewMode.SPECS -> {
+                            PluginPortsAndSpecsView(plugin = activePlugin)
+                        }
                     }
                 }
             }
@@ -144,10 +146,7 @@ fun StudioRackScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         // On-screen Live Interactive MIDI Keyboard (Routes to Slot 0: Instrument)
-        MidiKeyboardSection(
-            onNoteOn = { note -> viewModel.sendNoteOn(note) },
-            onNoteOff = { note -> viewModel.sendNoteOff(note) }
-        )
+        MidiKeyboardSection(viewModel = viewModel)
     }
 }
 
@@ -292,11 +291,11 @@ private fun SignalRackHeader(
             }
 
             Card(
+                onClick = { onSelectSlot(slot.index) },
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(16.dp))
-                    .clickable { onSelectSlot(slot.index) },
+                    .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected) StudioSurfaceVariant else StudioSurface
                 )
@@ -695,91 +694,182 @@ private fun ParameterCard(
     }
 }
 
+private fun getNoteName(note: Int): String {
+    val noteNames = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+    val name = noteNames[note % 12]
+    val oct = (note / 12) - 2
+    return "$name$oct"
+}
+
 @Composable
 private fun MidiKeyboardSection(
-    onNoteOn: (Int) -> Unit,
-    onNoteOff: (Int) -> Unit
+    viewModel: HostViewModel
 ) {
-    val noteOnStates = remember { mutableStateListOf<Long>().apply { addAll(List(128) { 0L }) } }
-    var octave by remember { mutableIntStateOf(4) }
+    val noteOnStates = viewModel.keyboardNoteOnStates
+    val octave = viewModel.keyboardOctave
+    val isHoldEnabled = viewModel.isKeyboardHoldActive
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(20.dp)),
-        colors = CardDefaults.cardColors(containerColor = StudioSurface)
+    // Start & End notes covering full MIDI range 0..127 across octaves 0..9
+    val startNote = octave * 12
+    val endNote = minOf(127, (octave + 2) * 12 - 1)
+    val startNoteName = getNoteName(startNote)
+    val endNoteName = getNoteName(endNote)
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp)
+        // Controls Row: Octave Stepper on Left + HOLD Button on Right
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            // Left: Octave Stepper (- / Note Range / +)
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = "MIDI KEYBOARD (INSTRUMENT SLOT 1)",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextSecondary,
-                    letterSpacing = 1.sp
-                )
+                // Octave Down (-)
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (octave > 0) StudioSurfaceVariant else StudioSurfaceVariant.copy(alpha = 0.4f))
+                        .border(1.dp, if (octave > 0) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
+                        .clickable(enabled = octave > 0) { viewModel.keyboardOctave = octave - 1 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Remove,
+                        contentDescription = "Octave Down",
+                        tint = if (octave > 0) AccentGold else TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "[\u25C0]",
-                        fontSize = 14.sp,
-                        color = NeonCyan,
-                        modifier = Modifier
-                            .clickable { if (octave > 0) octave-- }
-                            .padding(horizontal = 6.dp)
-                    )
-                    Text(
-                        text = "Octave: $octave",
-                        fontSize = 12.sp,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "[\u25B6]",
-                        fontSize = 14.sp,
-                        color = NeonCyan,
-                        modifier = Modifier
-                            .clickable { if (octave < 8) octave++ }
-                            .padding(horizontal = 6.dp)
+                // Note Range Display Badge (e.g. C2 – B3, spans full MIDI range 0..127 across octaves 0..9)
+                Box(
+                    modifier = Modifier
+                        .height(30.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(StudioSurfaceVariant)
+                        .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(SignalGreen)
+                        )
+                        Text(
+                            text = "$startNoteName – $endNoteName",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                }
+
+                // Octave Up (+)
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (octave < 9) StudioSurfaceVariant else StudioSurfaceVariant.copy(alpha = 0.4f))
+                        .border(1.dp, if (octave < 9) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
+                        .clickable(enabled = octave < 9) { viewModel.keyboardOctave = octave + 1 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Octave Up",
+                        tint = if (octave < 9) AccentGold else TextMuted,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
+            // Right: HOLD Mode Toggle Button
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
+                    .height(30.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isHoldEnabled) AccentCyan.copy(alpha = 0.2f) else StudioSurfaceVariant)
+                    .border(
+                        width = 1.dp,
+                        color = if (isHoldEnabled) AccentCyan else StudioPanelBorder,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clickable {
+                        viewModel.toggleKeyboardHold()
+                    }
+                    .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.Center
             ) {
-                DiatonicKeyboard(
-                    noteOnStates = noteOnStates.toList(),
-                    octaveZeroBased = octave,
-                    moveAction = DiatonicKeyboardMoveAction.NoteChange,
-                    onNoteOn = { note, _ ->
-                        if (note in 0..127) {
-                            noteOnStates[note] = 1L
-                            onNoteOn(note)
-                        }
-                    },
-                    onNoteOff = { note, _ ->
-                        if (note in 0..127) {
-                            noteOnStates[note] = 0L
-                            onNoteOff(note)
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(if (isHoldEnabled) AccentCyan else TextMuted)
+                    )
+                    Text(
+                        text = "HOLD",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isHoldEnabled) AccentCyan else TextSecondary,
+                        letterSpacing = 0.5.sp
+                    )
+                }
             }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Keyboard Surface (Positioned at bottom of page)
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(95.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF0F1117))
+                .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
+                .padding(2.dp)
+        ) {
+            val availableWidth = maxWidth
+            val computedWhiteKeyWidth = availableWidth / 14
+
+            DiatonicKeyboard(
+                noteOnStates = noteOnStates.toList(),
+                octaveZeroBased = octave,
+                numWhiteKeys = 14, // 2 Full Octaves
+                whiteKeyWidth = computedWhiteKeyWidth,
+                totalWidth = availableWidth,
+                totalHeight = 90.dp,
+                blackKeyHeight = 52.dp,
+                whiteKeyColor = Color(0xFFF1F5F9), // Pristine Matte Off-White
+                blackKeyColor = Color(0xFF171A21), // Deep Obsidian Matte Black
+                whiteNoteOnColor = ElectricBlue,    // High-visibility Electric Blue for all key highlights
+                blackNoteOnColor = ElectricBlue,    // High-visibility Electric Blue for all key highlights
+                moveAction = DiatonicKeyboardMoveAction.NoteChange,
+                onNoteOn = { note, _ ->
+                    viewModel.onKeyboardNoteOn(note)
+                },
+                onNoteOff = { note, _ ->
+                    viewModel.onKeyboardNoteOff(note)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }
