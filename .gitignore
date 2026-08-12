@@ -35,5 +35,4 @@ google-services.json
 
 gradlew
 gradlew.bat
-gradle/wrapper
 gradle/gradle-daemon-*
