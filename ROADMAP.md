@@ -8,6 +8,7 @@ This document outlines future tasks, technical enhancements, and UX improvements
 
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
+| **Process Audio Code in C++** | `High` | Migrate the real-time audio rendering loop and 3-slot plugin graph execution from Kotlin/JNI to native C++ (NDK) for ultra-low latency and maximum efficiency. |
 | **Real-Time DSP CPU Load Meter** | `High` | Add a real-time CPU meter (%) in the workstation status banner showing audio callback DSP processing load. |
 | **Master Output Gain & Limiter** | `High` | Add a master output gain slider and soft-clipper/limiter on the workstation banner to prevent digital clipping when testing high-gain plugins or playing polyphonic synths. |
 | **Audio File Drag-and-Drop / Custom Sample Loader** | `Medium` | Allow users to load custom `.wav` or `.ogg` audio files for the "SAMPLE TEST" button instead of using only the default asset. |
