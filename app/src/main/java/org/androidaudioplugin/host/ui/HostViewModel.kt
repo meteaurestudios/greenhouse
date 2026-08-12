@@ -175,6 +175,20 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val instance = hostEngine.instantiatePlugin(plugin, sampleRate, framesPerCallback)
 
+                // Populate dynamic parameters and ports if missing from static aap_metadata.xml
+                if (plugin.parameters.isEmpty()) {
+                    val paramCount = instance.getParameterCount()
+                    for (i in 0 until paramCount) {
+                        plugin.parameters.add(instance.getParameter(i))
+                    }
+                }
+                if (plugin.ports.isEmpty()) {
+                    val portCount = instance.getPortCount()
+                    for (i in 0 until portCount) {
+                        plugin.ports.add(instance.getPort(i))
+                    }
+                }
+
                 slots[slotIndex] = slots[slotIndex].copy(
                     pluginInfo = plugin,
                     instance = instance,

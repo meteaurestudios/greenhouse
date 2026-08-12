@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
@@ -23,7 +25,8 @@ import org.androidaudioplugin.host.ui.theme.*
 
 @Composable
 fun EngineSettingsScreen(
-    viewModel: HostViewModel
+    viewModel: HostViewModel,
+    onNavigateBack: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -31,19 +34,39 @@ fun EngineSettingsScreen(
             .background(StudioBackground)
             .padding(16.dp)
     ) {
-        // Header
-        Text(
-            text = "AUDIO ENGINE & DIAGNOSTICS",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextPrimary,
-            letterSpacing = 1.5.sp
-        )
-        Text(
-            text = "System audio specs, Oboe buffer configuration & AAP status",
-            fontSize = 12.sp,
-            color = TextSecondary
-        )
+        // Header with Back Button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onNavigateBack,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(StudioSurfaceVariant)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back to Studio Rack",
+                    tint = TextPrimary
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "AUDIO ENGINE & DIAGNOSTICS",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    letterSpacing = 1.2.sp
+                )
+                Text(
+                    text = "System audio specs, Oboe buffer configuration & AAP status",
+                    fontSize = 11.sp,
+                    color = TextSecondary
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

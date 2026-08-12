@@ -34,6 +34,8 @@ import java.util.Locale
 import org.androidaudioplugin.host.ui.HostViewModel
 import org.androidaudioplugin.host.ui.theme.*
 
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+
 @Composable
 fun PluginBrowserScreen(
     viewModel: HostViewModel,
@@ -59,19 +61,34 @@ fun PluginBrowserScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "SELECT PLUGIN FOR ${targetSlot.title.uppercase(Locale.US)}",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AccentGold,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    text = "${targetSlot.slotType} Slot • ${viewModel.filteredPlugins.size} AAP plugin(s) available",
-                    fontSize = 12.sp,
-                    color = TextSecondary
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onNavigateToRack,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(StudioSurfaceVariant)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back to Rack",
+                        tint = TextPrimary
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "SELECT PLUGIN FOR ${targetSlot.title.uppercase(Locale.US)}",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AccentGold,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "${targetSlot.slotType} Slot • ${viewModel.filteredPlugins.size} AAP plugin(s) available",
+                        fontSize = 11.sp,
+                        color = TextSecondary
+                    )
+                }
             }
 
             IconButton(

@@ -12,6 +12,12 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -44,73 +50,15 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-sealed class NavigationTab(val route: String, val title: String, val icon: ImageVector) {
-    object Browser : NavigationTab("browser", "Browser", Icons.Default.Tune)
-    object Rack : NavigationTab("rack", "Studio Rack", Icons.Default.MusicNote)
-    object Settings : NavigationTab("settings", "Diagnostics", Icons.Default.Settings)
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainHostApp(
     viewModel: HostViewModel = viewModel()
 ) {
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route ?: NavigationTab.Browser.route
-
-    val tabs = listOf(
-        NavigationTab.Browser,
-        NavigationTab.Rack,
-        NavigationTab.Settings
-    )
-
-    val navigateToRoute: (String) -> Unit = { targetRoute ->
-        if (currentRoute != targetRoute) {
-            navController.navigate(targetRoute) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                }
-                launchSingleTop = true
-                restoreState = true
-            }
-        }
-    }
 
     Scaffold(
-        bottomBar = {
-            NavigationBar(
-                containerColor = StudioSurface,
-                contentColor = TextPrimary,
-                tonalElevation = 8.dp
-            ) {
-                tabs.forEach { tab ->
-                    val isSelected = currentRoute == tab.route
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { navigateToRoute(tab.route) },
-                        icon = {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.title,
-                                tint = if (isSelected) NeonCyan else TextMuted
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.title,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) NeonCyan else TextMuted
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = ElectricBlue.copy(alpha = 0.2f)
-                        )
-                    )
-                }
-            }
-        }
+        contentWindowInsets = WindowInsets.systemBars
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -119,25 +67,27 @@ fun MainHostApp(
         ) {
             NavHost(
                 navController = navController,
-                startDestination = NavigationTab.Rack.route
+                startDestination = "rack"
             ) {
-                composable(NavigationTab.Browser.route) {
-                    PluginBrowserScreen(
-                        viewModel = viewModel,
-                        onNavigateToRack = { navigateToRoute(NavigationTab.Rack.route) }
-                    )
-                }
-
-                composable(NavigationTab.Rack.route) {
+                composable("rack") {
                     StudioRackScreen(
                         viewModel = viewModel,
-                        onNavigateToBrowser = { navigateToRoute(NavigationTab.Browser.route) }
+                        onNavigateToBrowser = { navController.navigate("browser") },
+                        onNavigateToSettings = { navController.navigate("settings") }
                     )
                 }
 
-                composable(NavigationTab.Settings.route) {
+                composable("browser") {
+                    PluginBrowserScreen(
+                        viewModel = viewModel,
+                        onNavigateToRack = { navController.popBackStack() }
+                    )
+                }
+
+                composable("settings") {
                     EngineSettingsScreen(
-                        viewModel = viewModel
+                        viewModel = viewModel,
+                        onNavigateBack = { navController.popBackStack() }
                     )
                 }
             }

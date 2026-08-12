@@ -47,7 +47,8 @@ import java.util.Locale
 @Composable
 fun StudioRackScreen(
     viewModel: HostViewModel,
-    onNavigateToBrowser: () -> Unit
+    onNavigateToBrowser: () -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     val activeSlot = viewModel.activeSlot
     val activePlugin = activeSlot.pluginInfo
@@ -64,7 +65,8 @@ fun StudioRackScreen(
             isProcessing = viewModel.isProcessing,
             isSamplePressed = viewModel.isSamplePressed,
             onToggleProcessing = { viewModel.toggleAudioPlayback() },
-            onTriggerAudioSample = { viewModel.triggerSampleAudio() }
+            onTriggerAudioSample = { viewModel.triggerSampleAudio() },
+            onOpenSettings = onNavigateToSettings
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -116,6 +118,8 @@ fun StudioRackScreen(
                 when (viewModel.currentViewMode) {
                     StudioRackViewMode.PARAMETERS -> {
                         ParameterControlRack(
+                            slotIndex = activeSlot.index,
+                            pluginId = activePlugin.pluginId ?: "",
                             parameters = activePlugin.parameters,
                             parameterValues = viewModel.slotParameterValues[activeSlot.index],
                             onValueChange = { param, valDouble ->
@@ -153,7 +157,8 @@ private fun MasterControlBanner(
     isProcessing: Boolean,
     isSamplePressed: Boolean,
     onToggleProcessing: () -> Unit,
-    onTriggerAudioSample: () -> Unit
+    onTriggerAudioSample: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -172,6 +177,7 @@ private fun MasterControlBanner(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Left: Status Dot, Title & Settings Cog
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -179,40 +185,59 @@ private fun MasterControlBanner(
                             .clip(CircleShape)
                             .background(if (isProcessing) SignalGreen else DangerRed)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "AAP SIGNAL CHAIN",
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.5.sp
                     )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .clickable { onOpenSettings() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Diagnostics & Info",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Right: TEST Button & Engine Power Toggle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     val interactionSource = remember { MutableInteractionSource() }
                     val isPressed by interactionSource.collectIsPressedAsState()
                     val activeColor = if (isPressed) AccentGold.copy(alpha = 0.5f) else AccentGold
 
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(activeColor)
                             .clickable(
                                 interactionSource = interactionSource,
                                 indication = null
                             ) { onTriggerAudioSample() }
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.VolumeUp,
                                 contentDescription = null,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(13.dp),
                                 tint = StudioBackground
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text = "TEST",
                                 fontSize = 10.sp,
@@ -222,21 +247,20 @@ private fun MasterControlBanner(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(24.dp))
-
-                    IconButton(
-                        onClick = onToggleProcessing,
+                    Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
                             .background(if (isProcessing) SignalGreen.copy(alpha = 0.15f) else DangerRed.copy(alpha = 0.15f))
                             .border(1.dp, if (isProcessing) SignalGreen else DangerRed, CircleShape)
+                            .clickable { onToggleProcessing() },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.PowerSettingsNew,
                             contentDescription = "Toggle Engine",
                             tint = if (isProcessing) SignalGreen else DangerRed,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
@@ -430,6 +454,8 @@ private fun StatusAndModeSelectorBar(
 
 @Composable
 private fun ParameterControlRack(
+    slotIndex: Int,
+    pluginId: String,
     parameters: List<ParameterInformation>,
     parameterValues: Map<Int, Double>,
     onValueChange: (ParameterInformation, Double) -> Unit
@@ -452,7 +478,7 @@ private fun ParameterControlRack(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(parameters, key = { it.id }) { param ->
+            items(parameters, key = { param -> "${slotIndex}_${pluginId}_${param.id}" }) { param ->
                 val currentValue = parameterValues[param.id] ?: param.defaultValue
                 ParameterCard(
                     parameter = param,
