@@ -305,45 +305,63 @@ private fun SignalRackHeader(
                         .fillMaxWidth()
                         .padding(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    // Symmetrical Top Header: Far-Left Bypass, Centered Label Box, Far-Right Close Cross
+                    Box(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (slot.index == 0) AccentViolet.copy(alpha = 0.2f) else AccentCyan.copy(alpha = 0.2f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = slot.slotType.uppercase(Locale.US),
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (slot.index == 0) AccentViolet else AccentCyan
+                        // Far Left: Bypass power icon (if loaded)
+                        if (isLoaded) {
+                            Icon(
+                                imageVector = Icons.Default.PowerSettingsNew,
+                                contentDescription = "Bypass",
+                                tint = if (slot.isBypassed) DangerRed else SignalGreen,
+                                modifier = Modifier
+                                    .padding(start = 3.dp)
+                                    .size(15.dp)
+                                    .align(Alignment.CenterStart)
+                                    .clip(CircleShape)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { onToggleBypass(slot.index) }
                             )
                         }
 
+                        // Center: Dead-Centered Slot Type Capsule Label Box
+                        val badgeColor = if (slot.index == 0) AccentViolet else AccentCyan
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .border(1.dp, badgeColor.copy(alpha = 0.7f), CircleShape)
+                                .clip(CircleShape)
+                                .background(badgeColor.copy(alpha = 0.15f))
+                                .padding(horizontal = 7.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = slot.slotType.lowercase(Locale.US),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = badgeColor
+                            )
+                        }
+
+                        // Far Right: Unload / Clear close icon (if loaded)
                         if (isLoaded) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.PowerSettingsNew,
-                                    contentDescription = "Bypass",
-                                    tint = if (slot.isBypassed) DangerRed else SignalGreen,
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clickable { onToggleBypass(slot.index) }
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Clear",
-                                    tint = TextMuted,
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clickable { onUnloadSlot(slot.index) }
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear",
+                                tint = TextMuted,
+                                modifier = Modifier
+                                    .padding(end = 3.dp)
+                                    .size(15.dp)
+                                    .align(Alignment.CenterEnd)
+                                    .clip(CircleShape)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { onUnloadSlot(slot.index) }
+                            )
                         }
                     }
 

@@ -41,12 +41,6 @@ fun PluginBrowserScreen(
     viewModel: HostViewModel,
     onNavigateToRack: () -> Unit
 ) {
-    val categories = listOf(
-        PluginCategory.ALL,
-        PluginCategory.SYNTH,
-        PluginCategory.EFFECT,
-        PluginCategory.OTHER
-    )
     val targetSlot = viewModel.slots[viewModel.targetBrowserSlotIndex.coerceIn(0, 2)]
 
     Column(
@@ -84,7 +78,7 @@ fun PluginBrowserScreen(
                         letterSpacing = 1.sp
                     )
                     Text(
-                        text = "${targetSlot.slotType} Slot • ${viewModel.filteredPlugins.size} AAP plugin(s) available",
+                        text = "${targetSlot.slotType} Slot • ${viewModel.filteredPlugins.size} AAP ${targetSlot.slotType.lowercase(Locale.US)} plugin(s) available",
                         fontSize = 11.sp,
                         color = TextSecondary
                     )
@@ -129,27 +123,27 @@ fun PluginBrowserScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Category Filter Chips
+        // Manufacturer / Developer Filter Chips
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            items(categories) { category ->
-                val isSelected = viewModel.selectedCategory.id == category.id
+            items(viewModel.availableDevelopers) { dev ->
+                val isSelected = viewModel.selectedDeveloper == dev
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) Color(0xFF282D3B) else StudioSurface)
                         .border(
                             width = 1.dp,
-                            color = if (isSelected) AccentGold.copy(alpha = 0.6f) else StudioPanelBorder,
-                            shape = RoundedCornerShape(12.dp)
+                            color = if (isSelected) AccentGold else StudioPanelBorder,
+                            shape = CircleShape
                         )
-                        .clickable { viewModel.selectCategory(category) }
-                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) Color(0xFF282D3B) else StudioSurface)
+                        .clickable { viewModel.selectDeveloper(dev) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = category.title,
+                        text = if (dev == "ALL") "All Developers" else dev,
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) TextPrimary else TextSecondary
@@ -225,13 +219,12 @@ private fun PluginCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
             .border(
                 width = if (isSelected) 1.5.dp else 1.dp,
                 color = if (isSelected) AccentGold else StudioPanelBorder,
                 shape = RoundedCornerShape(16.dp)
-            )
-            .clickable { onLoad() },
+            ),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) StudioSurfaceVariant else StudioSurface
         )
@@ -261,17 +254,16 @@ private fun PluginCard(
                         Spacer(modifier = Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, tagColor.copy(alpha = 0.8f), CircleShape)
+                                .clip(CircleShape)
                                 .background(tagBg)
-                                .border(1.dp, tagColor.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = plugin.category?.uppercase(Locale.US) ?: "PLUGIN",
+                                text = (plugin.category ?: "plugin").lowercase(Locale.US),
                                 fontSize = 9.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = tagColor,
-                                letterSpacing = 0.5.sp
+                                fontWeight = FontWeight.Bold,
+                                color = tagColor
                             )
                         }
                     }

@@ -155,11 +155,35 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    var selectedDeveloper by mutableStateOf("ALL")
+        private set
+
+    fun selectDeveloper(developer: String) {
+        selectedDeveloper = developer
+    }
+
+    fun isPluginAllowedForSlot(plugin: PluginInformation, slotIndex: Int): Boolean {
+        val cat = repository.getPluginCategory(plugin)
+        return if (slotIndex == 0) {
+            cat == PluginCategory.SYNTH || cat == PluginCategory.OTHER
+        } else {
+            cat == PluginCategory.EFFECT || cat == PluginCategory.OTHER
+        }
+    }
+
+    val availableDevelopers: List<String>
+        get() {
+            val slotPlugins = pluginList.filter { isPluginAllowedForSlot(it, targetBrowserSlotIndex) }
+            val devs = slotPlugins.mapNotNull { it.developer?.ifBlank { null } ?: "Unknown" }.distinct().sorted()
+            return listOf("ALL") + devs
+        }
+
     fun openBrowserForSlot(slotIndex: Int) {
         if (slotIndex in 0..2) {
             targetBrowserSlotIndex = slotIndex
             activeSlotIndex = slotIndex
-            selectedCategory = if (slotIndex == 0) PluginCategory.SYNTH else PluginCategory.EFFECT
+            selectedDeveloper = "ALL"
+            searchQuery = ""
         }
     }
 
@@ -195,17 +219,14 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     val filteredPlugins: List<PluginInformation>
         get() {
             return pluginList.filter { plugin ->
-                val matchesCategory = when (selectedCategory.id) {
-                    PluginCategory.SYNTH.id -> repository.getPluginCategory(plugin) == PluginCategory.SYNTH
-                    PluginCategory.EFFECT.id -> repository.getPluginCategory(plugin) == PluginCategory.EFFECT
-                    PluginCategory.OTHER.id -> repository.getPluginCategory(plugin) == PluginCategory.OTHER
-                    else -> true
-                }
+                val matchesSlotCategory = isPluginAllowedForSlot(plugin, targetBrowserSlotIndex)
+                val pluginDev = plugin.developer?.ifBlank { null } ?: "Unknown"
+                val matchesDeveloper = selectedDeveloper == "ALL" || pluginDev == selectedDeveloper
                 val matchesSearch = searchQuery.isBlank() ||
                         plugin.displayName.contains(searchQuery, ignoreCase = true) ||
-                        (plugin.developer?.contains(searchQuery, ignoreCase = true) == true) ||
+                        pluginDev.contains(searchQuery, ignoreCase = true) ||
                         (plugin.pluginId?.contains(searchQuery, ignoreCase = true) == true)
-                matchesCategory && matchesSearch
+                matchesSlotCategory && matchesDeveloper && matchesSearch
             }
         }
 
