@@ -26,12 +26,3 @@ project(":androidaudioplugin").projectDir = file("external/aap-core/androidaudio
 
 include(":androidaudioplugin-ui-compose")
 project(":androidaudioplugin-ui-compose").projectDir = file("external/aap-core/androidaudioplugin-ui-compose")
-
-include(":androidaudioplugin-manager")
-project(":androidaudioplugin-manager").projectDir = file("external/aap-core/androidaudioplugin-manager")
-
-include(":androidaudioplugin-midi-device-service")
-project(":androidaudioplugin-midi-device-service").projectDir = file("external/aap-core/androidaudioplugin-midi-device-service")
-
-include(":androidaudioplugin-js-controller")
-project(":androidaudioplugin-js-controller").projectDir = file("external/aap-core/androidaudioplugin-js-controller")

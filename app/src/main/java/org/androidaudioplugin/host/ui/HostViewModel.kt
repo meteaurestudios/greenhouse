@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,6 +29,16 @@ enum class StudioRackViewMode(val title: String) {
     SPECS("Ports & Details")
 }
 
+data class RackSlotData(
+    val index: Int,
+    val title: String,
+    val slotType: String,
+    val pluginInfo: PluginInformation? = null,
+    val instance: NativeRemotePluginInstance? = null,
+    val isBypassed: Boolean = false,
+    val selectedPresetIndex: Int = 0
+)
+
 class HostViewModel(application: Application) : AndroidViewModel(application) {
     private val tag = "HostViewModel"
 
@@ -43,10 +54,17 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     var searchQuery by mutableStateOf("")
         private set
 
-    var selectedPlugin by mutableStateOf<PluginInformation?>(null)
+    // Multi-slot rack state (0: Instrument, 1: Effect 1, 2: Effect 2)
+    val slots = mutableStateListOf(
+        RackSlotData(0, "Slot 1", "Instrument"),
+        RackSlotData(1, "Slot 2", "Effect 1"),
+        RackSlotData(2, "Slot 3", "Effect 2")
+    )
+
+    var activeSlotIndex by mutableIntStateOf(0)
         private set
 
-    var activeInstance by mutableStateOf<NativeRemotePluginInstance?>(null)
+    var targetBrowserSlotIndex by mutableIntStateOf(0)
         private set
 
     var currentViewMode by mutableStateOf(StudioRackViewMode.PARAMETERS)
@@ -67,10 +85,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     var statusMessage by mutableStateOf<String?>("Scan complete. Select an AAP plugin from the catalog to load.")
         private set
 
-    val parameterValues = mutableStateMapOf<Int, Double>()
-
-    var selectedPresetIndex by mutableIntStateOf(0)
-        private set
+    val slotParameterValues = Array(3) { mutableStateMapOf<Int, Double>() }
 
     val sampleRate: Int
     val framesPerCallback: Int
@@ -79,7 +94,27 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         sampleRate = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 44100
         framesPerCallback = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 256
+
+        audioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback)
+        audioPlayer?.loadSampleAudio(application)
+
         refreshPluginList()
+    }
+
+    val activeSlot: RackSlotData
+        get() = slots[activeSlotIndex.coerceIn(0, 2)]
+
+    fun selectActiveSlot(slotIndex: Int) {
+        if (slotIndex in 0..2) {
+            activeSlotIndex = slotIndex
+        }
+    }
+
+    fun openBrowserForSlot(slotIndex: Int) {
+        if (slotIndex in 0..2) {
+            targetBrowserSlotIndex = slotIndex
+            selectedCategory = if (slotIndex == 0) PluginCategory.SYNTH else PluginCategory.EFFECT
+        }
     }
 
     fun refreshPluginList() {
@@ -128,52 +163,74 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-    fun loadPlugin(plugin: PluginInformation) {
-        if (selectedPlugin?.pluginId == plugin.pluginId && activeInstance != null) {
-            return
-        }
+    fun loadPluginIntoSlot(slotIndex: Int, plugin: PluginInformation) {
+        if (slotIndex !in 0..2) return
 
         viewModelScope.launch {
             isInstantiating = true
-            statusMessage = "Instantiating ${plugin.displayName}..."
+            statusMessage = "Instantiating ${plugin.displayName} in ${slots[slotIndex].title}..."
 
-            unloadActivePlugin()
+            unloadSlot(slotIndex)
 
             try {
-                selectedPlugin = plugin
-
-                val player = AapAudioPlayer.create(sampleRate, framesPerCallback)
-                player.loadSampleAudio(getApplication())
-
                 val instance = hostEngine.instantiatePlugin(plugin, sampleRate, framesPerCallback)
-                activeInstance = instance
 
-                player.attachPlugin(instance)
-                audioPlayer = player
+                slots[slotIndex] = slots[slotIndex].copy(
+                    pluginInfo = plugin,
+                    instance = instance,
+                    isBypassed = false,
+                    selectedPresetIndex = 0
+                )
 
-                parameterValues.clear()
+                audioPlayer?.setSlotPlugin(slotIndex, instance)
+
+                slotParameterValues[slotIndex].clear()
                 plugin.parameters.forEach { param ->
-                    parameterValues[param.id] = param.defaultValue
+                    slotParameterValues[slotIndex][param.id] = param.defaultValue
                 }
 
-                toggleAudioPlayback()
+                activeSlotIndex = slotIndex
 
-                val category = repository.getPluginCategory(plugin)
-                statusMessage = if (category == PluginCategory.EFFECT) {
-                    "Loaded Effect: ${plugin.displayName}. Tap 'SAMPLE TEST' to hear audio effect!"
-                } else {
-                    "Loaded Instrument: ${plugin.displayName}. Play keys on the MIDI Keyboard!"
+                if (!isProcessing) {
+                    toggleAudioPlayback()
                 }
+
+                statusMessage = "Loaded ${plugin.displayName} into ${slots[slotIndex].title} (${slots[slotIndex].slotType})"
             } catch (e: Throwable) {
                 Log.e(tag, "Failed to load plugin ${plugin.displayName}", e)
                 statusMessage = "Error loading plugin: ${e.localizedMessage ?: e.message}"
-                selectedPlugin = null
-                activeInstance = null
-                audioPlayer = null
             } finally {
                 isInstantiating = false
             }
         }
+    }
+
+    fun unloadSlot(slotIndex: Int) {
+        if (slotIndex !in 0..2) return
+        val currentInst = slots[slotIndex].instance
+        audioPlayer?.setSlotPlugin(slotIndex, null)
+        try {
+            currentInst?.destroy()
+        } catch (e: Throwable) {
+            Log.e(tag, "Error destroying plugin instance", e)
+        }
+
+        slots[slotIndex] = slots[slotIndex].copy(
+            pluginInfo = null,
+            instance = null,
+            isBypassed = false,
+            selectedPresetIndex = 0
+        )
+        slotParameterValues[slotIndex].clear()
+        statusMessage = "Cleared ${slots[slotIndex].title}"
+    }
+
+    fun toggleSlotBypass(slotIndex: Int) {
+        if (slotIndex !in 0..2) return
+        val newBypass = !slots[slotIndex].isBypassed
+        slots[slotIndex] = slots[slotIndex].copy(isBypassed = newBypass)
+        audioPlayer?.setSlotBypassed(slotIndex, newBypass)
+        statusMessage = "${slots[slotIndex].title} ${if (newBypass) "BYPASSED" else "ACTIVE"}"
     }
 
     fun toggleAudioPlayback() {
@@ -185,18 +242,19 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             player.start()
             isProcessing = true
-            statusMessage = "Audio engine ACTIVE (Low-latency Oboe running)."
+            statusMessage = "Audio engine ACTIVE (Low-latency audio rack running)."
         }
     }
 
     fun triggerSampleAudio() {
-        audioPlayer?.playSampleAudio()
-        isSamplePressed = true
-        statusMessage = "Playing test sample audio..."
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(300)
-            isSamplePressed = false
+        val inst0Slot = slots[0]
+        val isInst0Active = inst0Slot.pluginInfo != null && !inst0Slot.isBypassed && inst0Slot.instance != null
+        if (isInst0Active) {
+            statusMessage = "Instrument active — play notes on keyboard to test!"
+            return
         }
+        audioPlayer?.playSampleAudio()
+        statusMessage = "Playing test sample audio through effect chain..."
     }
 
     fun sendNoteOn(note: Int, velocity: Float = 1.0f) {
@@ -207,34 +265,30 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer?.sendNoteOff(note, velocity)
     }
 
-    fun setParameterValue(parameter: ParameterInformation, value: Double) {
-        parameterValues[parameter.id] = value
-        audioPlayer?.setParameterValue(parameter, value)
+    fun setParameterValue(slotIndex: Int, parameter: ParameterInformation, value: Double) {
+        if (slotIndex !in 0..2) return
+        slotParameterValues[slotIndex][parameter.id] = value
+        audioPlayer?.setParameterValue(slotIndex, parameter, value)
     }
 
-    fun setPreset(index: Int) {
-        selectedPresetIndex = index
-        audioPlayer?.setPresetIndex(index)
-        statusMessage = "Preset changed to #$index"
-    }
-
-    private fun unloadActivePlugin() {
-        try {
-            audioPlayer?.close()
-        } catch (e: Throwable) {
-            Log.e(tag, "Error closing audio player", e)
-        }
-        audioPlayer = null
-        isProcessing = false
+    fun setPreset(slotIndex: Int, index: Int) {
+        if (slotIndex !in 0..2) return
+        slots[slotIndex] = slots[slotIndex].copy(selectedPresetIndex = index)
+        audioPlayer?.setPresetIndex(slotIndex, index)
+        statusMessage = "${slots[slotIndex].title} Preset changed to #$index"
     }
 
     override fun onCleared() {
         super.onCleared()
-        unloadActivePlugin()
+        for (i in 0..2) {
+            unloadSlot(i)
+        }
         try {
+            audioPlayer?.close()
             hostEngine.close()
         } catch (e: Throwable) {
             Log.e(tag, "Error closing host engine", e)
         }
     }
 }
+

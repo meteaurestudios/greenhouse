@@ -6,6 +6,8 @@ import android.widget.FrameLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -35,6 +37,7 @@ import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.composeaudiocontrols.DiatonicKeyboard
 import org.androidaudioplugin.composeaudiocontrols.DiatonicKeyboardMoveAction
 import org.androidaudioplugin.host.ui.HostViewModel
+import org.androidaudioplugin.host.ui.RackSlotData
 import org.androidaudioplugin.host.ui.StudioRackViewMode
 import org.androidaudioplugin.host.ui.theme.*
 import org.androidaudioplugin.hosting.GuiHelper
@@ -46,7 +49,8 @@ fun StudioRackScreen(
     viewModel: HostViewModel,
     onNavigateToBrowser: () -> Unit
 ) {
-    val activePlugin = viewModel.selectedPlugin
+    val activeSlot = viewModel.activeSlot
+    val activePlugin = activeSlot.pluginInfo
 
     Column(
         modifier = Modifier
@@ -56,7 +60,7 @@ fun StudioRackScreen(
     ) {
         // Master Control Banner
         MasterControlBanner(
-            plugin = activePlugin,
+            slots = viewModel.slots,
             isProcessing = viewModel.isProcessing,
             isSamplePressed = viewModel.isSamplePressed,
             onToggleProcessing = { viewModel.toggleAudioPlayback() },
@@ -65,17 +69,32 @@ fun StudioRackScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // View Mode Selector & Preset Bar
-        StatusAndModeSelectorBar(
-            currentMode = viewModel.currentViewMode,
-            onModeSelected = { viewModel.updateViewMode(it) },
-            selectedPresetIndex = viewModel.selectedPresetIndex,
-            onPresetSelected = { viewModel.setPreset(it) }
+        // 3-Slot Audio Signal Chain Rack Header
+        SignalRackHeader(
+            slots = viewModel.slots,
+            activeSlotIndex = viewModel.activeSlotIndex,
+            onSelectSlot = { viewModel.selectActiveSlot(it) },
+            onAddPlugin = { slotIndex ->
+                viewModel.openBrowserForSlot(slotIndex)
+                onNavigateToBrowser()
+            },
+            onToggleBypass = { viewModel.toggleSlotBypass(it) },
+            onUnloadSlot = { viewModel.unloadSlot(it) }
         )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Dynamic Main Panel (Parameter Control Rack / Native Embedded GUI / Ports Spec)
+        // View Mode Selector & Preset Bar for Active Slot
+        StatusAndModeSelectorBar(
+            activeSlot = activeSlot,
+            currentMode = viewModel.currentViewMode,
+            onModeSelected = { viewModel.updateViewMode(it) },
+            onPresetSelected = { viewModel.setPreset(activeSlot.index, it) }
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Dynamic Main Panel (Parameter Controls / Native Embedded GUI / Ports Spec)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -86,21 +105,28 @@ fun StudioRackScreen(
                 .padding(12.dp)
         ) {
             if (activePlugin == null) {
-                NoPluginLoadedView(onNavigateToBrowser = onNavigateToBrowser)
+                NoPluginInSlotView(
+                    slot = activeSlot,
+                    onOpenBrowser = {
+                        viewModel.openBrowserForSlot(activeSlot.index)
+                        onNavigateToBrowser()
+                    }
+                )
             } else {
                 when (viewModel.currentViewMode) {
                     StudioRackViewMode.PARAMETERS -> {
                         ParameterControlRack(
                             parameters = activePlugin.parameters,
-                            parameterValues = viewModel.parameterValues,
+                            parameterValues = viewModel.slotParameterValues[activeSlot.index],
                             onValueChange = { param, valDouble ->
-                                viewModel.setParameterValue(param, valDouble)
+                                viewModel.setParameterValue(activeSlot.index, param, valDouble)
                             }
                         )
                     }
                     StudioRackViewMode.NATIVE_SURFACE -> {
                         NativePluginSurfaceContainer(
                             viewModel = viewModel,
+                            slot = activeSlot,
                             plugin = activePlugin
                         )
                     }
@@ -113,7 +139,7 @@ fun StudioRackScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // On-screen Live Interactive MIDI Keyboard
+        // On-screen Live Interactive MIDI Keyboard (Routes to Slot 0: Instrument)
         MidiKeyboardSection(
             onNoteOn = { note -> viewModel.sendNoteOn(note) },
             onNoteOff = { note -> viewModel.sendNoteOff(note) }
@@ -123,7 +149,7 @@ fun StudioRackScreen(
 
 @Composable
 private fun MasterControlBanner(
-    plugin: PluginInformation?,
+    slots: List<RackSlotData>,
     isProcessing: Boolean,
     isSamplePressed: Boolean,
     onToggleProcessing: () -> Unit,
@@ -139,9 +165,8 @@ private fun MasterControlBanner(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(12.dp)
         ) {
-            // Header Info: Status Badge, Full Plugin Title & Developer
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -152,123 +177,194 @@ private fun MasterControlBanner(
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(if (isProcessing && plugin != null) SignalGreen else DangerRed)
+                            .background(if (isProcessing) SignalGreen else DangerRed)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "AAP SIGNAL CHAIN",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isPressed by interactionSource.collectIsPressedAsState()
+                    val activeColor = if (isPressed) AccentGold.copy(alpha = 0.5f) else AccentGold
+
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (plugin != null) AccentGold.copy(alpha = 0.15f) else StudioSurface)
-                            .border(1.dp, if (plugin != null) AccentGold.copy(alpha = 0.4f) else StudioPanelBorder, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(activeColor)
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) { onTriggerAudioSample() }
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = plugin?.category?.uppercase(Locale.US) ?: "NO PLUGIN",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (plugin != null) AccentGold else TextMuted
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = StudioBackground
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "TEST",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = StudioBackground
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(24.dp))
+
+                    IconButton(
+                        onClick = onToggleProcessing,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(if (isProcessing) SignalGreen.copy(alpha = 0.15f) else DangerRed.copy(alpha = 0.15f))
+                            .border(1.dp, if (isProcessing) SignalGreen else DangerRed, CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PowerSettingsNew,
+                            contentDescription = "Toggle Engine",
+                            tint = if (isProcessing) SignalGreen else DangerRed,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
+            }
+        }
+    }
+}
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+@Composable
+private fun SignalRackHeader(
+    slots: List<RackSlotData>,
+    activeSlotIndex: Int,
+    onSelectSlot: (Int) -> Unit,
+    onAddPlugin: (Int) -> Unit,
+    onToggleBypass: (Int) -> Unit,
+    onUnloadSlot: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        slots.forEach { slot ->
+            val isSelected = slot.index == activeSlotIndex
+            val isLoaded = slot.pluginInfo != null
+            val borderColor = when {
+                isSelected -> AccentGold
+                isLoaded -> NeonCyan.copy(alpha = 0.5f)
+                else -> StudioPanelBorder
+            }
+
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(16.dp))
+                    .clickable { onSelectSlot(slot.index) },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSelected) StudioSurfaceVariant else StudioSurface
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
                 ) {
-                    val isEffect = plugin != null &&
-                            (plugin.category?.contains("Synth", ignoreCase = true) != true &&
-                             plugin.category?.contains("Instrument", ignoreCase = true) != true)
-
-                    if (isEffect) {
-                        val activeColor = if (isSamplePressed) AccentGold.copy(alpha = 0.65f) else AccentGold
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(activeColor)
-                                .border(
-                                    width = 1.dp,
-                                    color = activeColor,
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                .clickable { onTriggerAudioSample() }
-                                .padding(horizontal = 14.dp, vertical = 7.dp),
-                            contentAlignment = Alignment.Center
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (slot.index == 0) AccentViolet.copy(alpha = 0.2f) else AccentCyan.copy(alpha = 0.2f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
+                            Text(
+                                text = slot.slotType.uppercase(Locale.US),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (slot.index == 0) AccentViolet else AccentCyan
+                            )
+                        }
+
+                        if (isLoaded) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.VolumeUp,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = StudioBackground
+                                    imageVector = Icons.Default.PowerSettingsNew,
+                                    contentDescription = "Bypass",
+                                    tint = if (slot.isBypassed) DangerRed else SignalGreen,
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clickable { onToggleBypass(slot.index) }
                                 )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = "SAMPLE TEST",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = StudioBackground,
-                                    letterSpacing = 0.5.sp
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear",
+                                    tint = TextMuted,
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clickable { onUnloadSlot(slot.index) }
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.width(20.dp))
                     }
 
-                    if (plugin != null) {
-                        IconButton(
-                            onClick = onToggleProcessing,
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = slot.pluginInfo?.displayName ?: "Empty Slot",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isLoaded) TextPrimary else TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    if (!isLoaded) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(if (isProcessing) SignalGreen.copy(alpha = 0.15f) else DangerRed.copy(alpha = 0.15f))
-                                .border(1.dp, if (isProcessing) SignalGreen else DangerRed, CircleShape)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF282D3B))
+                                .clickable { onAddPlugin(slot.index) }
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.PowerSettingsNew,
-                                contentDescription = "Toggle Audio Engine",
-                                tint = if (isProcessing) SignalGreen else DangerRed,
-                                modifier = Modifier.size(16.dp)
+                            Text(
+                                text = "+ ADD",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = NeonCyan
                             )
                         }
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Plugin Display Name
-            Text(
-                text = plugin?.displayName ?: "No AAP Plugin Loaded",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            // Developer / Vendor / Package ID
-            Text(
-                text = if (plugin != null)
-                    "${plugin.developer ?: "Unknown Vendor"} • ${plugin.packageName}"
-                else
-                    "Select a plugin from the Catalog tab",
-                fontSize = 11.sp,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }
 
 @Composable
 private fun StatusAndModeSelectorBar(
+    activeSlot: RackSlotData,
     currentMode: StudioRackViewMode,
     onModeSelected: (StudioRackViewMode) -> Unit,
-    selectedPresetIndex: Int,
     onPresetSelected: (Int) -> Unit
 ) {
     Row(
@@ -276,7 +372,6 @@ private fun StatusAndModeSelectorBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Mode Selector Chips (Scrollable so it never squeezes the preset box)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.weight(1f)
@@ -293,7 +388,7 @@ private fun StatusAndModeSelectorBar(
                             shape = RoundedCornerShape(12.dp)
                         )
                         .clickable { onModeSelected(mode) }
-                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = mode.title,
@@ -307,7 +402,6 @@ private fun StatusAndModeSelectorBar(
 
         Spacer(modifier = Modifier.width(10.dp))
 
-        // Preset Stepper Box (Guaranteed un-squeezed layout)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -316,16 +410,16 @@ private fun StatusAndModeSelectorBar(
                 .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp))
                 .padding(horizontal = 10.dp, vertical = 4.dp)
         ) {
-            Text("Preset #$selectedPresetIndex", fontSize = 11.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+            Text("Preset #${activeSlot.selectedPresetIndex}", fontSize = 11.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.width(6.dp))
             IconButton(
-                onClick = { if (selectedPresetIndex > 0) onPresetSelected(selectedPresetIndex - 1) },
+                onClick = { if (activeSlot.selectedPresetIndex > 0) onPresetSelected(activeSlot.selectedPresetIndex - 1) },
                 modifier = Modifier.size(24.dp)
             ) {
                 Icon(Icons.Default.Remove, contentDescription = "Prev Preset", tint = AccentGold, modifier = Modifier.size(16.dp))
             }
             IconButton(
-                onClick = { onPresetSelected(selectedPresetIndex + 1) },
+                onClick = { onPresetSelected(activeSlot.selectedPresetIndex + 1) },
                 modifier = Modifier.size(24.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Next Preset", tint = AccentGold, modifier = Modifier.size(16.dp))
@@ -373,21 +467,22 @@ private fun ParameterControlRack(
 @Composable
 private fun NativePluginSurfaceContainer(
     viewModel: HostViewModel,
+    slot: RackSlotData,
     plugin: PluginInformation
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val activeInstance = viewModel.activeInstance
+    val instance = slot.instance
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && activeInstance != null) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && instance != null) {
         var surfaceHost by remember { mutableStateOf<GuiHelper.NativeEmbeddedSurfaceControlHost?>(null) }
 
-        DisposableEffect(activeInstance.instanceId) {
+        DisposableEffect(instance.instanceId) {
             val host = GuiHelper.NativeEmbeddedSurfaceControlHost(
                 context = context,
                 pluginPackageName = plugin.packageName,
                 pluginId = plugin.pluginId ?: "",
-                instanceId = activeInstance.instanceId
+                instanceId = instance.instanceId
             )
             surfaceHost = host
 
@@ -600,7 +695,7 @@ private fun MidiKeyboardSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "MIDI KEYBOARD",
+                    text = "MIDI KEYBOARD (INSTRUMENT SLOT 1)",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextSecondary,
@@ -638,7 +733,7 @@ private fun MidiKeyboardSection(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .height(120.dp)
             ) {
                 DiatonicKeyboard(
                     noteOnStates = noteOnStates.toList(),
@@ -664,7 +759,10 @@ private fun MidiKeyboardSection(
 }
 
 @Composable
-private fun NoPluginLoadedView(onNavigateToBrowser: () -> Unit) {
+private fun NoPluginInSlotView(
+    slot: RackSlotData,
+    onOpenBrowser: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -678,30 +776,31 @@ private fun NoPluginLoadedView(onNavigateToBrowser: () -> Unit) {
             Icon(
                 imageVector = Icons.Default.Tune,
                 contentDescription = null,
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.size(56.dp),
                 tint = ElectricBlue
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "No AAP Plugin Selected",
-                fontSize = 20.sp,
+                text = "${slot.title} (${slot.slotType}) is Empty",
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Explore system-wide Audio Plugin Services (Instruments & Effects) from the catalog.",
+                text = "Load an AAP ${slot.slotType.lowercase(Locale.US)} plugin from the catalog to build your audio signal chain.",
                 fontSize = 13.sp,
                 color = TextSecondary
             )
             Spacer(modifier = Modifier.height(20.dp))
             Button(
-                onClick = onNavigateToBrowser,
+                onClick = onOpenBrowser,
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = StudioBackground),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("OPEN PLUGIN CATALOG", fontWeight = FontWeight.Bold)
+                Text("BROWSE PLUGINS FOR ${slot.slotType.uppercase(Locale.US)}", fontWeight = FontWeight.Bold)
             }
         }
     }
 }
+

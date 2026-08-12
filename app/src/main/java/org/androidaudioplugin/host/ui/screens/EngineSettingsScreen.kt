@@ -109,8 +109,10 @@ fun EngineSettingsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val activePlugin = viewModel.selectedPlugin
+                val activeSlot = viewModel.activeSlot
+                val activePlugin = activeSlot.pluginInfo
                 if (activePlugin != null) {
+                    InfoRow(label = "Active Slot Focus", value = "${activeSlot.title} (${activeSlot.slotType})")
                     InfoRow(label = "Loaded Plugin", value = activePlugin.displayName)
                     InfoRow(label = "Developer", value = activePlugin.developer ?: "Unknown")
                     InfoRow(label = "Plugin ID", value = activePlugin.pluginId ?: "N/A")
@@ -119,7 +121,7 @@ fun EngineSettingsScreen(
                     InfoRow(label = "Ports Count", value = "${activePlugin.ports.size}")
                 } else {
                     Text(
-                        text = "No plugin currently loaded in session.",
+                        text = "No plugin currently loaded in ${activeSlot.title} (${activeSlot.slotType}).",
                         fontSize = 13.sp,
                         color = TextMuted
                     )

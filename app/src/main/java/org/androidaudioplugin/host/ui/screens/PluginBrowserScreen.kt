@@ -45,6 +45,7 @@ fun PluginBrowserScreen(
         PluginCategory.EFFECT,
         PluginCategory.OTHER
     )
+    val targetSlot = viewModel.slots[viewModel.targetBrowserSlotIndex.coerceIn(0, 2)]
 
     Column(
         modifier = Modifier
@@ -60,14 +61,14 @@ fun PluginBrowserScreen(
         ) {
             Column {
                 Text(
-                    text = "AAP PLUGIN CATALOG",
-                    fontSize = 22.sp,
+                    text = "SELECT PLUGIN FOR ${targetSlot.title.uppercase(Locale.US)}",
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    letterSpacing = 1.5.sp
+                    color = AccentGold,
+                    letterSpacing = 1.sp
                 )
                 Text(
-                    text = "${viewModel.filteredPlugins.size} AAP plugin(s) available on system",
+                    text = "${targetSlot.slotType} Slot • ${viewModel.filteredPlugins.size} AAP plugin(s) available",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
@@ -173,12 +174,13 @@ fun PluginBrowserScreen(
                     .weight(1f)
             ) {
                 items(viewModel.filteredPlugins, key = { it.pluginId ?: it.displayName }) { plugin ->
+                    val isSlotLoaded = targetSlot.pluginInfo?.pluginId == plugin.pluginId
                     PluginCard(
                         plugin = plugin,
-                        isSelected = viewModel.selectedPlugin?.pluginId == plugin.pluginId,
-                        isInstantiating = viewModel.isInstantiating && viewModel.selectedPlugin?.pluginId == plugin.pluginId,
+                        isSelected = isSlotLoaded,
+                        isInstantiating = viewModel.isInstantiating && isSlotLoaded,
                         onLoad = {
-                            viewModel.loadPlugin(plugin)
+                            viewModel.loadPluginIntoSlot(viewModel.targetBrowserSlotIndex, plugin)
                             onNavigateToRack()
                         }
                     )

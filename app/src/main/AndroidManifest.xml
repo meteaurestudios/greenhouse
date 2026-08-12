@@ -7,6 +7,9 @@
 
     <queries>
         <intent>
+            <action android:name="org.androidaudioplugin.AudioPluginService.V4" />
+        </intent>
+        <intent>
             <action android:name="org.androidaudioplugin.AudioPluginService" />
         </intent>
     </queries>

@@ -65,6 +65,18 @@ fun MainHostApp(
         NavigationTab.Settings
     )
 
+    val navigateToRoute: (String) -> Unit = { targetRoute ->
+        if (currentRoute != targetRoute) {
+            navController.navigate(targetRoute) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar(
@@ -76,17 +88,7 @@ fun MainHostApp(
                     val isSelected = currentRoute == tab.route
                     NavigationBarItem(
                         selected = isSelected,
-                        onClick = {
-                            if (currentRoute != tab.route) {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        },
+                        onClick = { navigateToRoute(tab.route) },
                         icon = {
                             Icon(
                                 imageVector = tab.icon,
@@ -117,29 +119,19 @@ fun MainHostApp(
         ) {
             NavHost(
                 navController = navController,
-                startDestination = NavigationTab.Browser.route
+                startDestination = NavigationTab.Rack.route
             ) {
                 composable(NavigationTab.Browser.route) {
                     PluginBrowserScreen(
                         viewModel = viewModel,
-                        onNavigateToRack = {
-                            navController.navigate(NavigationTab.Rack.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
+                        onNavigateToRack = { navigateToRoute(NavigationTab.Rack.route) }
                     )
                 }
 
                 composable(NavigationTab.Rack.route) {
                     StudioRackScreen(
                         viewModel = viewModel,
-                        onNavigateToBrowser = {
-                            navController.navigate(NavigationTab.Browser.route)
-                        }
+                        onNavigateToBrowser = { navigateToRoute(NavigationTab.Browser.route) }
                     )
                 }
 
