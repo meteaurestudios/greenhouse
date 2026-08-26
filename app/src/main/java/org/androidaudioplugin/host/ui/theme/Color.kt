@@ -14,7 +14,7 @@ val AccentCyan = Color(0xFF7DD3FC)           // Soft Sky Slate
 val AccentViolet = Color(0xFFC084FC)         // Soft Lavender
 val ElectricBlue = Color(0xFF38BDF8)         // Muted Studio Sky Blue
 val SignalGreen = Color(0xFF10B981)          // Warm Active Studio Emerald
-val WarningOrange = Color(0xFF94A3B8)        // Soft Muted Slate (Replaced harsh orange)
+val WarningOrange = Color(0xFFF59E0B)        // Vibrant Studio Amber Orange (Middle range warning)
 val DangerRed = Color(0xFFF43F5E)            // Muted Studio Crimson
 
 // Primary Theme Aliases

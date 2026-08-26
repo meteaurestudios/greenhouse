@@ -93,9 +93,6 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         addAll(List(NUM_RACK_SLOTS) { 0f })
     }
 
-    var isSamplePressed by mutableStateOf(false)
-        private set
-
     var isInstantiating by mutableStateOf(false)
         private set
 
@@ -169,7 +166,6 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         framesPerCallback = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 256
 
         audioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback, numSlots = NUM_RACK_SLOTS)
-        audioPlayer?.loadSampleAudio(application)
 
         refreshPluginList()
         startCpuMonitoring()
@@ -422,19 +418,6 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             isProcessing = true
             statusMessage = "Audio engine ACTIVE (Low-latency audio rack running)."
         }
-    }
-
-    fun triggerSampleAudio() {
-        val inst0Slot = slots[0]
-        val isInst0Active = inst0Slot.pluginInfo != null && !inst0Slot.isBypassed && inst0Slot.instance != null
-
-        if (isInst0Active) {
-            statusMessage = "Instrument active — play notes on keyboard to test!"
-            return
-        }
-
-        audioPlayer?.playSampleAudio()
-        statusMessage = "Playing test sample audio through effect chain..."
     }
 
     fun sendNoteOn(note: Int, velocity: Float = 1.0f) {

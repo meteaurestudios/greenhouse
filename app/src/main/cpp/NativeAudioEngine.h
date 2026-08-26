@@ -113,8 +113,6 @@ public:
 
     void setSlotPlugin(int32_t slotIndex, aap::PluginClient* client, int32_t instanceId);
     void setSlotBypassed(int32_t slotIndex, bool bypassed);
-    void setSampleAudioData(const float* data, size_t sizeInFloats);
-    void playSampleAudio();
     void sendUmpToSlot(int32_t slotIndex, const uint8_t* data, size_t size);
 
     float getTotalCpuLoad() const
@@ -147,13 +145,6 @@ private:
 
     // Pre-allocated scratch buffers
     std::vector<float> mIntermediateStereoBuffer;
-
-    // Sample audio test playback (lock-free)
-    std::vector<float> mSampleAudioData;
-    std::atomic<const float*> mSampleAudioDataPtr{nullptr};
-    std::atomic<size_t> mSampleAudioDataSize{0};
-    std::atomic<size_t> mSampleAudioPos{0};
-    std::atomic<bool> mIsPlayingSampleAudio{false};
 
     // Performance & CPU tracking
     double mBufferDurationNs;

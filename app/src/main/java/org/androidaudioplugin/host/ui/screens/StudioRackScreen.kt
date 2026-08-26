@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,9 +81,7 @@ fun StudioRackScreen(
                 slots = viewModel.slots,
                 isProcessing = viewModel.isProcessing,
                 totalCpuLoad = viewModel.totalCpuLoad,
-                isSamplePressed = viewModel.isSamplePressed,
                 onToggleProcessing = { viewModel.toggleAudioPlayback() },
-                onTriggerAudioSample = { viewModel.triggerSampleAudio() },
                 onOpenSettings = onNavigateToSettings
             )
 
@@ -181,7 +180,8 @@ fun StudioRackScreen(
 @Composable
 private fun DspCpuMeter(
     cpuPercent: Float,
-    isProcessing: Boolean
+    isProcessing: Boolean,
+    onToggleProcessing: () -> Unit
 ) {
     val meterColor = when {
         !isProcessing -> TextMuted
@@ -193,12 +193,24 @@ private fun DspCpuMeter(
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(StudioSurface)
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
+            .background(if (isProcessing) StudioSurface else DangerRed.copy(alpha = 0.08f))
+            .border(
+                width = 1.dp,
+                color = if (isProcessing) StudioPanelBorder else DangerRed.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable { onToggleProcessing() }
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(if (isProcessing) SignalGreen else DangerRed)
+        )
+
         Text(
             text = "DSP",
             fontSize = 9.sp,
@@ -216,7 +228,7 @@ private fun DspCpuMeter(
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth((cpuPercent / 100f).coerceIn(0f, 1f))
+                    .fillMaxWidth((if (isProcessing) cpuPercent / 100f else 0f).coerceIn(0f, 1f))
                     .clip(CircleShape)
                     .background(meterColor)
             )
@@ -227,6 +239,9 @@ private fun DspCpuMeter(
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(30.dp),
+            maxLines = 1,
             color = meterColor
         )
     }
@@ -237,9 +252,7 @@ private fun MasterControlBanner(
     slots: List<RackSlotData>,
     isProcessing: Boolean,
     totalCpuLoad: Float,
-    isSamplePressed: Boolean,
     onToggleProcessing: () -> Unit,
-    onTriggerAudioSample: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     Card(
@@ -259,7 +272,7 @@ private fun MasterControlBanner(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Status Dot, Title & Settings Cog
+                // Left: Status Dot, Title & Settings Info
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
@@ -296,68 +309,12 @@ private fun MasterControlBanner(
                     }
                 }
 
-                // Center: Real-Time DSP CPU Meter
+                // Right: Interactive Real-Time DSP CPU Meter (click to activate / deactivate engine)
                 DspCpuMeter(
                     cpuPercent = totalCpuLoad,
-                    isProcessing = isProcessing
+                    isProcessing = isProcessing,
+                    onToggleProcessing = onToggleProcessing
                 )
-
-                // Right: TEST Button & Engine Power Toggle
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    val interactionSource = remember { MutableInteractionSource() }
-                    val isPressed by interactionSource.collectIsPressedAsState()
-                    val activeColor = if (isPressed) AccentGold.copy(alpha = 0.5f) else AccentGold
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(activeColor)
-                            .clickable(
-                                interactionSource = interactionSource,
-                                indication = null
-                            ) { onTriggerAudioSample() }
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.VolumeUp,
-                                contentDescription = null,
-                                modifier = Modifier.size(13.dp),
-                                tint = StudioBackground
-                            )
-
-                            Spacer(modifier = Modifier.width(3.dp))
-
-                            Text(
-                                text = "TEST",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = StudioBackground
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .background(if (isProcessing) SignalGreen.copy(alpha = 0.15f) else DangerRed.copy(alpha = 0.15f))
-                            .border(1.dp, if (isProcessing) SignalGreen else DangerRed, CircleShape)
-                            .clickable { onToggleProcessing() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PowerSettingsNew,
-                            contentDescription = "Toggle Engine",
-                            tint = if (isProcessing) SignalGreen else DangerRed,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                }
             }
         }
     }
@@ -425,7 +382,7 @@ private fun SignalRackHeader(
                             )
                         }
 
-                        // Center: Dead-Centered Slot Type Capsule Label Box
+                        // Center: Dead-Centered Slot Type Capsule Label Box (rounded corners with reduced vertical padding)
                         val badgeColor = if (slot.index == 0) AccentViolet else AccentCyan
                         Box(
                             modifier = Modifier
@@ -433,7 +390,7 @@ private fun SignalRackHeader(
                                 .border(1.dp, badgeColor.copy(alpha = 0.7f), CircleShape)
                                 .clip(CircleShape)
                                 .background(badgeColor.copy(alpha = 0.15f))
-                                .padding(horizontal = 7.dp, vertical = 2.dp),
+                                .padding(horizontal = 7.dp, vertical = 0.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(

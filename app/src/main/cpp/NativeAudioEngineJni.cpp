@@ -70,34 +70,6 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetSlotBypassed(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetSampleAudioData(
-        JNIEnv *env, jclass clazz, jlong engineHandle, jfloatArray data)
-{
-    auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
-
-    if (engine != nullptr && data != nullptr) {
-        auto length = env->GetArrayLength(data);
-        auto elements = env->GetFloatArrayElements(data, nullptr);
-
-        if (elements != nullptr) {
-            engine->setSampleAudioData(elements, static_cast<size_t>(length));
-            env->ReleaseFloatArrayElements(data, elements, JNI_ABORT);
-        }
-    }
-}
-
-JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativePlaySampleAudio(
-        JNIEnv *env, jclass clazz, jlong engineHandle)
-{
-    auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
-
-    if (engine != nullptr) {
-        engine->playSampleAudio();
-    }
-}
-
-JNIEXPORT void JNICALL
 Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSendUmp(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex, jbyteArray data, jint length)
 {

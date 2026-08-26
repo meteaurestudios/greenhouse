@@ -20,7 +20,6 @@ class AapAudioPlayer private constructor(
 
     companion object {
         private const val TAG = "AapAudioPlayer"
-        const val DEFAULT_SAMPLE_AUDIO = "androidaudioplugin_manager_sample_audio.ogg"
         const val DEFAULT_NUM_RACK_SLOTS = 3
 
         init {
@@ -58,12 +57,6 @@ class AapAudioPlayer private constructor(
 
         @JvmStatic
         private external fun nativeSetSlotBypassed(engineHandle: Long, slotIndex: Int, bypassed: Boolean)
-
-        @JvmStatic
-        private external fun nativeSetSampleAudioData(engineHandle: Long, data: FloatArray)
-
-        @JvmStatic
-        private external fun nativePlaySampleAudio(engineHandle: Long)
 
         @JvmStatic
         private external fun nativeSendUmp(engineHandle: Long, slotIndex: Int, data: ByteArray, length: Int)
@@ -136,121 +129,6 @@ class AapAudioPlayer private constructor(
         }
     }
 
-    fun loadSampleAudio(context: Context, filename: String = DEFAULT_SAMPLE_AUDIO): Boolean {
-        return try {
-            val afd = context.assets.openFd(filename)
-            val extractor = android.media.MediaExtractor()
-            extractor.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-            afd.close()
-
-            var trackIndex = -1
-            var format: android.media.MediaFormat? = null
-
-            for (i in 0 until extractor.trackCount) {
-                val f = extractor.getTrackFormat(i)
-                val mime = f.getString(android.media.MediaFormat.KEY_MIME) ?: ""
-
-                if (mime.startsWith("audio/")) {
-                    trackIndex = i
-                    format = f
-                    break
-                }
-            }
-
-            if (trackIndex < 0 || format == null) {
-                return false
-            }
-
-            extractor.selectTrack(trackIndex)
-
-            val mime = format.getString(android.media.MediaFormat.KEY_MIME)!!
-            val channels = if (format.containsKey(android.media.MediaFormat.KEY_CHANNEL_COUNT)) {
-                format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
-            } else {
-                2
-            }
-
-            val codec = android.media.MediaCodec.createDecoderByType(mime)
-            codec.configure(format, null, null, 0)
-            codec.start()
-
-            val sampleList = mutableListOf<Float>()
-            val info = android.media.MediaCodec.BufferInfo()
-            var sawInputEOS = false
-            var sawOutputEOS = false
-
-            while (!sawOutputEOS) {
-                if (!sawInputEOS) {
-                    val inputIndex = codec.dequeueInputBuffer(5000)
-
-                    if (inputIndex >= 0) {
-                        val inputBuf = codec.getInputBuffer(inputIndex)
-                        val sampleSize = extractor.readSampleData(inputBuf!!, 0)
-
-                        if (sampleSize < 0) {
-                            codec.queueInputBuffer(inputIndex, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                            sawInputEOS = true
-                        } else {
-                            val sampleTime = extractor.sampleTime
-                            codec.queueInputBuffer(inputIndex, 0, sampleSize, sampleTime, 0)
-                            extractor.advance()
-                        }
-                    }
-                }
-
-                val outputIndex = codec.dequeueOutputBuffer(info, 5000)
-
-                if (outputIndex >= 0) {
-                    val outputBuf = codec.getOutputBuffer(outputIndex)
-
-                    if (outputBuf != null && info.size > 0) {
-                        outputBuf.position(info.offset)
-                        outputBuf.limit(info.offset + info.size)
-                        val shortBuf = outputBuf.order(ByteOrder.nativeOrder()).asShortBuffer()
-                        val numShorts = shortBuf.remaining()
-                        val shorts = ShortArray(numShorts)
-                        shortBuf.get(shorts)
-
-                        if (channels == 1) {
-                            for (s in shorts) {
-                                val floatVal = (s / 32768.0f).coerceIn(-1.0f, 1.0f)
-                                sampleList.add(floatVal) // Left
-                                sampleList.add(floatVal) // Right
-                            }
-                        } else {
-                            for (s in shorts) {
-                                val floatVal = (s / 32768.0f).coerceIn(-1.0f, 1.0f)
-                                sampleList.add(floatVal)
-                            }
-                        }
-                    }
-
-                    codec.releaseOutputBuffer(outputIndex, false)
-
-                    if ((info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                        sawOutputEOS = true
-                    }
-                }
-            }
-
-            codec.stop()
-            codec.release()
-            extractor.release()
-
-            val floatData = sampleList.toFloatArray()
-
-            if (nativeEngineHandle != 0L) {
-                nativeSetSampleAudioData(nativeEngineHandle, floatData)
-            }
-
-            Log.d(TAG, "Sample audio loaded successfully (${floatData.size} samples, channels=$channels)")
-            true
-        } catch (e: Throwable) {
-            Log.e(TAG, "Error loading sample audio asset", e)
-            false
-        }
-    }
-
     fun start() {
         if (isProcessing) {
             return
@@ -278,12 +156,6 @@ class AapAudioPlayer private constructor(
         if (nativeEngineHandle != 0L) {
             nativePause(nativeEngineHandle)
             Log.d(TAG, "Native audio player paused")
-        }
-    }
-
-    fun playSampleAudio() {
-        if (nativeEngineHandle != 0L) {
-            nativePlaySampleAudio(nativeEngineHandle)
         }
     }
 

@@ -165,32 +165,6 @@ void NativeAudioEngine::setSlotBypassed(int32_t slotIndex, bool bypassed)
     }
 }
 
-void NativeAudioEngine::setSampleAudioData(const float* data, size_t sizeInFloats)
-{
-    mSampleAudioData.assign(data, data + sizeInFloats);
-    mSampleAudioDataSize.store(sizeInFloats, std::memory_order_release);
-    mSampleAudioDataPtr.store(mSampleAudioData.data(), std::memory_order_release);
-    mSampleAudioPos.store(0, std::memory_order_release);
-    mIsPlayingSampleAudio.store(false, std::memory_order_release);
-    LOGI("Sample audio loaded into native engine (%zu samples)", sizeInFloats);
-}
-
-void NativeAudioEngine::playSampleAudio()
-{
-    if (mNumSlots > 0) {
-        auto inst0 = mSlots[0]->mInstance.load(std::memory_order_acquire);
-
-        if (inst0 != nullptr && !mSlots[0]->mIsBypassed.load(std::memory_order_relaxed)) {
-            if (inst0->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
-                return;
-            }
-        }
-    }
-
-    mSampleAudioPos.store(0, std::memory_order_release);
-    mIsPlayingSampleAudio.store(true, std::memory_order_release);
-}
-
 void NativeAudioEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, size_t size)
 {
     if (slotIndex < 0 || slotIndex >= mNumSlots || data == nullptr || size == 0) {
@@ -215,7 +189,7 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     clock_gettime(CLOCK_MONOTONIC, &start_total);
 
     // ----------------------------------------------------
-    // STEP 1: SLOT 0 (SYNTH / SAMPLE AUDIO)
+    // STEP 1: SLOT 0 (SYNTH / GENERATOR)
     // ----------------------------------------------------
     struct timespec slot_start, slot_end;
     clock_gettime(CLOCK_MONOTONIC, &slot_start);
@@ -255,31 +229,7 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     }
 
     if (!renderedSlot0) {
-        if (mIsPlayingSampleAudio.load(std::memory_order_relaxed)) {
-            auto sampleData = mSampleAudioDataPtr.load(std::memory_order_acquire);
-            auto totalSamples = mSampleAudioDataSize.load(std::memory_order_relaxed);
-            auto currentPos = mSampleAudioPos.load(std::memory_order_relaxed);
-
-            if (sampleData != nullptr && totalSamples > 0) {
-                auto remaining = totalSamples - currentPos;
-
-                if (remaining >= numSamples) {
-                    std::memcpy(mIntermediateStereoBuffer.data(), sampleData + currentPos, numSamples * sizeof(float));
-                    currentPos += numSamples;
-                } else {
-                    std::memcpy(mIntermediateStereoBuffer.data(), sampleData + currentPos, remaining * sizeof(float));
-                    std::fill(mIntermediateStereoBuffer.begin() + remaining, mIntermediateStereoBuffer.begin() + numSamples, 0.0f);
-                    mIsPlayingSampleAudio.store(false, std::memory_order_relaxed);
-                    currentPos = 0;
-                }
-
-                mSampleAudioPos.store(currentPos, std::memory_order_relaxed);
-            } else {
-                std::fill(mIntermediateStereoBuffer.begin(), mIntermediateStereoBuffer.begin() + numSamples, 0.0f);
-            }
-        } else {
-            std::fill(mIntermediateStereoBuffer.begin(), mIntermediateStereoBuffer.begin() + numSamples, 0.0f);
-        }
+        std::fill(mIntermediateStereoBuffer.begin(), mIntermediateStereoBuffer.begin() + numSamples, 0.0f);
     }
 
     if (mNumSlots > 0) {
