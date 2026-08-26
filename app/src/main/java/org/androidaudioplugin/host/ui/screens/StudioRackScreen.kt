@@ -1,11 +1,14 @@
 package org.androidaudioplugin.host.ui.screens
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.os.Build
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -25,13 +28,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
@@ -54,6 +62,11 @@ fun StudioRackScreen(
     val currentSlotIndex = viewModel.activeSlotIndex
     val activeSlot = viewModel.slots[currentSlotIndex]
     val activePlugin = activeSlot.pluginInfo
+    var isRackFolded by remember { mutableStateOf(false) }
+
+    androidx.activity.compose.BackHandler(enabled = isRackFolded) {
+        isRackFolded = false
+    }
 
     Column(
         modifier = Modifier
@@ -61,51 +74,53 @@ fun StudioRackScreen(
             .background(StudioBackground)
             .padding(12.dp)
     ) {
-        // Master Control Banner
-        MasterControlBanner(
-            slots = viewModel.slots,
-            isProcessing = viewModel.isProcessing,
-            totalCpuLoad = viewModel.totalCpuLoad,
-            isSamplePressed = viewModel.isSamplePressed,
-            onToggleProcessing = { viewModel.toggleAudioPlayback() },
-            onTriggerAudioSample = { viewModel.triggerSampleAudio() },
-            onOpenSettings = onNavigateToSettings
-        )
+        if (!isRackFolded) {
+            // Master Control Banner
+            MasterControlBanner(
+                slots = viewModel.slots,
+                isProcessing = viewModel.isProcessing,
+                totalCpuLoad = viewModel.totalCpuLoad,
+                isSamplePressed = viewModel.isSamplePressed,
+                onToggleProcessing = { viewModel.toggleAudioPlayback() },
+                onTriggerAudioSample = { viewModel.triggerSampleAudio() },
+                onOpenSettings = onNavigateToSettings
+            )
 
-        Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-        // Multi-Slot Audio Signal Chain Rack Header
-        SignalRackHeader(
-            slots = viewModel.slots,
-            activeSlotIndex = currentSlotIndex,
-            isProcessing = viewModel.isProcessing,
-            slotCpuLoads = viewModel.slotCpuLoads,
-            onSelectSlot = { slotIdx ->
-                viewModel.selectActiveSlot(slotIdx)
-            },
-            onAddPlugin = { slotIndex ->
-                viewModel.openBrowserForSlot(slotIndex)
-                onNavigateToBrowser()
-            },
-            onToggleBypass = { slotIdx ->
-                viewModel.toggleSlotBypass(slotIdx)
-            },
-            onUnloadSlot = { slotIdx ->
-                viewModel.unloadSlot(slotIdx)
-            }
-        )
+            // Multi-Slot Audio Signal Chain Rack Header
+            SignalRackHeader(
+                slots = viewModel.slots,
+                activeSlotIndex = currentSlotIndex,
+                isProcessing = viewModel.isProcessing,
+                slotCpuLoads = viewModel.slotCpuLoads,
+                onSelectSlot = { slotIdx ->
+                    viewModel.selectActiveSlot(slotIdx)
+                },
+                onAddPlugin = { slotIndex ->
+                    viewModel.openBrowserForSlot(slotIndex)
+                    onNavigateToBrowser()
+                },
+                onToggleBypass = { slotIdx ->
+                    viewModel.toggleSlotBypass(slotIdx)
+                },
+                onUnloadSlot = { slotIdx ->
+                    viewModel.unloadSlot(slotIdx)
+                }
+            )
 
-        Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-        // View Mode Selector & Preset Bar for Active Slot
-        StatusAndModeSelectorBar(
-            activeSlot = activeSlot,
-            currentMode = viewModel.currentViewMode,
-            onModeSelected = { viewModel.updateViewMode(it) },
-            onPresetSelected = { viewModel.setPreset(activeSlot.index, it) }
-        )
+            // View Mode Selector & Preset Bar for Active Slot
+            StatusAndModeSelectorBar(
+                activeSlot = activeSlot,
+                currentMode = viewModel.currentViewMode,
+                onModeSelected = { viewModel.updateViewMode(it) },
+                onPresetSelected = { viewModel.setPreset(activeSlot.index, it) }
+            )
 
-        Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+        }
 
         // Dynamic Main Panel (Parameter Controls / Native Embedded GUI / Ports Spec)
         Box(
@@ -143,7 +158,9 @@ fun StudioRackScreen(
                             NativePluginSurfaceContainer(
                                 viewModel = viewModel,
                                 slot = activeSlot,
-                                plugin = activePlugin
+                                plugin = activePlugin,
+                                isRackFolded = isRackFolded,
+                                onToggleFoldRack = { isRackFolded = !isRackFolded }
                             )
                         }
                         StudioRackViewMode.SPECS -> {
@@ -606,10 +623,368 @@ private fun ParameterControlRack(
 }
 
 @Composable
+private fun NativeSurfaceZoomToolbar(
+    isFitMode: Boolean,
+    displayedScale: Float,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    showFullscreenButton: Boolean,
+    isFullscreen: Boolean,
+    onToggleFullscreen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xD9181C26))
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp))
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Zoom Out (-) Button (Disabled when in FIT mode)
+        val canZoomOut = !isFitMode
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (canZoomOut) Color(0xFF282D3B) else Color(0xFF1E212A))
+                .clickable(
+                    enabled = canZoomOut,
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onZoomOut() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Remove,
+                contentDescription = "Zoom Out",
+                tint = if (canZoomOut) TextPrimary else TextMuted.copy(alpha = 0.35f),
+                modifier = Modifier.size(14.dp)
+            )
+        }
+
+        // Zoom Percentage readout
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (isFitMode) Color(0xFF282D3B) else Color.Transparent)
+                .padding(horizontal = 6.dp, vertical = 3.dp)
+        ) {
+            val zoomPercent = "${(displayedScale * 100).toInt()}%"
+            Text(
+                text = zoomPercent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = if (isFitMode) NeonCyan else AccentGold
+            )
+        }
+
+        // Zoom In (+) Button
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFF282D3B))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onZoomIn() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Zoom In",
+                tint = TextPrimary,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+
+        if (showFullscreenButton) {
+            Spacer(modifier = Modifier.width(2.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF282D3B))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onToggleFullscreen() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                    contentDescription = if (isFullscreen) "Exit Fullscreen" else "Fullscreen",
+                    tint = TextPrimary,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NativeSurfaceInteractionToggle(
+    isMoveMode: Boolean,
+    onSelectTweakMode: () -> Unit,
+    onSelectMoveMode: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // TWEAK Button (Individual background, white TextPrimary active)
+        val isTweakActive = !isMoveMode
+        val tweakInteractionSource = remember { MutableInteractionSource() }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isTweakActive) Color(0xFF282D3B) else Color(0x80181C26))
+                .border(1.dp, if (isTweakActive) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
+                .clickable(
+                    interactionSource = tweakInteractionSource,
+                    indication = androidx.compose.material3.ripple(bounded = true, color = Color.White)
+                ) { onSelectTweakMode() }
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.TouchApp,
+                    contentDescription = "Tweak Mode",
+                    tint = if (isTweakActive) TextPrimary else TextSecondary,
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = "TWEAK",
+                    fontSize = 9.sp,
+                    fontWeight = if (isTweakActive) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isTweakActive) TextPrimary else TextSecondary
+                )
+            }
+        }
+
+        // MOVE Button (Individual background, white TextPrimary active)
+        val isMoveActive = isMoveMode
+        val moveInteractionSource = remember { MutableInteractionSource() }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (isMoveActive) Color(0xFF282D3B) else Color(0x80181C26))
+                .border(1.dp, if (isMoveActive) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
+                .clickable(
+                    interactionSource = moveInteractionSource,
+                    indication = androidx.compose.material3.ripple(bounded = true, color = Color.White)
+                ) { onSelectMoveMode() }
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.OpenWith,
+                    contentDescription = "Move Mode",
+                    tint = if (isMoveActive) TextPrimary else TextSecondary,
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = "MOVE",
+                    fontSize = 9.sp,
+                    fontWeight = if (isMoveActive) FontWeight.Bold else FontWeight.Medium,
+                    color = if (isMoveActive) TextPrimary else TextSecondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NativePluginSurfaceViewer(
+    host: GuiHelper.NativeEmbeddedSurfaceControlHost,
+    preferredSize: GuiHelper.Size,
+    isFitMode: Boolean,
+    isMoveMode: Boolean,
+    currentScale: Float,
+    panOffsetX: Float,
+    panOffsetY: Float,
+    onFitScaleCalculated: (Float) -> Unit,
+    onEffectiveScaleCalculated: (Float) -> Unit,
+    onPanDelta: (Float, Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF10131A))
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        val density = LocalDensity.current
+        val containerWidthPx = with(density) { maxWidth.toPx() }
+        val containerHeightPx = with(density) { maxHeight.toPx() }
+
+        val nativeWidthPx = preferredSize.width.toFloat().coerceAtLeast(100f)
+        val nativeHeightPx = preferredSize.height.toFloat().coerceAtLeast(100f)
+
+        val fitScale = minOf(containerWidthPx / nativeWidthPx, containerHeightPx / nativeHeightPx, 1.0f).coerceAtLeast(0.05f)
+        val effectiveScale = if (isFitMode) {
+            fitScale
+        } else {
+            currentScale.coerceAtLeast(0.05f)
+        }
+
+        LaunchedEffect(fitScale) {
+            onFitScaleCalculated(fitScale)
+        }
+
+        LaunchedEffect(effectiveScale) {
+            onEffectiveScaleCalculated(effectiveScale)
+        }
+
+        val scaledContentWidth = nativeWidthPx * effectiveScale
+        val scaledContentHeight = nativeHeightPx * effectiveScale
+
+        // Strict out-of-bounds translation clamping in both axes
+        val minTransX = if (scaledContentWidth <= containerWidthPx) {
+            (containerWidthPx - scaledContentWidth) / 2f
+        } else {
+            containerWidthPx - scaledContentWidth
+        }
+        val maxTransX = if (scaledContentWidth <= containerWidthPx) {
+            (containerWidthPx - scaledContentWidth) / 2f
+        } else {
+            0f
+        }
+
+        val minTransY = if (scaledContentHeight <= containerHeightPx) {
+            (containerHeightPx - scaledContentHeight) / 2f
+        } else {
+            containerHeightPx - scaledContentHeight
+        }
+        val maxTransY = if (scaledContentHeight <= containerHeightPx) {
+            (containerHeightPx - scaledContentHeight) / 2f
+        } else {
+            0f
+        }
+
+        val transX = if (isFitMode) {
+            (containerWidthPx - scaledContentWidth) / 2f
+        } else {
+            panOffsetX.coerceIn(minTransX, maxTransX)
+        }
+
+        val transY = if (isFitMode) {
+            (containerHeightPx - scaledContentHeight) / 2f
+        } else {
+            panOffsetY.coerceIn(minTransY, maxTransY)
+        }
+
+        AndroidView(
+            factory = { ctx ->
+                FrameLayout(ctx).apply {
+                    clipChildren = true
+                    clipToPadding = true
+                    outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+                    clipToOutline = true
+                    setBackgroundColor(android.graphics.Color.parseColor("#10131A"))
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+
+                    val surfaceView = host.surfaceView
+
+                    if (surfaceView.parent != null) {
+                        (surfaceView.parent as ViewGroup).removeView(surfaceView)
+                    }
+
+                    surfaceView.isClickable = true
+                    (surfaceView as? android.view.SurfaceView)?.setZOrderMediaOverlay(true)
+
+                    val lp = FrameLayout.LayoutParams(
+                        preferredSize.width,
+                        preferredSize.height
+                    ).apply {
+                        gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                    }
+                    surfaceView.layoutParams = lp
+                    surfaceView.pivotX = 0f
+                    surfaceView.pivotY = 0f
+                    surfaceView.scaleX = effectiveScale
+                    surfaceView.scaleY = effectiveScale
+                    surfaceView.translationX = transX
+                    surfaceView.translationY = transY
+
+                    addView(surfaceView)
+                }
+            },
+            update = { frameLayout ->
+                val surfaceView = host.surfaceView
+
+                if (surfaceView.parent !== frameLayout) {
+                    if (surfaceView.parent != null) {
+                        (surfaceView.parent as ViewGroup).removeView(surfaceView)
+                    }
+
+                    frameLayout.removeAllViews()
+                    frameLayout.addView(surfaceView)
+                }
+
+                surfaceView.isClickable = true
+                (surfaceView as? android.view.SurfaceView)?.setZOrderMediaOverlay(true)
+
+                val lp = (surfaceView.layoutParams as? FrameLayout.LayoutParams) ?: FrameLayout.LayoutParams(
+                    preferredSize.width,
+                    preferredSize.height
+                )
+                lp.width = preferredSize.width
+                lp.height = preferredSize.height
+                lp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                surfaceView.layoutParams = lp
+
+                surfaceView.pivotX = 0f
+                surfaceView.pivotY = 0f
+                surfaceView.scaleX = effectiveScale
+                surfaceView.scaleY = effectiveScale
+                surfaceView.translationX = transX
+                surfaceView.translationY = transY
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Transparent Move Drag Overlay (captures touches to translate view in X and Y without going out of bounds)
+        if (!isFitMode && isMoveMode) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(minTransX, maxTransX, minTransY, maxTransY) {
+                        detectDragGestures { change, dragAmount ->
+                            change.consume()
+                            onPanDelta(dragAmount.x, dragAmount.y)
+                        }
+                    }
+            )
+        }
+    }
+}
+
+@Composable
 private fun NativePluginSurfaceContainer(
     viewModel: HostViewModel,
     slot: RackSlotData,
-    plugin: PluginInformation
+    plugin: PluginInformation,
+    isRackFolded: Boolean,
+    onToggleFoldRack: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -617,6 +992,14 @@ private fun NativePluginSurfaceContainer(
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && instance != null) {
         var surfaceHost by remember { mutableStateOf<GuiHelper.NativeEmbeddedSurfaceControlHost?>(null) }
+        var preferredSize by remember { mutableStateOf(GuiHelper.Size(800, 600)) }
+        var isFitMode by remember { mutableStateOf(true) }
+        var isMoveMode by remember { mutableStateOf(false) }
+        var calculatedFitScale by remember { mutableFloatStateOf(1.0f) }
+        var currentScale by remember { mutableFloatStateOf(1.0f) }
+        var displayedScale by remember { mutableFloatStateOf(1.0f) }
+        var panOffsetX by remember { mutableFloatStateOf(0f) }
+        var panOffsetY by remember { mutableFloatStateOf(0f) }
 
         DisposableEffect(instance.instanceId) {
             val host = GuiHelper.NativeEmbeddedSurfaceControlHost(
@@ -630,6 +1013,7 @@ private fun NativePluginSurfaceContainer(
             coroutineScope.launch {
                 try {
                     val size = host.getPreferredSizeOrFallback(800, 600)
+                    preferredSize = size
                     host.connect(size.width, size.height)
                     host.show()
                 } catch (e: Throwable) {
@@ -646,26 +1030,90 @@ private fun NativePluginSurfaceContainer(
             }
         }
 
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            surfaceHost?.let { host ->
-                AndroidView(
-                    factory = { ctx ->
-                        FrameLayout(ctx).apply {
-                            layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
+        surfaceHost?.let { host ->
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Dedicated Top Toolbar Row above the native surface
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        NativeSurfaceZoomToolbar(
+                            isFitMode = isFitMode,
+                            displayedScale = displayedScale,
+                            onZoomIn = {
+                                val base = if (isFitMode) calculatedFitScale else currentScale
+                                val target = (Math.round((base + 0.15f) * 20.0) / 20.0).toFloat().coerceIn(0.05f, 3.0f)
+                                isFitMode = false
+                                currentScale = target
+                            },
+                            onZoomOut = {
+                                val base = if (isFitMode) calculatedFitScale else currentScale
+                                val target = (Math.round((base - 0.15f) * 20.0) / 20.0).toFloat()
+
+                                if (target <= calculatedFitScale + 0.02f) {
+                                    isFitMode = true
+                                    isMoveMode = false
+                                    panOffsetX = 0f
+                                    panOffsetY = 0f
+                                } else {
+                                    isFitMode = false
+                                    currentScale = target
+                                }
+                            },
+                            showFullscreenButton = true,
+                            isFullscreen = isRackFolded,
+                            onToggleFullscreen = onToggleFoldRack
+                        )
+
+                        if (!isFitMode) {
+                            NativeSurfaceInteractionToggle(
+                                isMoveMode = isMoveMode,
+                                onSelectTweakMode = { isMoveMode = false },
+                                onSelectMoveMode = { isMoveMode = true }
                             )
-                            val surfaceView = host.surfaceView
-                            if (surfaceView.parent != null) {
-                                (surfaceView.parent as ViewGroup).removeView(surfaceView)
-                            }
-                            addView(surfaceView)
                         }
+                    }
+
+                    if (isRackFolded) {
+                        Text(
+                            text = plugin.displayName,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+
+                // Sizable Centered Native Surface View
+                NativePluginSurfaceViewer(
+                    host = host,
+                    preferredSize = preferredSize,
+                    isFitMode = isFitMode,
+                    isMoveMode = isMoveMode,
+                    currentScale = currentScale,
+                    panOffsetX = panOffsetX,
+                    panOffsetY = panOffsetY,
+                    onFitScaleCalculated = { calculatedFitScale = it },
+                    onEffectiveScaleCalculated = { displayedScale = it },
+                    onPanDelta = { dx, dy ->
+                        panOffsetX += dx
+                        panOffsetY += dy
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
                 )
             }
         }
@@ -676,12 +1124,15 @@ private fun NativePluginSurfaceContainer(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.Layers, contentDescription = null, tint = TextMuted, modifier = Modifier.size(48.dp))
+
                 Spacer(modifier = Modifier.height(8.dp))
+
                 Text(
                     text = "Native Surface GUI container requires Android 11+ (API 30+).",
                     color = TextSecondary,
                     fontSize = 13.sp
                 )
+
                 Text(
                     text = "Use the Parameter Controls tab to tweak plugin values.",
                     color = TextMuted,
@@ -700,11 +1151,15 @@ private fun PluginPortsAndSpecsView(plugin: PluginInformation) {
     ) {
         item {
             Text("PLUGIN SPECIFICATIONS", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
+
             Spacer(modifier = Modifier.height(4.dp))
+
             Text("ID: ${plugin.pluginId ?: "N/A"}", fontSize = 12.sp, color = TextPrimary)
             Text("Package: ${plugin.packageName}", fontSize = 12.sp, color = TextSecondary)
             Text("Category: ${plugin.category ?: "Unspecified"}", fontSize = 12.sp, color = TextSecondary)
-            Divider(modifier = Modifier.padding(vertical = 8.dp), color = StudioPanelBorder)
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = StudioPanelBorder)
+
             Text("AUDIO & MIDI PORTS (${plugin.ports.size})", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = SignalGreen)
         }
 

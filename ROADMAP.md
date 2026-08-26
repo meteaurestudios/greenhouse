@@ -11,9 +11,6 @@ This document outlines future tasks, technical enhancements, and UX improvements
 | **Master Output Gain & Limiter** | `High` | Add a master output gain slider and soft-clipper/limiter on the workstation banner to prevent digital clipping when testing high-gain plugins or polyphonic synths. |
 | **Latency Benchmark Display** | `Low` | Display real-time round-trip latency (in milliseconds) based on native Oboe callback performance metrics in the status banner. |
 
-> [!NOTE]
-> **Sample Rate & Buffer Configuration**: The native audio engine automatically configures hardware sample rate and buffer burst size for minimal latency.
-
 ---
 
 ## 2. 🎹 MIDI & Performance Controls
@@ -30,7 +27,6 @@ This document outlines future tasks, technical enhancements, and UX improvements
 
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
-| **Adaptive Native UI Scaling** | `High` | Dynamically scale and adapt embedded native plugin GUI surfaces to fit available device height and width without clipping. |
 | **AAP User Preset Saving & Export** | `High` | Enable saving current parameter states as custom user presets, exporting/importing them as JSON or native AAP state blobs. |
 | **Native GUI Fallback & Error Handling** | `Medium` | Display a smooth fallback message if a native plugin surface crashes or fails to instantiate via IPC. |
 | **Compact Mode / Landscape Optimization** | `Low` | Further optimize layout spacing for tablet and landscape tablet displays. |
@@ -51,6 +47,7 @@ This document outlines future tasks, technical enhancements, and UX improvements
 
 - ✅ **Native C++ Audio Engine (`NativeAudioEngine`)**: High-performance C++ Oboe playback engine executing dynamic multi-slot signal chains (Slot 0 instrument $\rightarrow$ Slot $1 \dots N-1$ effects) with lock-free CPU load tracking.
 - ✅ **Real-Time DSP CPU Load Meters**: Live DSP callback meter widget in the master control banner, per-slot load badges on active rack cards, and comprehensive diagnostics in Engine Settings.
+- ✅ **Adaptive Native Plugin UI Display**: Smart proportional auto-fit, calibrated 15% zoom stepping aligned to 5% multiples, seamless 2D translation (`MOVE` mode), frictionless single-touch consecutive knob tweaking (`TWEAK` mode), stationary glass toolbar with far-left mode toggle, and full-screen immersive mode with playable live MIDI keyboard.
 - ✅ **Matte Titanium Luxury DAW UI**: Apple Pro / Teenage Engineering inspired dark obsidian theme.
 - ✅ **Dynamic Multi-Slot Workstation Rack**: Configurable $N$-slot signal chains with active slot focus, parameter modulation, and bypass toggles.
 - ✅ **Live Interactive MIDI Keyboard**: Full octave shifting, note latch/hold mode, and polyphonic MIDI 2.0 UMP event dispatching.
