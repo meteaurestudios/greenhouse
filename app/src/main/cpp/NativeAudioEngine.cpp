@@ -1,4 +1,6 @@
 #include "NativeAudioEngine.h"
+#include "ScopedNoDenormals.h"
+#include "AudioSimd.h"
 #include <algorithm>
 #include <cstring>
 
@@ -15,7 +17,7 @@ NativeAudioEngine::NativeAudioEngine(int32_t sampleRate, int32_t framesPerCallba
       mFramesPerCallback(framesPerCallback),
       mChannelCount(channelCount),
       mNumSlots(std::max(1, numSlots)),
-      mIntermediateStereoBuffer(framesPerCallback * channelCount, 0.0f),
+      mIntermediateStereoBuffer(std::max<size_t>(static_cast<size_t>(framesPerCallback * channelCount * 4), 8192), 0.0f),
       mSmoothedSlotLoad(std::max(1, numSlots), 0.0)
 {
     mBufferDurationNs = (static_cast<double>(framesPerCallback) / static_cast<double>(sampleRate)) * 1e9;
@@ -60,15 +62,15 @@ bool NativeAudioEngine::start()
         return false;
     }
 
-    // Activate all loaded plugins
+    // Activate all loaded plugins on control thread
     for (int32_t i = 0; i < mNumSlots; i++) {
-        std::lock_guard<std::mutex> lock(mSlots[i]->mMutex);
+        auto inst = mSlots[i]->mInstance.load(std::memory_order_acquire);
 
-        if (mSlots[i]->mInstance != nullptr) {
-            mSlots[i]->refreshPorts();
+        if (inst != nullptr) {
+            mSlots[i]->refreshPorts(inst);
 
-            if (mSlots[i]->mInstance->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_INACTIVE) {
-                mSlots[i]->mInstance->activate();
+            if (inst->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_INACTIVE) {
+                inst->activate();
             }
         }
     }
@@ -103,11 +105,11 @@ void NativeAudioEngine::pause()
     }
 
     for (int32_t i = 0; i < mNumSlots; i++) {
-        std::lock_guard<std::mutex> lock(mSlots[i]->mMutex);
+        auto inst = mSlots[i]->mInstance.load(std::memory_order_acquire);
 
-        if (mSlots[i]->mInstance != nullptr) {
-            if (mSlots[i]->mInstance->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
-                mSlots[i]->mInstance->deactivate();
+        if (inst != nullptr) {
+            if (inst->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
+                inst->deactivate();
             }
         }
     }
@@ -140,9 +142,10 @@ void NativeAudioEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* clie
     mSlots[slotIndex]->setInstance(instance);
 
     if (instance != nullptr) {
-        LOGI("Slot %d plugin set: %p (instanceId=%d, inPorts=%zu, outPorts=%zu, state=%d)",
+        LOGI("Slot %d plugin set: %p (instanceId=%d, inPorts=%d, outPorts=%d, state=%d)",
              slotIndex, instance, instanceId,
-             mSlots[slotIndex]->mAudioInPorts.size(), mSlots[slotIndex]->mAudioOutPorts.size(),
+             mSlots[slotIndex]->mInPortCount.load(std::memory_order_relaxed),
+             mSlots[slotIndex]->mOutPortCount.load(std::memory_order_relaxed),
              static_cast<int>(instance->getInstanceState()));
 
         if (mIsProcessing.load()) {
@@ -164,27 +167,28 @@ void NativeAudioEngine::setSlotBypassed(int32_t slotIndex, bool bypassed)
 
 void NativeAudioEngine::setSampleAudioData(const float* data, size_t sizeInFloats)
 {
-    std::lock_guard<std::mutex> lock(mSampleAudioMutex);
     mSampleAudioData.assign(data, data + sizeInFloats);
-    mSampleAudioPos.store(0);
-    mIsPlayingSampleAudio.store(false);
+    mSampleAudioDataSize.store(sizeInFloats, std::memory_order_release);
+    mSampleAudioDataPtr.store(mSampleAudioData.data(), std::memory_order_release);
+    mSampleAudioPos.store(0, std::memory_order_release);
+    mIsPlayingSampleAudio.store(false, std::memory_order_release);
     LOGI("Sample audio loaded into native engine (%zu samples)", sizeInFloats);
 }
 
 void NativeAudioEngine::playSampleAudio()
 {
     if (mNumSlots > 0) {
-        std::lock_guard<std::mutex> lock(mSlots[0]->mMutex);
+        auto inst0 = mSlots[0]->mInstance.load(std::memory_order_acquire);
 
-        if (mSlots[0]->mInstance != nullptr && !mSlots[0]->mIsBypassed.load()) {
-            if (mSlots[0]->mInstance->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
+        if (inst0 != nullptr && !mSlots[0]->mIsBypassed.load(std::memory_order_relaxed)) {
+            if (inst0->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
                 return;
             }
         }
     }
 
-    mSampleAudioPos.store(0);
-    mIsPlayingSampleAudio.store(true);
+    mSampleAudioPos.store(0, std::memory_order_release);
+    mIsPlayingSampleAudio.store(true, std::memory_order_release);
 }
 
 void NativeAudioEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, size_t size)
@@ -193,8 +197,7 @@ void NativeAudioEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, si
         return;
     }
 
-    std::lock_guard<std::mutex> lock(mSlots[slotIndex]->mMutex);
-    auto inst = mSlots[slotIndex]->mInstance;
+    auto inst = mSlots[slotIndex]->mInstance.load(std::memory_order_acquire);
 
     if (inst != nullptr) {
         inst->addEventUmpInput((void*) data, size);
@@ -203,12 +206,10 @@ void NativeAudioEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, si
 
 oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audioStream, void *audioData, int32_t numFrames)
 {
+    ScopedNoDenormals noDenormals;
+
     auto outStream = static_cast<float*>(audioData);
     auto numSamples = static_cast<size_t>(numFrames * mChannelCount);
-
-    if (mIntermediateStereoBuffer.size() < numSamples) {
-        mIntermediateStereoBuffer.resize(numSamples, 0.0f);
-    }
 
     struct timespec start_total, end_total;
     clock_gettime(CLOCK_MONOTONIC, &start_total);
@@ -222,45 +223,30 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     bool renderedSlot0 = false;
 
     if (mNumSlots > 0) {
-        std::lock_guard<std::mutex> lock(mSlots[0]->mMutex);
-        auto inst0 = mSlots[0]->mInstance;
+        auto inst0 = mSlots[0]->mInstance.load(std::memory_order_acquire);
 
-        if (inst0 != nullptr && !mSlots[0]->mIsBypassed.load()) {
-            if (inst0->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_INACTIVE) {
-                inst0->activate();
-            }
-
+        if (inst0 != nullptr && !mSlots[0]->mIsBypassed.load(std::memory_order_relaxed)) {
             if (inst0->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
                 inst0->process(numFrames, 0);
                 auto aapBuffer = inst0->getAudioPluginBuffer();
 
-                if (mSlots[0]->mAudioOutPorts.empty()) {
-                    mSlots[0]->refreshPorts();
-                }
+                auto outCount = mSlots[0]->mOutPortCount.load(std::memory_order_relaxed);
+                auto out0 = mSlots[0]->mOutPort0.load(std::memory_order_relaxed);
+                auto out1 = mSlots[0]->mOutPort1.load(std::memory_order_relaxed);
 
-                const auto& outPorts = mSlots[0]->mAudioOutPorts;
-
-                if (outPorts.size() >= 2) {
-                    auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, outPorts[0]));
-                    auto outR = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, outPorts[1]));
+                if (outCount >= 2 && out0 >= 0 && out1 >= 0 && aapBuffer != nullptr) {
+                    auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
+                    auto outR = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out1));
 
                     if (outL != nullptr && outR != nullptr) {
-                        for (int32_t i = 0; i < numFrames; i++) {
-                            mIntermediateStereoBuffer[i * 2 + 0] = outL[i];
-                            mIntermediateStereoBuffer[i * 2 + 1] = outR[i];
-                        }
-
+                        simd::interleaveStereo(outL, outR, mIntermediateStereoBuffer.data(), numFrames);
                         renderedSlot0 = true;
                     }
-                } else if (outPorts.size() == 1) {
-                    auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, outPorts[0]));
+                } else if (outCount == 1 && out0 >= 0 && aapBuffer != nullptr) {
+                    auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
 
                     if (outL != nullptr) {
-                        for (int32_t i = 0; i < numFrames; i++) {
-                            mIntermediateStereoBuffer[i * 2 + 0] = outL[i];
-                            mIntermediateStereoBuffer[i * 2 + 1] = outL[i];
-                        }
-
+                        simd::interleaveMonoToStereo(outL, mIntermediateStereoBuffer.data(), numFrames);
                         renderedSlot0 = true;
                     }
                 }
@@ -269,24 +255,28 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     }
 
     if (!renderedSlot0) {
-        if (mIsPlayingSampleAudio.load()) {
-            std::lock_guard<std::mutex> lock(mSampleAudioMutex);
-            auto totalSamples = mSampleAudioData.size();
-            auto currentPos = mSampleAudioPos.load();
+        if (mIsPlayingSampleAudio.load(std::memory_order_relaxed)) {
+            auto sampleData = mSampleAudioDataPtr.load(std::memory_order_acquire);
+            auto totalSamples = mSampleAudioDataSize.load(std::memory_order_relaxed);
+            auto currentPos = mSampleAudioPos.load(std::memory_order_relaxed);
 
-            for (int32_t i = 0; i < numFrames; i++) {
-                if (currentPos + 1 < totalSamples) {
-                    mIntermediateStereoBuffer[i * 2 + 0] = mSampleAudioData[currentPos++];
-                    mIntermediateStereoBuffer[i * 2 + 1] = mSampleAudioData[currentPos++];
+            if (sampleData != nullptr && totalSamples > 0) {
+                auto remaining = totalSamples - currentPos;
+
+                if (remaining >= numSamples) {
+                    std::memcpy(mIntermediateStereoBuffer.data(), sampleData + currentPos, numSamples * sizeof(float));
+                    currentPos += numSamples;
                 } else {
-                    mIntermediateStereoBuffer[i * 2 + 0] = 0.0f;
-                    mIntermediateStereoBuffer[i * 2 + 1] = 0.0f;
-                    mIsPlayingSampleAudio.store(false);
+                    std::memcpy(mIntermediateStereoBuffer.data(), sampleData + currentPos, remaining * sizeof(float));
+                    std::fill(mIntermediateStereoBuffer.begin() + remaining, mIntermediateStereoBuffer.begin() + numSamples, 0.0f);
+                    mIsPlayingSampleAudio.store(false, std::memory_order_relaxed);
                     currentPos = 0;
                 }
-            }
 
-            mSampleAudioPos.store(currentPos);
+                mSampleAudioPos.store(currentPos, std::memory_order_relaxed);
+            } else {
+                std::fill(mIntermediateStereoBuffer.begin(), mIntermediateStereoBuffer.begin() + numSamples, 0.0f);
+            }
         } else {
             std::fill(mIntermediateStereoBuffer.begin(), mIntermediateStereoBuffer.begin() + numSamples, 0.0f);
         }
@@ -306,67 +296,52 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     for (int32_t slotIdx = 1; slotIdx < mNumSlots; slotIdx++) {
         clock_gettime(CLOCK_MONOTONIC, &slot_start);
 
-        std::lock_guard<std::mutex> lock(mSlots[slotIdx]->mMutex);
-        auto inst = mSlots[slotIdx]->mInstance;
+        auto inst = mSlots[slotIdx]->mInstance.load(std::memory_order_acquire);
 
-        if (inst != nullptr && !mSlots[slotIdx]->mIsBypassed.load()) {
-            if (inst->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_INACTIVE) {
-                inst->activate();
-            }
-
+        if (inst != nullptr && !mSlots[slotIdx]->mIsBypassed.load(std::memory_order_relaxed)) {
             if (inst->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
-                if (mSlots[slotIdx]->mAudioInPorts.empty() || mSlots[slotIdx]->mAudioOutPorts.empty()) {
-                    mSlots[slotIdx]->refreshPorts();
-                }
+                auto inCount = mSlots[slotIdx]->mInPortCount.load(std::memory_order_relaxed);
+                auto in0 = mSlots[slotIdx]->mInPort0.load(std::memory_order_relaxed);
+                auto in1 = mSlots[slotIdx]->mInPort1.load(std::memory_order_relaxed);
+                auto outCount = mSlots[slotIdx]->mOutPortCount.load(std::memory_order_relaxed);
+                auto out0 = mSlots[slotIdx]->mOutPort0.load(std::memory_order_relaxed);
+                auto out1 = mSlots[slotIdx]->mOutPort1.load(std::memory_order_relaxed);
 
                 auto aapBuffer = inst->getAudioPluginBuffer();
-                const auto& inPorts = mSlots[slotIdx]->mAudioInPorts;
-                const auto& outPorts = mSlots[slotIdx]->mAudioOutPorts;
 
-                if (!inPorts.empty() && !outPorts.empty() && aapBuffer != nullptr) {
-                    // Copy intermediate stereo buffer into effect inputs
-                    if (inPorts.size() >= 2) {
-                        auto inL = static_cast<float*>(aapBuffer->get_buffer(aapBuffer, inPorts[0]));
-                        auto inR = static_cast<float*>(aapBuffer->get_buffer(aapBuffer, inPorts[1]));
+                if (inCount > 0 && outCount > 0 && aapBuffer != nullptr) {
+                    // Copy intermediate stereo buffer into effect inputs (SIMD deinterleaving)
+                    if (inCount >= 2 && in0 >= 0 && in1 >= 0) {
+                        auto inL = static_cast<float*>(aapBuffer->get_buffer(aapBuffer, in0));
+                        auto inR = static_cast<float*>(aapBuffer->get_buffer(aapBuffer, in1));
 
                         if (inL != nullptr && inR != nullptr) {
-                            for (int32_t i = 0; i < numFrames; i++) {
-                                inL[i] = mIntermediateStereoBuffer[i * 2 + 0];
-                                inR[i] = mIntermediateStereoBuffer[i * 2 + 1];
-                            }
+                            simd::deinterleaveStereo(mIntermediateStereoBuffer.data(), inL, inR, numFrames);
                         }
-                    } else if (inPorts.size() == 1) {
-                        auto inM = static_cast<float*>(aapBuffer->get_buffer(aapBuffer, inPorts[0]));
+                    } else if (inCount == 1 && in0 >= 0) {
+                        auto inM = static_cast<float*>(aapBuffer->get_buffer(aapBuffer, in0));
 
                         if (inM != nullptr) {
-                            for (int32_t i = 0; i < numFrames; i++) {
-                                inM[i] = 0.5f * (mIntermediateStereoBuffer[i * 2 + 0] + mIntermediateStereoBuffer[i * 2 + 1]);
-                            }
+                            simd::deinterleaveStereoToMono(mIntermediateStereoBuffer.data(), inM, numFrames);
                         }
                     }
 
                     // Process plugin
                     inst->process(numFrames, 0);
 
-                    // Read effect outputs back into intermediate stereo buffer
-                    if (outPorts.size() >= 2) {
-                        auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, outPorts[0]));
-                        auto outR = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, outPorts[1]));
+                    // Read effect outputs back into intermediate stereo buffer (SIMD interleaving)
+                    if (outCount >= 2 && out0 >= 0 && out1 >= 0) {
+                        auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
+                        auto outR = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out1));
 
                         if (outL != nullptr && outR != nullptr) {
-                            for (int32_t i = 0; i < numFrames; i++) {
-                                mIntermediateStereoBuffer[i * 2 + 0] = outL[i];
-                                mIntermediateStereoBuffer[i * 2 + 1] = outR[i];
-                            }
+                            simd::interleaveStereo(outL, outR, mIntermediateStereoBuffer.data(), numFrames);
                         }
-                    } else if (outPorts.size() == 1) {
-                        auto outM = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, outPorts[0]));
+                    } else if (outCount == 1 && out0 >= 0) {
+                        auto outM = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
 
                         if (outM != nullptr) {
-                            for (int32_t i = 0; i < numFrames; i++) {
-                                mIntermediateStereoBuffer[i * 2 + 0] = outM[i];
-                                mIntermediateStereoBuffer[i * 2 + 1] = outM[i];
-                            }
+                            simd::interleaveMonoToStereo(outM, mIntermediateStereoBuffer.data(), numFrames);
                         }
                     }
                 }

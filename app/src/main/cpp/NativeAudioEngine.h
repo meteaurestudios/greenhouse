@@ -5,7 +5,6 @@
 #include <aap/core/host/plugin-host.h>
 #include <atomic>
 #include <vector>
-#include <mutex>
 #include <memory>
 #include <time.h>
 #include <android/log.h>
@@ -17,47 +16,80 @@ constexpr int32_t DEFAULT_NUM_RACK_SLOTS = 3;
 
 struct RackSlot
 {
-    std::mutex mMutex;
-    aap::PluginInstance* mInstance{nullptr};
+    std::atomic<aap::PluginInstance*> mInstance{nullptr};
     std::atomic<bool> mIsBypassed{false};
-    std::vector<int32_t> mAudioInPorts;
-    std::vector<int32_t> mAudioOutPorts;
+    std::atomic<int32_t> mInPort0{-1};
+    std::atomic<int32_t> mInPort1{-1};
+    std::atomic<int32_t> mOutPort0{-1};
+    std::atomic<int32_t> mOutPort1{-1};
+    std::atomic<int32_t> mInPortCount{0};
+    std::atomic<int32_t> mOutPortCount{0};
     std::atomic<float> mCpuLoad{0.0f};
 
     RackSlot() = default;
 
     void setInstance(aap::PluginInstance* inst)
     {
-        std::lock_guard<std::mutex> lock(mMutex);
-        mInstance = inst;
-        mAudioInPorts.clear();
-        mAudioOutPorts.clear();
-
-        if (mInstance != nullptr) {
-            refreshPorts();
+        if (inst == nullptr) {
+            mInstance.store(nullptr, std::memory_order_release);
+            mInPortCount.store(0, std::memory_order_release);
+            mOutPortCount.store(0, std::memory_order_release);
+            mInPort0.store(-1, std::memory_order_release);
+            mInPort1.store(-1, std::memory_order_release);
+            mOutPort0.store(-1, std::memory_order_release);
+            mOutPort1.store(-1, std::memory_order_release);
+            return;
         }
+
+        refreshPorts(inst);
+        mInstance.store(inst, std::memory_order_release);
     }
 
-    void refreshPorts()
+    void refreshPorts(aap::PluginInstance* inst)
     {
-        mAudioInPorts.clear();
-        mAudioOutPorts.clear();
+        if (inst == nullptr) {
+            return;
+        }
 
-        if (mInstance != nullptr) {
-            int32_t numPorts = mInstance->getNumPorts();
+        int32_t inCount = 0;
+        int32_t outCount = 0;
+        int32_t in0 = -1;
+        int32_t in1 = -1;
+        int32_t out0 = -1;
+        int32_t out1 = -1;
 
-            for (int32_t i = 0; i < numPorts; i++) {
-                auto port = mInstance->getPort(i);
+        int32_t numPorts = inst->getNumPorts();
 
-                if (port != nullptr && port->getContentType() == AAP_CONTENT_TYPE_AUDIO) {
-                    if (port->getPortDirection() == AAP_PORT_DIRECTION_INPUT) {
-                        mAudioInPorts.push_back(i);
-                    } else if (port->getPortDirection() == AAP_PORT_DIRECTION_OUTPUT) {
-                        mAudioOutPorts.push_back(i);
+        for (int32_t i = 0; i < numPorts; i++) {
+            auto port = inst->getPort(i);
+
+            if (port != nullptr && port->getContentType() == AAP_CONTENT_TYPE_AUDIO) {
+                if (port->getPortDirection() == AAP_PORT_DIRECTION_INPUT) {
+                    if (inCount == 0) {
+                        in0 = i;
+                    } else if (inCount == 1) {
+                        in1 = i;
                     }
+
+                    inCount++;
+                } else if (port->getPortDirection() == AAP_PORT_DIRECTION_OUTPUT) {
+                    if (outCount == 0) {
+                        out0 = i;
+                    } else if (outCount == 1) {
+                        out1 = i;
+                    }
+
+                    outCount++;
                 }
             }
         }
+
+        mInPort0.store(in0, std::memory_order_release);
+        mInPort1.store(in1, std::memory_order_release);
+        mOutPort0.store(out0, std::memory_order_release);
+        mOutPort1.store(out1, std::memory_order_release);
+        mInPortCount.store(inCount, std::memory_order_release);
+        mOutPortCount.store(outCount, std::memory_order_release);
     }
 };
 
@@ -116,9 +148,10 @@ private:
     // Pre-allocated scratch buffers
     std::vector<float> mIntermediateStereoBuffer;
 
-    // Sample audio test playback
-    std::mutex mSampleAudioMutex;
+    // Sample audio test playback (lock-free)
     std::vector<float> mSampleAudioData;
+    std::atomic<const float*> mSampleAudioDataPtr{nullptr};
+    std::atomic<size_t> mSampleAudioDataSize{0};
     std::atomic<size_t> mSampleAudioPos{0};
     std::atomic<bool> mIsPlayingSampleAudio{false};
 
