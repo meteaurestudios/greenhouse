@@ -7,6 +7,9 @@ local.properties
 
 # Log/OS Files
 *.log
+.DS_Store
+**/.DS_Store
+Thumbs.db
 
 # Android Studio generated files and folders
 captures/
@@ -23,9 +26,15 @@ misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
 
-# Keystore files
+# Keystore files & secret configurations
 *.jks
 *.keystore
+*.p12
+*.key
+*.pem
+*.pk8
+keystore.properties
+signing.properties
 
 # Google Services (e.g. APIs or Firebase)
 google-services.json
@@ -33,6 +42,5 @@ google-services.json
 # Android Profiling
 *.hprof
 
-gradlew
-gradlew.bat
+# Gradle daemons
 gradle/gradle-daemon-*
