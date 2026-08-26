@@ -51,3 +51,22 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradle
    - Standard Material 3 `IconButton` enforces a minimum 48dp interactive component size layout. When precise custom dimensions are needed without forced padding, use `Box(modifier = Modifier.size(...).clip(CircleShape).clickable { ... })`.
 3. **Window Insets**:
    - Account for system navigation bar insets using `WindowInsets.navigationBars` or `WindowInsets.systemBars`.
+
+---
+
+## 4. Code Formatting & Style Rules
+
+1. **Mandatory Braces and Newlines**:
+   - All `if`, `else if`, `else`, `for`, and `while` control flow statements (in both Kotlin and C/C++) **MUST ALWAYS** have curly brackets `{}` with their body on a new line. Single-line statement bodies without braces are strictly prohibited.
+2. **Blank Lines Around Control Flow Blocks**:
+   - All `if`, `else if`, `else`, `for`, and `while` blocks **MUST ALWAYS** have a blank / new line immediately before and after them (to clearly separate control flow blocks from preceding and subsequent statements).
+3. **`auto` with `static_cast` (C++)**:
+   - Always use `auto` when declaring and assigning a variable initialized with a `static_cast` (e.g. `auto out = static_cast<float*>(...);` rather than `float* out = static_cast<float*>(...);`).
+4. **C++ Function Opening Braces on New Line**:
+   - All C++ functions (constructors, destructors, member methods, and JNI functions) **MUST ALWAYS** place their opening curly bracket `{` on a new line.
+5. **C++ Member Variable Naming (`m` Prefix & CamelCase)**:
+   - All C++ member variables (in classes and structs) **MUST ALWAYS** start with a lowercase `m` followed by CamelCase (e.g. `mSampleRate`, `mFramesPerCallback`, `mIsProcessing`, `mSlots`, `mAudioInPorts`, `mCpuLoad`).
+
+
+
+

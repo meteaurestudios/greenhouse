@@ -17,6 +17,19 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        externalNativeBuild {
+            cmake {
+                arguments("-DANDROID_STL=c++_shared")
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            version = libs.versions.cmake.get()
+            path("src/main/cpp/CMakeLists.txt")
+        }
     }
 
     buildTypes {
@@ -37,6 +50,9 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            pickFirsts += "**/libc++_shared.so"
         }
     }
 }

@@ -40,6 +40,10 @@ data class RackSlotData(
 )
 
 class HostViewModel(application: Application) : AndroidViewModel(application) {
+    companion object {
+        const val NUM_RACK_SLOTS = 3
+    }
+
     private val tag = "HostViewModel"
 
     private val repository = PluginRepository()
@@ -54,12 +58,14 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     var searchQuery by mutableStateOf("")
         private set
 
-    // Multi-slot rack state (0: Instrument, 1: Effect 1, 2: Effect 2)
-    val slots = mutableStateListOf(
-        RackSlotData(0, "Slot 1", "Instrument"),
-        RackSlotData(1, "Slot 2", "Effect 1"),
-        RackSlotData(2, "Slot 3", "Effect 2")
-    )
+    // Multi-slot rack state (Slot 0: Instrument, Slot 1..N-1: Effect)
+    val slots = mutableStateListOf<RackSlotData>().apply {
+        add(RackSlotData(0, "Slot 1", "Instrument"))
+
+        for (i in 1 until NUM_RACK_SLOTS) {
+            add(RackSlotData(i, "Slot ${i + 1}", "Effect $i"))
+        }
+    }
 
     var activeSlotIndex by mutableIntStateOf(0)
         private set
@@ -85,15 +91,18 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     var statusMessage by mutableStateOf<String?>("Scan complete. Select an AAP plugin from the catalog to load.")
         private set
 
-    val slotParameterValues = Array(3) { mutableStateMapOf<Int, Double>() }
+    val slotParameterValues = Array(NUM_RACK_SLOTS) { mutableStateMapOf<Int, Double>() }
 
     // Persistent Keyboard State (survives screen navigation and slot changes)
-    val keyboardNoteOnStates = mutableStateListOf<Long>().apply { addAll(List(128) { 0L }) }
+    val keyboardNoteOnStates = mutableStateListOf<Long>().apply {
+        addAll(List(128) { 0L })
+    }
     var keyboardOctave by mutableIntStateOf(4)
     var isKeyboardHoldActive by mutableStateOf(false)
 
     fun toggleKeyboardHold() {
         isKeyboardHoldActive = !isKeyboardHoldActive
+
         if (!isKeyboardHoldActive) {
             releaseAllKeyboardNotes()
         }
@@ -109,7 +118,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onKeyboardNoteOn(note: Int) {
-        if (note !in 0..127) return
+        if (note !in 0..127) {
+            return
+        }
+
         if (isKeyboardHoldActive) {
             if (keyboardNoteOnStates[note] > 0L) {
                 keyboardNoteOnStates[note] = 0L
@@ -125,7 +137,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onKeyboardNoteOff(note: Int) {
-        if (note !in 0..127) return
+        if (note !in 0..127) {
+            return
+        }
+
         if (!isKeyboardHoldActive) {
             keyboardNoteOnStates[note] = 0L
             sendNoteOff(note)
@@ -140,17 +155,17 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         sampleRate = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 44100
         framesPerCallback = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 256
 
-        audioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback)
+        audioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback, numSlots = NUM_RACK_SLOTS)
         audioPlayer?.loadSampleAudio(application)
 
         refreshPluginList()
     }
 
     val activeSlot: RackSlotData
-        get() = slots[activeSlotIndex.coerceIn(0, 2)]
+        get() = slots[activeSlotIndex.coerceIn(0, NUM_RACK_SLOTS - 1)]
 
     fun selectActiveSlot(slotIndex: Int) {
-        if (slotIndex in 0..2) {
+        if (slotIndex in 0 until NUM_RACK_SLOTS) {
             activeSlotIndex = slotIndex
         }
     }
@@ -164,22 +179,27 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
     fun isPluginAllowedForSlot(plugin: PluginInformation, slotIndex: Int): Boolean {
         val cat = repository.getPluginCategory(plugin)
-        return if (slotIndex == 0) {
-            cat == PluginCategory.SYNTH || cat == PluginCategory.OTHER
+
+        if (slotIndex == 0) {
+            return cat == PluginCategory.SYNTH || cat == PluginCategory.OTHER
         } else {
-            cat == PluginCategory.EFFECT || cat == PluginCategory.OTHER
+            return cat == PluginCategory.EFFECT || cat == PluginCategory.OTHER
         }
     }
 
     val availableDevelopers: List<String>
         get() {
-            val slotPlugins = pluginList.filter { isPluginAllowedForSlot(it, targetBrowserSlotIndex) }
-            val devs = slotPlugins.mapNotNull { it.developer?.ifBlank { null } ?: "Unknown" }.distinct().sorted()
+            val slotPlugins = pluginList.filter {
+                isPluginAllowedForSlot(it, targetBrowserSlotIndex)
+            }
+            val devs = slotPlugins.mapNotNull {
+                it.developer?.ifBlank { null } ?: "Unknown"
+            }.distinct().sorted()
             return listOf("ALL") + devs
         }
 
     fun openBrowserForSlot(slotIndex: Int) {
-        if (slotIndex in 0..2) {
+        if (slotIndex in 0 until NUM_RACK_SLOTS) {
             targetBrowserSlotIndex = slotIndex
             activeSlotIndex = slotIndex
             selectedDeveloper = "ALL"
@@ -231,7 +251,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     fun loadPluginIntoSlot(slotIndex: Int, plugin: PluginInformation) {
-        if (slotIndex !in 0..2) return
+        if (slotIndex !in 0 until NUM_RACK_SLOTS) {
+            return
+        }
+
         activeSlotIndex = slotIndex
         targetBrowserSlotIndex = slotIndex
 
@@ -247,12 +270,15 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                 // Populate dynamic parameters and ports if missing from static aap_metadata.xml
                 if (plugin.parameters.isEmpty()) {
                     val paramCount = instance.getParameterCount()
+
                     for (i in 0 until paramCount) {
                         plugin.parameters.add(instance.getParameter(i))
                     }
                 }
+
                 if (plugin.ports.isEmpty()) {
                     val portCount = instance.getPortCount()
+
                     for (i in 0 until portCount) {
                         plugin.ports.add(instance.getPort(i))
                     }
@@ -271,6 +297,12 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 audioPlayer?.setSlotPlugin(slotIndex, instance)
+
+                // Dispatch initial default parameter values to plugin instance
+                plugin.parameters.forEach { param ->
+                    audioPlayer?.setParameterValue(slotIndex, param, param.defaultValue)
+                }
+
                 activeSlotIndex = slotIndex
 
                 if (!isProcessing) {
@@ -288,9 +320,13 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun unloadSlot(slotIndex: Int) {
-        if (slotIndex !in 0..2) return
+        if (slotIndex !in 0 until NUM_RACK_SLOTS) {
+            return
+        }
+
         val currentInst = slots[slotIndex].instance
         audioPlayer?.setSlotPlugin(slotIndex, null)
+
         try {
             currentInst?.destroy()
         } catch (e: Throwable) {
@@ -308,7 +344,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleSlotBypass(slotIndex: Int) {
-        if (slotIndex !in 0..2) return
+        if (slotIndex !in 0 until NUM_RACK_SLOTS) {
+            return
+        }
+
         val newBypass = !slots[slotIndex].isBypassed
         slots[slotIndex] = slots[slotIndex].copy(isBypassed = newBypass)
         audioPlayer?.setSlotBypassed(slotIndex, newBypass)
@@ -316,7 +355,12 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleAudioPlayback() {
-        val player = audioPlayer ?: return
+        val player = audioPlayer
+
+        if (player == null) {
+            return
+        }
+
         if (isProcessing) {
             player.pause()
             isProcessing = false
@@ -331,10 +375,12 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     fun triggerSampleAudio() {
         val inst0Slot = slots[0]
         val isInst0Active = inst0Slot.pluginInfo != null && !inst0Slot.isBypassed && inst0Slot.instance != null
+
         if (isInst0Active) {
             statusMessage = "Instrument active — play notes on keyboard to test!"
             return
         }
+
         audioPlayer?.playSampleAudio()
         statusMessage = "Playing test sample audio through effect chain..."
     }
@@ -348,13 +394,19 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setParameterValue(slotIndex: Int, parameter: ParameterInformation, value: Double) {
-        if (slotIndex !in 0..2) return
+        if (slotIndex !in 0 until NUM_RACK_SLOTS) {
+            return
+        }
+
         slotParameterValues[slotIndex][parameter.id] = value
         audioPlayer?.setParameterValue(slotIndex, parameter, value)
     }
 
     fun setPreset(slotIndex: Int, index: Int) {
-        if (slotIndex !in 0..2) return
+        if (slotIndex !in 0 until NUM_RACK_SLOTS) {
+            return
+        }
+
         slots[slotIndex] = slots[slotIndex].copy(selectedPresetIndex = index)
         audioPlayer?.setPresetIndex(slotIndex, index)
         statusMessage = "${slots[slotIndex].title} Preset changed to #$index"
@@ -362,9 +414,11 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        for (i in 0..2) {
+
+        for (i in 0 until NUM_RACK_SLOTS) {
             unloadSlot(i)
         }
+
         try {
             audioPlayer?.close()
             hostEngine.close()
@@ -373,4 +427,3 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 }
-

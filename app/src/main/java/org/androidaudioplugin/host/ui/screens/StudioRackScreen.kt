@@ -50,7 +50,8 @@ fun StudioRackScreen(
     onNavigateToBrowser: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
-    val activeSlot = viewModel.activeSlot
+    val currentSlotIndex = viewModel.activeSlotIndex
+    val activeSlot = viewModel.slots[currentSlotIndex]
     val activePlugin = activeSlot.pluginInfo
 
     Column(
@@ -74,14 +75,20 @@ fun StudioRackScreen(
         // 3-Slot Audio Signal Chain Rack Header
         SignalRackHeader(
             slots = viewModel.slots,
-            activeSlotIndex = viewModel.activeSlotIndex,
-            onSelectSlot = { viewModel.selectActiveSlot(it) },
+            activeSlotIndex = currentSlotIndex,
+            onSelectSlot = { slotIdx ->
+                viewModel.selectActiveSlot(slotIdx)
+            },
             onAddPlugin = { slotIndex ->
                 viewModel.openBrowserForSlot(slotIndex)
                 onNavigateToBrowser()
             },
-            onToggleBypass = { viewModel.toggleSlotBypass(it) },
-            onUnloadSlot = { viewModel.unloadSlot(it) }
+            onToggleBypass = { slotIdx ->
+                viewModel.toggleSlotBypass(slotIdx)
+            },
+            onUnloadSlot = { slotIdx ->
+                viewModel.unloadSlot(slotIdx)
+            }
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -291,10 +298,11 @@ private fun SignalRackHeader(
             }
 
             Card(
-                onClick = { onSelectSlot(slot.index) },
                 modifier = Modifier
                     .weight(1f)
-                    .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(16.dp)),
+                    .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onSelectSlot(slot.index) },
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected) StudioSurfaceVariant else StudioSurface
@@ -454,7 +462,11 @@ private fun StatusAndModeSelectorBar(
             Text("Preset #${activeSlot.selectedPresetIndex}", fontSize = 11.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.width(6.dp))
             IconButton(
-                onClick = { if (activeSlot.selectedPresetIndex > 0) onPresetSelected(activeSlot.selectedPresetIndex - 1) },
+                onClick = {
+                    if (activeSlot.selectedPresetIndex > 0) {
+                        onPresetSelected(activeSlot.selectedPresetIndex - 1)
+                    }
+                },
                 modifier = Modifier.size(24.dp)
             ) {
                 Icon(Icons.Default.Remove, contentDescription = "Prev Preset", tint = AccentGold, modifier = Modifier.size(16.dp))

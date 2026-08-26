@@ -41,7 +41,7 @@ fun PluginBrowserScreen(
     viewModel: HostViewModel,
     onNavigateToRack: () -> Unit
 ) {
-    val targetSlot = viewModel.slots[viewModel.targetBrowserSlotIndex.coerceIn(0, 2)]
+    val targetSlot = viewModel.slots[viewModel.targetBrowserSlotIndex.coerceIn(0, viewModel.slots.lastIndex)]
 
     Column(
         modifier = Modifier
