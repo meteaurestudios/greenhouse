@@ -38,8 +38,16 @@ This document outlines future tasks, technical enhancements, and UX improvements
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
 | **IPC Crash Monitor & Recovery** | `High` | Automatically detect if a remote AAP plugin process crashes, showing a "Re-instantiate" button instead of hanging the host UI. |
-| **Production Release Signing Setup** | `Medium` | Configure official release signing configuration and keystore credentials in `app/build.gradle.kts` for production builds. |
 | **Automated UI & Integration Tests** | `Medium` | Add Compose UI tests validating catalog loading, parameter state updates, and note triggering. |
+
+---
+
+## 5. 🏷️ Branding
+
+| Feature / Task | Priority | Description |
+| :--- | :--- | :--- |
+| **App Name** | `Medium` | Find a cool name for the app. |
+| **App Logo & Icon** | `Medium` | Create a logo and app icon. |
 
 ---
 
@@ -53,3 +61,4 @@ This document outlines future tasks, technical enhancements, and UX improvements
 - ✅ **Live Interactive MIDI Keyboard**: Full octave shifting, note latch/hold mode, and polyphonic MIDI 2.0 UMP event dispatching.
 - ✅ **Comprehensive Plugin Browser**: Real-time developer filtering, category badges, text search, and slot routing.
 - ✅ **Diagnostic & Engine Settings Screen**: Real-time audio hardware inspection, buffer sizing, and log monitor.
+- ✅ **Production Release Signing & CI/CD**: Dynamic keystore signing configuration for secure local/CI builds and automated GitHub Actions workflow for test, build, and releases.

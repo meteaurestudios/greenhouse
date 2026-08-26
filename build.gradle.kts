@@ -6,7 +6,6 @@ plugins {
     alias(libs.plugins.vanniktech.maven.publish) apply false
 }
 
-apply { from("${rootDir}/external/aap-core/publish-root.gradle") }
 
 subprojects {
     group = "org.androidaudioplugin"
