@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +65,7 @@ fun StudioRackScreen(
         MasterControlBanner(
             slots = viewModel.slots,
             isProcessing = viewModel.isProcessing,
+            totalCpuLoad = viewModel.totalCpuLoad,
             isSamplePressed = viewModel.isSamplePressed,
             onToggleProcessing = { viewModel.toggleAudioPlayback() },
             onTriggerAudioSample = { viewModel.triggerSampleAudio() },
@@ -72,10 +74,12 @@ fun StudioRackScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // 3-Slot Audio Signal Chain Rack Header
+        // Multi-Slot Audio Signal Chain Rack Header
         SignalRackHeader(
             slots = viewModel.slots,
             activeSlotIndex = currentSlotIndex,
+            isProcessing = viewModel.isProcessing,
+            slotCpuLoads = viewModel.slotCpuLoads,
             onSelectSlot = { slotIdx ->
                 viewModel.selectActiveSlot(slotIdx)
             },
@@ -158,9 +162,64 @@ fun StudioRackScreen(
 }
 
 @Composable
+private fun DspCpuMeter(
+    cpuPercent: Float,
+    isProcessing: Boolean
+) {
+    val meterColor = when {
+        !isProcessing -> TextMuted
+        cpuPercent > 80f -> DangerRed
+        cpuPercent > 50f -> WarningOrange
+        else -> SignalGreen
+    }
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(StudioSurface)
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "DSP",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (isProcessing) NeonCyan else TextMuted
+        )
+
+        Box(
+            modifier = Modifier
+                .width(36.dp)
+                .height(6.dp)
+                .clip(CircleShape)
+                .background(StudioBackground)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth((cpuPercent / 100f).coerceIn(0f, 1f))
+                    .clip(CircleShape)
+                    .background(meterColor)
+            )
+        }
+
+        Text(
+            text = if (isProcessing) "${cpuPercent.toInt()}%" else "OFF",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            color = meterColor
+        )
+    }
+}
+
+@Composable
 private fun MasterControlBanner(
     slots: List<RackSlotData>,
     isProcessing: Boolean,
+    totalCpuLoad: Float,
     isSamplePressed: Boolean,
     onToggleProcessing: () -> Unit,
     onTriggerAudioSample: () -> Unit,
@@ -191,7 +250,9 @@ private fun MasterControlBanner(
                             .clip(CircleShape)
                             .background(if (isProcessing) SignalGreen else DangerRed)
                     )
+
                     Spacer(modifier = Modifier.width(6.dp))
+
                     Text(
                         text = "AAP SIGNAL CHAIN",
                         fontSize = 11.sp,
@@ -199,7 +260,9 @@ private fun MasterControlBanner(
                         color = TextPrimary,
                         letterSpacing = 0.5.sp
                     )
+
                     Spacer(modifier = Modifier.width(2.dp))
+
                     Box(
                         modifier = Modifier
                             .size(22.dp)
@@ -215,6 +278,12 @@ private fun MasterControlBanner(
                         )
                     }
                 }
+
+                // Center: Real-Time DSP CPU Meter
+                DspCpuMeter(
+                    cpuPercent = totalCpuLoad,
+                    isProcessing = isProcessing
+                )
 
                 // Right: TEST Button & Engine Power Toggle
                 Row(
@@ -243,7 +312,9 @@ private fun MasterControlBanner(
                                 modifier = Modifier.size(13.dp),
                                 tint = StudioBackground
                             )
+
                             Spacer(modifier = Modifier.width(3.dp))
+
                             Text(
                                 text = "TEST",
                                 fontSize = 10.sp,
@@ -279,6 +350,8 @@ private fun MasterControlBanner(
 private fun SignalRackHeader(
     slots: List<RackSlotData>,
     activeSlotIndex: Int,
+    isProcessing: Boolean,
+    slotCpuLoads: List<Float>,
     onSelectSlot: (Int) -> Unit,
     onAddPlugin: (Int) -> Unit,
     onToggleBypass: (Int) -> Unit,
@@ -383,6 +456,19 @@ private fun SignalRackHeader(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+
+                    if (isLoaded && isProcessing) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
+
+                        Text(
+                            text = if (slot.isBypassed) "BYPASS" else "DSP ${slotCpu.toInt()}%",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (slot.isBypassed) DangerRed else TextMuted
+                        )
+                    }
 
                     if (!isLoaded) {
                         Spacer(modifier = Modifier.height(4.dp))

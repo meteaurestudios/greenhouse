@@ -101,6 +101,38 @@ fun EngineSettingsScreen(
                 val estimatedLatencyMs = (viewModel.framesPerCallback.toFloat() / viewModel.sampleRate.toFloat()) * 1000.0f
                 InfoRow(label = "Estimated Buffer Latency", value = String.format("%.2f ms", estimatedLatencyMs))
                 InfoRow(label = "Audio Processing Active", value = if (viewModel.isProcessing) "YES (Oboe Active)" else "NO (Paused)", valueColor = if (viewModel.isProcessing) SignalGreen else WarningOrange)
+
+                val cpuVal = viewModel.totalCpuLoad
+                val cpuColor = when {
+                    !viewModel.isProcessing -> TextMuted
+                    cpuVal > 80f -> DangerRed
+                    cpuVal > 50f -> WarningOrange
+                    else -> SignalGreen
+                }
+                InfoRow(
+                    label = "Total Engine DSP Load",
+                    value = if (viewModel.isProcessing) "${String.format("%.1f", cpuVal)}%" else "0.0% (Engine Paused)",
+                    valueColor = cpuColor
+                )
+
+                for (slot in viewModel.slots) {
+                    val slotCpu = viewModel.slotCpuLoads.getOrNull(slot.index) ?: 0f
+                    val slotText = if (!viewModel.isProcessing) {
+                        "0.0%"
+                    } else if (slot.pluginInfo == null) {
+                        "Empty Slot"
+                    } else if (slot.isBypassed) {
+                        "Bypassed"
+                    } else {
+                        "${String.format("%.1f", slotCpu)}%"
+                    }
+
+                    InfoRow(
+                        label = "└─ ${slot.title} (${slot.slotType}) DSP",
+                        value = slotText,
+                        valueColor = if (slot.isBypassed) DangerRed else TextSecondary
+                    )
+                }
             }
         }
 

@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -13,6 +14,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.androidaudioplugin.ParameterInformation
@@ -82,6 +86,13 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     var isProcessing by mutableStateOf(false)
         private set
 
+    var totalCpuLoad by mutableFloatStateOf(0f)
+        private set
+
+    val slotCpuLoads = mutableStateListOf<Float>().apply {
+        addAll(List(NUM_RACK_SLOTS) { 0f })
+    }
+
     var isSamplePressed by mutableStateOf(false)
         private set
 
@@ -150,6 +161,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     val sampleRate: Int
     val framesPerCallback: Int
 
+    private var cpuMonitorJob: Job? = null
+
     init {
         val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         sampleRate = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 44100
@@ -159,6 +172,45 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer?.loadSampleAudio(application)
 
         refreshPluginList()
+        startCpuMonitoring()
+    }
+
+    private fun startCpuMonitoring() {
+        cpuMonitorJob?.cancel()
+        cpuMonitorJob = viewModelScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                val player = audioPlayer
+
+                if (player != null && isProcessing) {
+                    val total = player.totalCpuLoad
+                    val totalPercent = (total * 100f).coerceIn(0f, 100f)
+
+                    withContext(Dispatchers.Main) {
+                        totalCpuLoad = totalPercent
+
+                        for (i in 0 until NUM_RACK_SLOTS) {
+                            val slotLoad = (player.getSlotCpuLoad(i) * 100f).coerceIn(0f, 100f)
+
+                            if (i < slotCpuLoads.size) {
+                                slotCpuLoads[i] = slotLoad
+                            }
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        if (totalCpuLoad != 0f) {
+                            totalCpuLoad = 0f
+
+                            for (i in 0 until slotCpuLoads.size) {
+                                slotCpuLoads[i] = 0f
+                            }
+                        }
+                    }
+                }
+
+                delay(100)
+            }
+        }
     }
 
     val activeSlot: RackSlotData

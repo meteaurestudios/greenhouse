@@ -8,7 +8,6 @@ This document outlines future tasks, technical enhancements, and UX improvements
 
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
-| **Real-Time DSP CPU Load Meter UI** | `High` | Add a real-time CPU meter (%) in the workstation status banner displaying total and per-slot DSP callback load. |
 | **Master Output Gain & Limiter** | `High` | Add a master output gain slider and soft-clipper/limiter on the workstation banner to prevent digital clipping when testing high-gain plugins or polyphonic synths. |
 | **Latency Benchmark Display** | `Low` | Display real-time round-trip latency (in milliseconds) based on native Oboe callback performance metrics in the status banner. |
 
@@ -51,6 +50,7 @@ This document outlines future tasks, technical enhancements, and UX improvements
 ## Summary of Completed Baseline Features
 
 - ✅ **Native C++ Audio Engine (`NativeAudioEngine`)**: High-performance C++ Oboe playback engine executing dynamic multi-slot signal chains (Slot 0 instrument $\rightarrow$ Slot $1 \dots N-1$ effects) with lock-free CPU load tracking.
+- ✅ **Real-Time DSP CPU Load Meters**: Live DSP callback meter widget in the master control banner, per-slot load badges on active rack cards, and comprehensive diagnostics in Engine Settings.
 - ✅ **Matte Titanium Luxury DAW UI**: Apple Pro / Teenage Engineering inspired dark obsidian theme.
 - ✅ **Dynamic Multi-Slot Workstation Rack**: Configurable $N$-slot signal chains with active slot focus, parameter modulation, and bypass toggles.
 - ✅ **Live Interactive MIDI Keyboard**: Full octave shifting, note latch/hold mode, and polyphonic MIDI 2.0 UMP event dispatching.
