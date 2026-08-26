@@ -44,11 +44,10 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
-import org.androidaudioplugin.composeaudiocontrols.DiatonicKeyboard
-import org.androidaudioplugin.composeaudiocontrols.DiatonicKeyboardMoveAction
 import org.androidaudioplugin.host.ui.HostViewModel
 import org.androidaudioplugin.host.ui.RackSlotData
 import org.androidaudioplugin.host.ui.StudioRackViewMode
+import org.androidaudioplugin.host.ui.components.StudioKeyboard
 import org.androidaudioplugin.host.ui.theme.*
 import org.androidaudioplugin.hosting.GuiHelper
 import java.util.Locale
@@ -1377,23 +1376,21 @@ private fun MidiKeyboardSection(
             val availableWidth = maxWidth
             val computedWhiteKeyWidth = availableWidth / 14
 
-            DiatonicKeyboard(
+            StudioKeyboard(
                 noteOnStates = noteOnStates.toList(),
                 octaveZeroBased = octave,
                 numWhiteKeys = 14, // 2 Full Octaves
                 whiteKeyWidth = computedWhiteKeyWidth,
-                totalWidth = availableWidth,
                 totalHeight = 90.dp,
                 blackKeyHeight = 52.dp,
                 whiteKeyColor = Color(0xFFF1F5F9), // Pristine Matte Off-White
                 blackKeyColor = Color(0xFF171A21), // Deep Obsidian Matte Black
                 whiteNoteOnColor = ElectricBlue,    // High-visibility Electric Blue for all key highlights
                 blackNoteOnColor = ElectricBlue,    // High-visibility Electric Blue for all key highlights
-                moveAction = DiatonicKeyboardMoveAction.NoteChange,
-                onNoteOn = { note, _ ->
+                onNoteOn = { note ->
                     viewModel.onKeyboardNoteOn(note)
                 },
-                onNoteOff = { note, _ ->
+                onNoteOff = { note ->
                     viewModel.onKeyboardNoteOff(note)
                 },
                 modifier = Modifier.fillMaxSize()
