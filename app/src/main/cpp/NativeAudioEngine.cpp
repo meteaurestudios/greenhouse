@@ -17,11 +17,9 @@ NativeAudioEngine::NativeAudioEngine(int32_t sampleRate, int32_t framesPerCallba
       mFramesPerCallback(framesPerCallback),
       mChannelCount(channelCount),
       mNumSlots(std::max(1, numSlots)),
-      mIntermediateStereoBuffer(std::max<size_t>(static_cast<size_t>(framesPerCallback * channelCount * 4), 8192), 0.0f),
+      mIntermediateStereoBuffer(std::max<size_t>(static_cast<size_t>(framesPerCallback * channelCount * 4), 32768), 0.0f),
       mSmoothedSlotLoad(std::max(1, numSlots), 0.0)
 {
-    mBufferDurationNs = (static_cast<double>(framesPerCallback) / static_cast<double>(sampleRate)) * 1e9;
-
     mSlots.reserve(mNumSlots);
 
     for (int32_t i = 0; i < mNumSlots; i++) {
@@ -62,6 +60,15 @@ bool NativeAudioEngine::start()
         return false;
     }
 
+    if (mStream) {
+        auto burst = mStream->getFramesPerBurst();
+
+        if (burst > 0) {
+            auto targetBufferSize = mFramesPerCallback + burst;
+            mStream->setBufferSizeInFrames(targetBufferSize);
+        }
+    }
+
     // Activate all loaded plugins on control thread
     for (int32_t i = 0; i < mNumSlots; i++) {
         auto inst = mSlots[i]->mInstance.load(std::memory_order_acquire);
@@ -88,6 +95,31 @@ bool NativeAudioEngine::start()
     LOGI("Native Audio Engine started successfully (Buffer Latency: %.2f ms)",
          (static_cast<float>(mFramesPerCallback) / static_cast<float>(mSampleRate)) * 1000.0f);
     return true;
+}
+
+void NativeAudioEngine::setFramesPerCallback(int32_t framesPerCallback)
+{
+    auto targetFrames = std::min(framesPerCallback, 4096);
+
+    if (targetFrames <= 0 || targetFrames == mFramesPerCallback) {
+        return;
+    }
+
+    bool wasProcessing = mIsProcessing.load();
+
+    if (wasProcessing) {
+        pause();
+    }
+
+    mFramesPerCallback = targetFrames;
+
+    if (static_cast<size_t>(mFramesPerCallback * mChannelCount * 4) > mIntermediateStereoBuffer.size()) {
+        mIntermediateStereoBuffer.resize(static_cast<size_t>(mFramesPerCallback * mChannelCount * 4), 0.0f);
+    }
+
+    if (wasProcessing) {
+        start();
+    }
 }
 
 void NativeAudioEngine::pause()
@@ -185,6 +217,11 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     auto outStream = static_cast<float*>(audioData);
     auto numSamples = static_cast<size_t>(numFrames * mChannelCount);
 
+    // Dynamic buffer duration in nanoseconds for this exact callback frame count
+    const double bufferDurationNs = (mSampleRate > 0 && numFrames > 0)
+        ? (static_cast<double>(numFrames) / static_cast<double>(mSampleRate)) * 1e9
+        : 1e9;
+
     struct timespec start_total, end_total;
     clock_gettime(CLOCK_MONOTONIC, &start_total);
 
@@ -235,7 +272,7 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     if (mNumSlots > 0) {
         clock_gettime(CLOCK_MONOTONIC, &slot_end);
         auto slot0_ns = (slot_end.tv_sec - slot_start.tv_sec) * 1e9 + (slot_end.tv_nsec - slot_start.tv_nsec);
-        auto slot0_load = slot0_ns / mBufferDurationNs;
+        auto slot0_load = (bufferDurationNs > 0.0) ? (slot0_ns / bufferDurationNs) : 0.0;
         mSmoothedSlotLoad[0] = (mSmoothedSlotLoad[0] * 0.9) + (slot0_load * 0.1);
         mSlots[0]->mCpuLoad.store(static_cast<float>(mSmoothedSlotLoad[0]));
     }
@@ -300,7 +337,7 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
 
         clock_gettime(CLOCK_MONOTONIC, &slot_end);
         auto slot_ns = (slot_end.tv_sec - slot_start.tv_sec) * 1e9 + (slot_end.tv_nsec - slot_start.tv_nsec);
-        auto slot_load = slot_ns / mBufferDurationNs;
+        auto slot_load = (bufferDurationNs > 0.0) ? (slot_ns / bufferDurationNs) : 0.0;
         mSmoothedSlotLoad[slotIdx] = (mSmoothedSlotLoad[slotIdx] * 0.9) + (slot_load * 0.1);
         mSlots[slotIdx]->mCpuLoad.store(static_cast<float>(mSmoothedSlotLoad[slotIdx]));
     }
@@ -312,7 +349,7 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
 
     clock_gettime(CLOCK_MONOTONIC, &end_total);
     auto total_elapsed_ns = (end_total.tv_sec - start_total.tv_sec) * 1e9 + (end_total.tv_nsec - start_total.tv_nsec);
-    auto instant_total_load = total_elapsed_ns / mBufferDurationNs;
+    auto instant_total_load = (bufferDurationNs > 0.0) ? (total_elapsed_ns / bufferDurationNs) : 0.0;
     mSmoothedTotalLoad = (mSmoothedTotalLoad * 0.9) + (instant_total_load * 0.1);
     mTotalCpuLoad.store(static_cast<float>(mSmoothedTotalLoad));
 

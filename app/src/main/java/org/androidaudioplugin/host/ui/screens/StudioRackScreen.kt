@@ -368,7 +368,7 @@ private fun SignalRackHeader(
                         // Bypass power icon (always shown)
                         Icon(
                             imageVector = Icons.Default.PowerSettingsNew,
-                            contentDescription = "Bypass",
+                            contentDescription = "Bypassed",
                             tint = when {
                                 slot.isBypassed -> DangerRed
                                 isLoaded -> SignalGreen
@@ -448,7 +448,7 @@ private fun SignalRackHeader(
 
                         val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
                         val statusText = when {
-                            slot.isBypassed -> "BYPASS"
+                            slot.isBypassed -> "Bypassed"
                             isProcessing -> "DSP ${slotCpu.toInt()}%"
                             else -> "ACTIVE"
                         }

@@ -23,9 +23,11 @@ import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.host.core.AapAudioPlayer
 import org.androidaudioplugin.host.core.AapHostEngine
+import org.androidaudioplugin.host.core.MAX_HOST_BUFFER_FRAMES
 import org.androidaudioplugin.host.data.PluginCategory
 import org.androidaudioplugin.host.data.PluginRepository
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
+import java.util.Locale
 
 enum class StudioRackViewMode(val title: String) {
     PARAMETERS("Parameters"),
@@ -156,14 +158,44 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val sampleRate: Int
-    val framesPerCallback: Int
+    val baseBurstSize: Int
+    var framesPerCallback by mutableIntStateOf(256)
+        private set
+
+    val availableBurstMultipliers: List<Int>
+        get() {
+            val base = if (baseBurstSize > 0) {
+                baseBurstSize
+            } else {
+                128
+            }
+
+            return listOf(1, 2, 4, 8).filter { (it * base) <= MAX_HOST_BUFFER_FRAMES }
+        }
+
+    fun setBufferFramesPerCallback(newFrames: Int) {
+        val clampedFrames = newFrames.coerceIn(1, MAX_HOST_BUFFER_FRAMES)
+
+        if (clampedFrames > 0 && clampedFrames != framesPerCallback) {
+            framesPerCallback = clampedFrames
+            audioPlayer?.setFramesPerCallback(clampedFrames)
+            val estimatedLatency = (clampedFrames.toFloat() / sampleRate.toFloat()) * 1000f
+            statusMessage = "Audio buffer updated to $clampedFrames frames (${String.format(Locale.US, "%.2f", estimatedLatency)} ms)"
+        }
+    }
 
     private var cpuMonitorJob: Job? = null
 
     init {
         val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         sampleRate = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 44100
-        framesPerCallback = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 256
+        val burst = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 128
+        baseBurstSize = if (burst > 0) {
+            burst
+        } else {
+            128
+        }
+        framesPerCallback = baseBurstSize * 2
 
         audioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback, numSlots = NUM_RACK_SLOTS)
 

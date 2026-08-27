@@ -111,6 +111,13 @@ public:
         return mNumSlots;
     }
 
+    int32_t getFramesPerCallback() const
+    {
+        return mFramesPerCallback;
+    }
+
+    void setFramesPerCallback(int32_t framesPerCallback);
+
     void setSlotPlugin(int32_t slotIndex, aap::PluginClient* client, int32_t instanceId);
     void setSlotBypassed(int32_t slotIndex, bool bypassed);
     void sendUmpToSlot(int32_t slotIndex, const uint8_t* data, size_t size);
@@ -147,7 +154,6 @@ private:
     std::vector<float> mIntermediateStereoBuffer;
 
     // Performance & CPU tracking
-    double mBufferDurationNs;
     std::atomic<float> mTotalCpuLoad{0.0f};
     double mSmoothedTotalLoad{0.0};
     std::vector<double> mSmoothedSlotLoad;

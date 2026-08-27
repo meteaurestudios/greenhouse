@@ -47,6 +47,17 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativePause(
 }
 
 JNIEXPORT void JNICALL
+Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetFramesPerCallback(
+        JNIEnv *env, jclass clazz, jlong engineHandle, jint framesPerCallback)
+{
+    auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
+
+    if (engine != nullptr) {
+        engine->setFramesPerCallback(framesPerCallback);
+    }
+}
+
+JNIEXPORT void JNICALL
 Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetSlotPlugin(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex, jlong nativeClient, jint instanceId)
 {

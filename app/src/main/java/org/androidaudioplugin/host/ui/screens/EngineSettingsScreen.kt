@@ -2,6 +2,7 @@ package org.androidaudioplugin.host.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.host.ui.HostViewModel
 import org.androidaudioplugin.host.ui.theme.*
+import java.util.Locale
 
 @Composable
 fun EngineSettingsScreen(
@@ -97,9 +99,109 @@ fun EngineSettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 InfoRow(label = "Output Sample Rate", value = "${viewModel.sampleRate} Hz")
-                InfoRow(label = "Buffer Frames per Callback", value = "${viewModel.framesPerCallback} frames")
+                InfoRow(label = "Hardware Burst Quantum", value = "${viewModel.baseBurstSize} frames")
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(StudioSurfaceVariant)
+                        .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp))
+                        .padding(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Buffer Frames per Callback",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        val activeMultiplier = if (viewModel.baseBurstSize > 0) {
+                            viewModel.framesPerCallback / viewModel.baseBurstSize
+                        } else {
+                            2
+                        }
+                        Text(
+                            text = "${viewModel.framesPerCallback} frames (${activeMultiplier}x Burst)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ElectricBlue
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        for (multiplier in viewModel.availableBurstMultipliers) {
+                            val frames = viewModel.baseBurstSize * multiplier
+                            val isSelected = (viewModel.framesPerCallback == frames)
+                            val latencyMs = (frames.toFloat() / viewModel.sampleRate.toFloat()) * 1000.0f
+                            val label = "${multiplier}x"
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) ElectricBlue else StudioSurface)
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) ElectricBlue else StudioPanelBorder,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        viewModel.setBufferFramesPerCallback(frames)
+                                    }
+                                    .padding(vertical = 8.dp, horizontal = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) TextPrimary else TextSecondary
+                                    )
+                                    Text(
+                                        text = String.format(Locale.US, "%.1fms", latencyMs),
+                                        fontSize = 9.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) TextPrimary.copy(alpha = 0.9f) else TextMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val profileDesc = when {
+                        viewModel.framesPerCallback <= viewModel.baseBurstSize -> "Ultra-low latency (high Binder IPC frequency)"
+                        viewModel.framesPerCallback <= viewModel.baseBurstSize * 2 -> "Low latency (recommended for single instrument)"
+                        viewModel.framesPerCallback <= viewModel.baseBurstSize * 4 -> "Balanced (recommended for multi-slot AAP racks)"
+                        viewModel.framesPerCallback <= viewModel.baseBurstSize * 8 -> "Safe / Heavy DSP (optimal for multi-FX chains)"
+                        else -> "Relaxed latency (minimal CPU overhead)"
+                    }
+
+                    Text(
+                        text = "• Profile: $profileDesc",
+                        fontSize = 11.sp,
+                        color = TextSecondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 val estimatedLatencyMs = (viewModel.framesPerCallback.toFloat() / viewModel.sampleRate.toFloat()) * 1000.0f
-                InfoRow(label = "Estimated Buffer Latency", value = String.format("%.2f ms", estimatedLatencyMs))
+                InfoRow(label = "Estimated Buffer Latency", value = String.format(Locale.US, "%.2f ms", estimatedLatencyMs))
                 InfoRow(label = "Audio Processing Active", value = if (viewModel.isProcessing) "YES (Oboe Active)" else "NO (Paused)", valueColor = if (viewModel.isProcessing) SignalGreen else WarningOrange)
 
                 val cpuVal = viewModel.totalCpuLoad
