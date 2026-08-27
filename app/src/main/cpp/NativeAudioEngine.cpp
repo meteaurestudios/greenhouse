@@ -17,7 +17,7 @@ NativeAudioEngine::NativeAudioEngine(int32_t sampleRate, int32_t framesPerCallba
       mFramesPerCallback(framesPerCallback),
       mChannelCount(channelCount),
       mNumSlots(std::max(1, numSlots)),
-      mIntermediateStereoBuffer(std::max<size_t>(static_cast<size_t>(framesPerCallback * channelCount * 4), 32768), 0.0f),
+      mIntermediateStereoBuffer(static_cast<size_t>(MAX_DSP_BLOCK_FRAMES * channelCount), 0.0f),
       mSmoothedSlotLoad(std::max(1, numSlots), 0.0)
 {
     mSlots.reserve(mNumSlots);
@@ -49,7 +49,7 @@ bool NativeAudioEngine::start()
         ->setFormat(oboe::AudioFormat::Float)
         ->setChannelCount(mChannelCount)
         ->setSampleRate(mSampleRate)
-        ->setFramesPerCallback(mFramesPerCallback)
+        ->setFramesPerCallback(oboe::kUnspecified)
         ->setDataCallback(this)
         ->setErrorCallback(this);
 
@@ -64,8 +64,10 @@ bool NativeAudioEngine::start()
         auto burst = mStream->getFramesPerBurst();
 
         if (burst > 0) {
-            auto targetBufferSize = mFramesPerCallback + burst;
+            auto targetBufferSize = std::max(burst, mFramesPerCallback.load(std::memory_order_relaxed));
             mStream->setBufferSizeInFrames(targetBufferSize);
+            LOGI("Oboe buffer size set to %d frames (burst size: %d)",
+                 mStream->getBufferSizeInFrames(), burst);
         }
     }
 
@@ -92,33 +94,28 @@ bool NativeAudioEngine::start()
     }
 
     mIsProcessing.store(true);
-    LOGI("Native Audio Engine started successfully (Buffer Latency: %.2f ms)",
-         (static_cast<float>(mFramesPerCallback) / static_cast<float>(mSampleRate)) * 1000.0f);
+    LOGI("Native Audio Engine started successfully (Exclusive LowLatency MMAP mode)");
     return true;
 }
 
 void NativeAudioEngine::setFramesPerCallback(int32_t framesPerCallback)
 {
-    auto targetFrames = std::min(framesPerCallback, 4096);
+    auto targetFrames = std::min(framesPerCallback, MAX_DSP_BLOCK_FRAMES);
 
-    if (targetFrames <= 0 || targetFrames == mFramesPerCallback) {
+    if (targetFrames <= 0) {
         return;
     }
 
-    bool wasProcessing = mIsProcessing.load();
+    mFramesPerCallback.store(targetFrames, std::memory_order_relaxed);
 
-    if (wasProcessing) {
-        pause();
-    }
+    if (mStream) {
+        auto burst = mStream->getFramesPerBurst();
 
-    mFramesPerCallback = targetFrames;
-
-    if (static_cast<size_t>(mFramesPerCallback * mChannelCount * 4) > mIntermediateStereoBuffer.size()) {
-        mIntermediateStereoBuffer.resize(static_cast<size_t>(mFramesPerCallback * mChannelCount * 4), 0.0f);
-    }
-
-    if (wasProcessing) {
-        start();
+        if (burst > 0) {
+            auto targetBufferSize = std::max(burst, targetFrames);
+            mStream->setBufferSizeInFrames(targetBufferSize);
+            LOGI("Dynamically updated Oboe buffer size to %d frames", mStream->getBufferSizeInFrames());
+        }
     }
 }
 
@@ -344,7 +341,7 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     }
 
     // ----------------------------------------------------
-    // STEP 4: OUTPUT AUDIO TO OBOE STREAM
+    // STEP 3: OUTPUT AUDIO TO OBOE STREAM
     // ----------------------------------------------------
     std::memcpy(outStream, mIntermediateStereoBuffer.data(), numSamples * sizeof(float));
 

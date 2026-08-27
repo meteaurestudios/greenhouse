@@ -13,6 +13,7 @@ namespace aaphost
 {
 
 constexpr int32_t DEFAULT_NUM_RACK_SLOTS = 3;
+constexpr int32_t MAX_DSP_BLOCK_FRAMES = 4096;
 
 struct RackSlot
 {
@@ -115,7 +116,7 @@ public:
 
     int32_t getFramesPerCallback() const
     {
-        return mFramesPerCallback;
+        return mFramesPerCallback.load(std::memory_order_relaxed);
     }
 
     void setFramesPerCallback(int32_t framesPerCallback);
@@ -143,7 +144,7 @@ public:
 
 private:
     int32_t mSampleRate;
-    int32_t mFramesPerCallback;
+    std::atomic<int32_t> mFramesPerCallback;
     int32_t mChannelCount;
     int32_t mNumSlots;
 
