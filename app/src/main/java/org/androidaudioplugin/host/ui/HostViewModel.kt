@@ -28,7 +28,7 @@ import org.androidaudioplugin.host.data.PluginRepository
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 
 enum class StudioRackViewMode(val title: String) {
-    PARAMETERS("Parameter Controls"),
+    PARAMETERS("Parameters"),
     NATIVE_SURFACE("Native Plugin GUI"),
     SPECS("Ports & Details")
 }
@@ -67,7 +67,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         add(RackSlotData(0, "Slot 1", "Instrument"))
 
         for (i in 1 until NUM_RACK_SLOTS) {
-            add(RackSlotData(i, "Slot ${i + 1}", "Effect $i"))
+            add(RackSlotData(i, "Slot ${i + 1}", "Effect"))
         }
     }
 

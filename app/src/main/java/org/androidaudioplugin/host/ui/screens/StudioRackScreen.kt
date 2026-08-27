@@ -346,6 +346,7 @@ private fun SignalRackHeader(
             Card(
                 modifier = Modifier
                     .weight(1f)
+                    .height(104.dp)
                     .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
                     .clickable { onSelectSlot(slot.index) },
@@ -356,40 +357,40 @@ private fun SignalRackHeader(
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 9.dp, vertical = 9.dp)
                 ) {
-                    // Symmetrical Top Header: Far-Left Bypass, Centered Label Box, Far-Right Close Cross
-                    Box(
-                        modifier = Modifier.fillMaxWidth()
+                    // Top Header Row: Bypass power icon with Slot Type Capsule Label Box next to it
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // Far Left: Bypass power icon (if loaded)
-                        if (isLoaded) {
-                            Icon(
-                                imageVector = Icons.Default.PowerSettingsNew,
-                                contentDescription = "Bypass",
-                                tint = if (slot.isBypassed) DangerRed else SignalGreen,
-                                modifier = Modifier
-                                    .padding(start = 3.dp)
-                                    .size(15.dp)
-                                    .align(Alignment.CenterStart)
-                                    .clip(CircleShape)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onToggleBypass(slot.index) }
-                            )
-                        }
+                        // Bypass power icon (always shown)
+                        Icon(
+                            imageVector = Icons.Default.PowerSettingsNew,
+                            contentDescription = "Bypass",
+                            tint = when {
+                                slot.isBypassed -> DangerRed
+                                isLoaded -> SignalGreen
+                                else -> TextMuted.copy(alpha = 0.4f)
+                            },
+                            modifier = Modifier
+                                .size(15.dp)
+                                .clip(CircleShape)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onToggleBypass(slot.index) }
+                        )
 
-                        // Center: Dead-Centered Slot Type Capsule Label Box (rounded corners with reduced vertical padding)
+                        // Slot Type Capsule Label Box
                         val badgeColor = if (slot.index == 0) AccentViolet else AccentCyan
                         Box(
                             modifier = Modifier
-                                .align(Alignment.Center)
                                 .border(1.dp, badgeColor.copy(alpha = 0.7f), CircleShape)
                                 .clip(CircleShape)
                                 .background(badgeColor.copy(alpha = 0.15f))
-                                .padding(horizontal = 7.dp, vertical = 0.dp),
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -399,66 +400,93 @@ private fun SignalRackHeader(
                                 color = badgeColor
                             )
                         }
+                    }
 
-                        // Far Right: Unload / Clear close icon (if loaded)
-                        if (isLoaded) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Clear",
-                                tint = TextMuted,
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    if (isLoaded) {
+                        // Plugin Name with Close Cross Button next to it
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = slot.pluginInfo?.displayName ?: "Empty Slot",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            Box(
                                 modifier = Modifier
-                                    .padding(end = 3.dp)
-                                    .size(15.dp)
-                                    .align(Alignment.CenterEnd)
+                                    .size(18.dp)
                                     .clip(CircleShape)
+                                    .background(Color(0xFF282D3B))
+                                    .border(1.dp, StudioPanelBorder, CircleShape)
                                     .clickable(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null
-                                    ) { onUnloadSlot(slot.index) }
-                            )
+                                    ) { onUnloadSlot(slot.index) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove Plugin",
+                                    tint = TextPrimary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = slot.pluginInfo?.displayName ?: "Empty Slot",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isLoaded) TextPrimary else TextMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    if (isLoaded && isProcessing) {
                         Spacer(modifier = Modifier.height(2.dp))
+
                         val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
+                        val statusText = when {
+                            slot.isBypassed -> "BYPASS"
+                            isProcessing -> "DSP ${slotCpu.toInt()}%"
+                            else -> "ACTIVE"
+                        }
 
                         Text(
-                            text = if (slot.isBypassed) "BYPASS" else "DSP ${slotCpu.toInt()}%",
-                            fontSize = 8.sp,
+                            text = statusText,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = FontFamily.Monospace,
                             color = if (slot.isBypassed) DangerRed else TextMuted
                         )
-                    }
+                    } else {
+                        Text(
+                            text = "Empty Slot",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
 
-                    if (!isLoaded) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(30.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFF282D3B))
-                                .clickable { onAddPlugin(slot.index) }
-                                .padding(vertical = 4.dp),
+                                .clickable { onAddPlugin(slot.index) },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "+ ADD",
-                                fontSize = 9.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = NeonCyan
+                                color = NeonCyan,
+                                letterSpacing = 0.5.sp
                             )
                         }
                     }
@@ -1090,7 +1118,7 @@ private fun NativePluginSurfaceContainer(
                 )
 
                 Text(
-                    text = "Use the Parameter Controls tab to tweak plugin values.",
+                    text = "Use the Parameters tab to tweak plugin values.",
                     color = TextMuted,
                     fontSize = 11.sp
                 )
@@ -1422,14 +1450,14 @@ private fun NoPluginInSlotView(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "${slot.title} (${slot.slotType}) is Empty",
+                text = "${slot.title} is Empty",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Load an AAP ${slot.slotType.lowercase(Locale.US)} plugin from the catalog to build your audio signal chain.",
+                text = "Select an ${slot.slotType.lowercase(Locale.US)} plugin from the catalog.",
                 fontSize = 13.sp,
                 color = TextSecondary
             )
@@ -1439,7 +1467,7 @@ private fun NoPluginInSlotView(
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = StudioBackground),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("BROWSE PLUGINS FOR ${slot.slotType.uppercase(Locale.US)}", fontWeight = FontWeight.Bold)
+                Text("BROWSE PLUGINS", fontWeight = FontWeight.Bold)
             }
         }
     }
