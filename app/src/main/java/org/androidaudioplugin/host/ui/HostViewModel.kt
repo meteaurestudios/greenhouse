@@ -23,14 +23,32 @@ import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.host.core.AapAudioPlayer
 import org.androidaudioplugin.host.core.AapHostEngine
+import org.androidaudioplugin.host.core.MAX_HOST_BUFFER_FRAMES
 import org.androidaudioplugin.host.data.PluginCategory
 import org.androidaudioplugin.host.data.PluginRepository
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
+import java.util.Locale
 
 enum class StudioRackViewMode(val title: String) {
-    PARAMETERS("Parameter Controls"),
+    PARAMETERS("Parameters"),
     NATIVE_SURFACE("Native Plugin GUI"),
     SPECS("Ports & Details")
+}
+
+class SlotNativeUiZoomState {
+    var isFitMode by mutableStateOf(true)
+    var currentScale by mutableFloatStateOf(1.0f)
+    var panOffsetX by mutableFloatStateOf(0f)
+    var panOffsetY by mutableFloatStateOf(0f)
+    var isMoveMode by mutableStateOf(false)
+
+    fun reset() {
+        isFitMode = true
+        currentScale = 1.0f
+        panOffsetX = 0f
+        panOffsetY = 0f
+        isMoveMode = false
+    }
 }
 
 data class RackSlotData(
@@ -67,7 +85,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         add(RackSlotData(0, "Slot 1", "Instrument"))
 
         for (i in 1 until NUM_RACK_SLOTS) {
-            add(RackSlotData(i, "Slot ${i + 1}", "Effect $i"))
+            add(RackSlotData(i, "Slot ${i + 1}", "Effect"))
         }
     }
 
@@ -100,6 +118,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     val slotParameterValues = Array(NUM_RACK_SLOTS) { mutableStateMapOf<Int, Double>() }
+    val slotNativeUiZoomStates = Array(NUM_RACK_SLOTS) { SlotNativeUiZoomState() }
 
     // Persistent Keyboard State (survives screen navigation and slot changes)
     val keyboardNoteOnStates = mutableStateListOf<Long>().apply {
@@ -156,14 +175,44 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val sampleRate: Int
-    val framesPerCallback: Int
+    val baseBurstSize: Int
+    var framesPerCallback by mutableIntStateOf(256)
+        private set
+
+    val availableBurstMultipliers: List<Int>
+        get() {
+            val base = if (baseBurstSize > 0) {
+                baseBurstSize
+            } else {
+                128
+            }
+
+            return listOf(1, 2, 4, 8).filter { (it * base) <= MAX_HOST_BUFFER_FRAMES }
+        }
+
+    fun setBufferFramesPerCallback(newFrames: Int) {
+        val clampedFrames = newFrames.coerceIn(1, MAX_HOST_BUFFER_FRAMES)
+
+        if (clampedFrames > 0 && clampedFrames != framesPerCallback) {
+            framesPerCallback = clampedFrames
+            audioPlayer?.setFramesPerCallback(clampedFrames)
+            val estimatedLatency = (clampedFrames.toFloat() / sampleRate.toFloat()) * 1000f
+            statusMessage = "Audio buffer updated to $clampedFrames frames (${String.format(Locale.US, "%.2f", estimatedLatency)} ms)"
+        }
+    }
 
     private var cpuMonitorJob: Job? = null
 
     init {
         val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         sampleRate = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 44100
-        framesPerCallback = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 256
+        val burst = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 128
+        baseBurstSize = if (burst > 0) {
+            burst
+        } else {
+            128
+        }
+        framesPerCallback = baseBurstSize * 2
 
         audioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback, numSlots = NUM_RACK_SLOTS)
 
@@ -344,6 +393,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                     selectedPresetIndex = 0
                 )
 
+                audioPlayer?.setSlotBypassed(slotIndex, false)
                 audioPlayer?.setSlotPlugin(slotIndex, instance)
 
                 // Dispatch initial default parameter values to plugin instance
@@ -373,6 +423,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val currentInst = slots[slotIndex].instance
+        audioPlayer?.setSlotBypassed(slotIndex, false)
         audioPlayer?.setSlotPlugin(slotIndex, null)
 
         try {
@@ -388,11 +439,16 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             selectedPresetIndex = 0
         )
         slotParameterValues[slotIndex].clear()
+        slotNativeUiZoomStates[slotIndex].reset()
         statusMessage = "Cleared ${slots[slotIndex].title}"
     }
 
     fun toggleSlotBypass(slotIndex: Int) {
         if (slotIndex !in 0 until NUM_RACK_SLOTS) {
+            return
+        }
+
+        if (slots[slotIndex].pluginInfo == null) {
             return
         }
 

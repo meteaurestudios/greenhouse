@@ -55,46 +55,68 @@ fun PluginBrowserScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onNavigateToRack,
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
                     modifier = Modifier
+                        .size(38.dp)
                         .clip(CircleShape)
                         .background(StudioSurfaceVariant)
+                        .clickable { onNavigateToRack() },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back to Rack",
-                        tint = TextPrimary
+                        tint = TextPrimary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
+
                 Spacer(modifier = Modifier.width(12.dp))
-                Column {
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(
                         text = "SELECT PLUGIN FOR ${targetSlot.title.uppercase(Locale.US)}",
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = AccentGold,
-                        letterSpacing = 1.sp
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
                     Text(
-                        text = "${targetSlot.slotType} Slot • ${viewModel.filteredPlugins.size} AAP ${targetSlot.slotType.lowercase(Locale.US)} plugin(s) available",
+                        text = "${targetSlot.slotType} Slot • ${viewModel.filteredPlugins.size} plugin(s) available",
                         fontSize = 11.sp,
-                        color = TextSecondary
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            IconButton(
-                onClick = { viewModel.refreshPluginList() },
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Box(
                 modifier = Modifier
+                    .size(38.dp)
                     .clip(CircleShape)
                     .background(StudioSurfaceVariant)
+                    .clickable { viewModel.refreshPluginList() },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Rescan Plugins",
-                    tint = NeonCyan
+                    tint = NeonCyan,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

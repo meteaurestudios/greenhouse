@@ -13,7 +13,7 @@ import java.nio.ByteOrder
 
 class AapAudioPlayer private constructor(
     val sampleRate: Int,
-    val framesPerCallback: Int,
+    initialFramesPerCallback: Int,
     val channelCount: Int = 2,
     val numSlots: Int = DEFAULT_NUM_RACK_SLOTS
 ) : AutoCloseable {
@@ -53,6 +53,9 @@ class AapAudioPlayer private constructor(
         private external fun nativePause(engineHandle: Long)
 
         @JvmStatic
+        private external fun nativeSetFramesPerCallback(engineHandle: Long, framesPerCallback: Int)
+
+        @JvmStatic
         private external fun nativeSetSlotPlugin(engineHandle: Long, slotIndex: Int, nativeClient: Long, instanceId: Int)
 
         @JvmStatic
@@ -70,8 +73,21 @@ class AapAudioPlayer private constructor(
 
     private var nativeEngineHandle: Long = 0L
 
+    var framesPerCallback: Int = initialFramesPerCallback
+        private set
+
     init {
         nativeEngineHandle = nativeCreate(sampleRate, framesPerCallback, channelCount, numSlots)
+    }
+
+    fun setFramesPerCallback(frames: Int) {
+        if (frames > 0 && frames != framesPerCallback) {
+            framesPerCallback = frames
+
+            if (nativeEngineHandle != 0L) {
+                nativeSetFramesPerCallback(nativeEngineHandle, frames)
+            }
+        }
     }
 
     private val slotInstances = Array<NativeRemotePluginInstance?>(numSlots) { null }
@@ -100,6 +116,7 @@ class AapAudioPlayer private constructor(
     fun setSlotPlugin(slotIndex: Int, instance: NativeRemotePluginInstance?) {
         if (slotIndex in 0 until numSlots) {
             slotInstances[slotIndex] = instance
+            slotBypassed[slotIndex] = false
 
             if (instance != null && isProcessing && instance.state == InstanceState.INACTIVE) {
                 try {
@@ -110,6 +127,8 @@ class AapAudioPlayer private constructor(
             }
 
             if (nativeEngineHandle != 0L) {
+                nativeSetSlotBypassed(nativeEngineHandle, slotIndex, false)
+
                 if (instance != null) {
                     nativeSetSlotPlugin(nativeEngineHandle, slotIndex, instance.client, instance.instanceId)
                 } else {

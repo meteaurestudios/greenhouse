@@ -9,6 +9,7 @@ import org.androidaudioplugin.hosting.AudioPluginClientBase
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 
 private const val DEFAULT_CONTROL_BUFFER_SIZE = 0x10000
+const val MAX_HOST_BUFFER_FRAMES = 4096
 
 class AapHostEngine(val context: Context) : AutoCloseable {
     private val tag = "AapHostEngine"
@@ -26,8 +27,8 @@ class AapHostEngine(val context: Context) : AutoCloseable {
         Log.d(tag, "Instantiating native plugin: ${pluginInfo.pluginId}")
         val instance = client.instantiateNativePlugin(pluginInfo)
 
-        Log.d(tag, "Preparing plugin instance (SR: $sampleRate, Frames: $framesPerCallback)")
-        instance.prepare(framesPerCallback, sampleRate, DEFAULT_CONTROL_BUFFER_SIZE)
+        Log.d(tag, "Preparing plugin instance (SR: $sampleRate, Frames: $MAX_HOST_BUFFER_FRAMES)")
+        instance.prepare(MAX_HOST_BUFFER_FRAMES, sampleRate, DEFAULT_CONTROL_BUFFER_SIZE)
 
         instance
     }
