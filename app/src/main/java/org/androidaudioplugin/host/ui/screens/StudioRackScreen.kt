@@ -378,6 +378,7 @@ private fun SignalRackHeader(
                                 .size(15.dp)
                                 .clip(CircleShape)
                                 .clickable(
+                                    enabled = isLoaded,
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
                                 ) { onToggleBypass(slot.index) }

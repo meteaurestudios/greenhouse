@@ -172,6 +172,7 @@ void NativeAudioEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* clie
     }
 
     mSlots[slotIndex]->setInstance(instance);
+    mSlots[slotIndex]->mIsBypassed.store(false, std::memory_order_release);
 
     if (instance != nullptr) {
         LOGI("Slot %d plugin set: %p (instanceId=%d, inPorts=%d, outPorts=%d, state=%d)",
@@ -193,7 +194,7 @@ void NativeAudioEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* clie
 void NativeAudioEngine::setSlotBypassed(int32_t slotIndex, bool bypassed)
 {
     if (slotIndex >= 0 && slotIndex < mNumSlots) {
-        mSlots[slotIndex]->mIsBypassed.store(bypassed);
+        mSlots[slotIndex]->mIsBypassed.store(bypassed, std::memory_order_release);
     }
 }
 

@@ -116,6 +116,7 @@ class AapAudioPlayer private constructor(
     fun setSlotPlugin(slotIndex: Int, instance: NativeRemotePluginInstance?) {
         if (slotIndex in 0 until numSlots) {
             slotInstances[slotIndex] = instance
+            slotBypassed[slotIndex] = false
 
             if (instance != null && isProcessing && instance.state == InstanceState.INACTIVE) {
                 try {
@@ -126,6 +127,8 @@ class AapAudioPlayer private constructor(
             }
 
             if (nativeEngineHandle != 0L) {
+                nativeSetSlotBypassed(nativeEngineHandle, slotIndex, false)
+
                 if (instance != null) {
                     nativeSetSlotPlugin(nativeEngineHandle, slotIndex, instance.client, instance.instanceId)
                 } else {

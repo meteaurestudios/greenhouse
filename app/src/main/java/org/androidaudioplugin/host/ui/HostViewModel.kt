@@ -376,6 +376,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                     selectedPresetIndex = 0
                 )
 
+                audioPlayer?.setSlotBypassed(slotIndex, false)
                 audioPlayer?.setSlotPlugin(slotIndex, instance)
 
                 // Dispatch initial default parameter values to plugin instance
@@ -405,6 +406,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val currentInst = slots[slotIndex].instance
+        audioPlayer?.setSlotBypassed(slotIndex, false)
         audioPlayer?.setSlotPlugin(slotIndex, null)
 
         try {
@@ -425,6 +427,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleSlotBypass(slotIndex: Int) {
         if (slotIndex !in 0 until NUM_RACK_SLOTS) {
+            return
+        }
+
+        if (slots[slotIndex].pluginInfo == null) {
             return
         }
 

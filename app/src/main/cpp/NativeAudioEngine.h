@@ -30,6 +30,8 @@ struct RackSlot
 
     void setInstance(aap::PluginInstance* inst)
     {
+        mIsBypassed.store(false, std::memory_order_release);
+
         if (inst == nullptr) {
             mInstance.store(nullptr, std::memory_order_release);
             mInPortCount.store(0, std::memory_order_release);
