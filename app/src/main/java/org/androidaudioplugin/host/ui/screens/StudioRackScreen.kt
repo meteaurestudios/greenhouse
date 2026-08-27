@@ -949,13 +949,15 @@ private fun NativePluginSurfaceViewer(
 
         // Transparent Move Drag Overlay (captures touches to translate view in X and Y without going out of bounds)
         if (!isFitMode && isMoveMode) {
+            val currentOnPanDelta by rememberUpdatedState(onPanDelta)
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(minTransX, maxTransX, minTransY, maxTransY) {
+                    .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            onPanDelta(dragAmount.x, dragAmount.y)
+                            currentOnPanDelta(dragAmount.x, dragAmount.y)
                         }
                     }
             )
@@ -978,13 +980,10 @@ private fun NativePluginSurfaceContainer(
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && instance != null) {
         var surfaceHost by remember { mutableStateOf<GuiHelper.NativeEmbeddedSurfaceControlHost?>(null) }
         var preferredSize by remember { mutableStateOf(GuiHelper.Size(800, 600)) }
-        var isFitMode by remember { mutableStateOf(true) }
-        var isMoveMode by remember { mutableStateOf(false) }
+
+        val zoomState = viewModel.slotNativeUiZoomStates[slot.index]
         var calculatedFitScale by remember { mutableFloatStateOf(1.0f) }
-        var currentScale by remember { mutableFloatStateOf(1.0f) }
         var displayedScale by remember { mutableFloatStateOf(1.0f) }
-        var panOffsetX by remember { mutableFloatStateOf(0f) }
-        var panOffsetY by remember { mutableFloatStateOf(0f) }
 
         DisposableEffect(instance.instanceId) {
             val host = GuiHelper.NativeEmbeddedSurfaceControlHost(
@@ -1032,26 +1031,35 @@ private fun NativePluginSurfaceContainer(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         NativeSurfaceZoomToolbar(
-                            isFitMode = isFitMode,
+                            isFitMode = zoomState.isFitMode,
                             displayedScale = displayedScale,
                             onZoomIn = {
-                                val base = if (isFitMode) calculatedFitScale else currentScale
+                                val base = if (zoomState.isFitMode) {
+                                    calculatedFitScale
+                                } else {
+                                    zoomState.currentScale
+                                }
                                 val target = (Math.round((base + 0.15f) * 20.0) / 20.0).toFloat().coerceIn(0.05f, 3.0f)
-                                isFitMode = false
-                                currentScale = target
+
+                                zoomState.isFitMode = false
+                                zoomState.currentScale = target
                             },
                             onZoomOut = {
-                                val base = if (isFitMode) calculatedFitScale else currentScale
+                                val base = if (zoomState.isFitMode) {
+                                    calculatedFitScale
+                                } else {
+                                    zoomState.currentScale
+                                }
                                 val target = (Math.round((base - 0.15f) * 20.0) / 20.0).toFloat()
 
                                 if (target <= calculatedFitScale + 0.02f) {
-                                    isFitMode = true
-                                    isMoveMode = false
-                                    panOffsetX = 0f
-                                    panOffsetY = 0f
+                                    zoomState.isFitMode = true
+                                    zoomState.isMoveMode = false
+                                    zoomState.panOffsetX = 0f
+                                    zoomState.panOffsetY = 0f
                                 } else {
-                                    isFitMode = false
-                                    currentScale = target
+                                    zoomState.isFitMode = false
+                                    zoomState.currentScale = target
                                 }
                             },
                             showFullscreenButton = true,
@@ -1059,11 +1067,15 @@ private fun NativePluginSurfaceContainer(
                             onToggleFullscreen = onToggleFoldRack
                         )
 
-                        if (!isFitMode) {
+                        if (!zoomState.isFitMode) {
                             NativeSurfaceInteractionToggle(
-                                isMoveMode = isMoveMode,
-                                onSelectTweakMode = { isMoveMode = false },
-                                onSelectMoveMode = { isMoveMode = true }
+                                isMoveMode = zoomState.isMoveMode,
+                                onSelectTweakMode = {
+                                    zoomState.isMoveMode = false
+                                },
+                                onSelectMoveMode = {
+                                    zoomState.isMoveMode = true
+                                }
                             )
                         }
                     }
@@ -1085,16 +1097,16 @@ private fun NativePluginSurfaceContainer(
                 NativePluginSurfaceViewer(
                     host = host,
                     preferredSize = preferredSize,
-                    isFitMode = isFitMode,
-                    isMoveMode = isMoveMode,
-                    currentScale = currentScale,
-                    panOffsetX = panOffsetX,
-                    panOffsetY = panOffsetY,
+                    isFitMode = zoomState.isFitMode,
+                    isMoveMode = zoomState.isMoveMode,
+                    currentScale = zoomState.currentScale,
+                    panOffsetX = zoomState.panOffsetX,
+                    panOffsetY = zoomState.panOffsetY,
                     onFitScaleCalculated = { calculatedFitScale = it },
                     onEffectiveScaleCalculated = { displayedScale = it },
                     onPanDelta = { dx, dy ->
-                        panOffsetX += dx
-                        panOffsetY += dy
+                        zoomState.panOffsetX += dx
+                        zoomState.panOffsetY += dy
                     },
                     modifier = Modifier
                         .weight(1f)

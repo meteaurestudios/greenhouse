@@ -35,6 +35,22 @@ enum class StudioRackViewMode(val title: String) {
     SPECS("Ports & Details")
 }
 
+class SlotNativeUiZoomState {
+    var isFitMode by mutableStateOf(true)
+    var currentScale by mutableFloatStateOf(1.0f)
+    var panOffsetX by mutableFloatStateOf(0f)
+    var panOffsetY by mutableFloatStateOf(0f)
+    var isMoveMode by mutableStateOf(false)
+
+    fun reset() {
+        isFitMode = true
+        currentScale = 1.0f
+        panOffsetX = 0f
+        panOffsetY = 0f
+        isMoveMode = false
+    }
+}
+
 data class RackSlotData(
     val index: Int,
     val title: String,
@@ -102,6 +118,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     val slotParameterValues = Array(NUM_RACK_SLOTS) { mutableStateMapOf<Int, Double>() }
+    val slotNativeUiZoomStates = Array(NUM_RACK_SLOTS) { SlotNativeUiZoomState() }
 
     // Persistent Keyboard State (survives screen navigation and slot changes)
     val keyboardNoteOnStates = mutableStateListOf<Long>().apply {
@@ -422,6 +439,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             selectedPresetIndex = 0
         )
         slotParameterValues[slotIndex].clear()
+        slotNativeUiZoomStates[slotIndex].reset()
         statusMessage = "Cleared ${slots[slotIndex].title}"
     }
 
