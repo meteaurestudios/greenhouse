@@ -977,7 +977,7 @@ private fun NativePluginSurfaceContainer(
     val coroutineScope = rememberCoroutineScope()
     val instance = slot.instance
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && instance != null) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM && instance != null) {
         var surfaceHost by remember { mutableStateOf<GuiHelper.NativeEmbeddedSurfaceControlHost?>(null) }
         var preferredSize by remember { mutableStateOf(GuiHelper.Size(800, 600)) }
 
@@ -1125,7 +1125,7 @@ private fun NativePluginSurfaceContainer(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Native Surface GUI container requires Android 11+ (API 30+).",
+                    text = "Native Plugin GUI requires Android 15+ (API 35+).",
                     color = TextSecondary,
                     fontSize = 13.sp
                 )

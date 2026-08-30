@@ -162,6 +162,8 @@ void NativeAudioEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* clie
         return;
     }
 
+    auto oldInstance = mSlots[slotIndex]->mInstance.load(std::memory_order_relaxed);
+
     aap::PluginInstance* instance = nullptr;
 
     if (client != nullptr && instanceId >= 0) {
@@ -170,6 +172,18 @@ void NativeAudioEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* clie
 
     mSlots[slotIndex]->setInstance(instance);
     mSlots[slotIndex]->mIsBypassed.store(false, std::memory_order_release);
+
+    // Quiescent-state synchronization: when detaching or replacing an active plugin instance,
+    // wait for QUIESCENT_EPOCHS_TO_WAIT full audio render epochs on the control thread to guarantee
+    // that any in-flight audio callback (onAudioReady) that loaded the old instance pointer has
+    // completely finished before returning to the caller. This ensures lock-free realtime safety without mutexes.
+    if (oldInstance != nullptr && mIsProcessing.load(std::memory_order_acquire)) {
+        auto targetEpoch = mRenderEpoch.load(std::memory_order_acquire) + QUIESCENT_EPOCHS_TO_WAIT;
+
+        for (int32_t attempt = 0; attempt < MAX_QUIESCENT_WAIT_ATTEMPTS && mRenderEpoch.load(std::memory_order_acquire) < targetEpoch; attempt++) {
+            usleep(QUIESCENT_POLL_INTERVAL_US);
+        }
+    }
 
     if (instance != nullptr) {
         LOGI("Slot %d plugin set: %p (instanceId=%d, inPorts=%d, outPorts=%d, state=%d)",
@@ -203,7 +217,7 @@ void NativeAudioEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, si
 
     auto inst = mSlots[slotIndex]->mInstance.load(std::memory_order_acquire);
 
-    if (inst != nullptr) {
+    if (inst != nullptr && inst->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
         inst->addEventUmpInput((void*) data, size);
     }
 }
@@ -236,27 +250,32 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
 
         if (inst0 != nullptr && !mSlots[0]->mIsBypassed.load(std::memory_order_relaxed)) {
             if (inst0->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
-                inst0->process(numFrames, 0);
                 auto aapBuffer = inst0->getAudioPluginBuffer();
 
-                auto outCount = mSlots[0]->mOutPortCount.load(std::memory_order_relaxed);
-                auto out0 = mSlots[0]->mOutPort0.load(std::memory_order_relaxed);
-                auto out1 = mSlots[0]->mOutPort1.load(std::memory_order_relaxed);
+                if (aapBuffer != nullptr) {
+                    inst0->process(numFrames, 0);
 
-                if (outCount >= 2 && out0 >= 0 && out1 >= 0 && aapBuffer != nullptr) {
-                    auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
-                    auto outR = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out1));
+                    if (inst0->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
+                        auto outCount = mSlots[0]->mOutPortCount.load(std::memory_order_relaxed);
+                        auto out0 = mSlots[0]->mOutPort0.load(std::memory_order_relaxed);
+                        auto out1 = mSlots[0]->mOutPort1.load(std::memory_order_relaxed);
 
-                    if (outL != nullptr && outR != nullptr) {
-                        simd::interleaveStereo(outL, outR, mIntermediateStereoBuffer.data(), numFrames);
-                        renderedSlot0 = true;
-                    }
-                } else if (outCount == 1 && out0 >= 0 && aapBuffer != nullptr) {
-                    auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
+                        if (outCount >= 2 && out0 >= 0 && out1 >= 0) {
+                            auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
+                            auto outR = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out1));
 
-                    if (outL != nullptr) {
-                        simd::interleaveMonoToStereo(outL, mIntermediateStereoBuffer.data(), numFrames);
-                        renderedSlot0 = true;
+                            if (outL != nullptr && outR != nullptr) {
+                                simd::interleaveStereo(outL, outR, mIntermediateStereoBuffer.data(), numFrames);
+                                renderedSlot0 = true;
+                            }
+                        } else if (outCount == 1 && out0 >= 0) {
+                            auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
+
+                            if (outL != nullptr) {
+                                simd::interleaveMonoToStereo(outL, mIntermediateStereoBuffer.data(), numFrames);
+                                renderedSlot0 = true;
+                            }
+                        }
                     }
                 }
             }
@@ -314,19 +333,21 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
                     // Process plugin
                     inst->process(numFrames, 0);
 
-                    // Read effect outputs back into intermediate stereo buffer (SIMD interleaving)
-                    if (outCount >= 2 && out0 >= 0 && out1 >= 0) {
-                        auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
-                        auto outR = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out1));
+                    if (inst->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
+                        // Read effect outputs back into intermediate stereo buffer (SIMD interleaving)
+                        if (outCount >= 2 && out0 >= 0 && out1 >= 0) {
+                            auto outL = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
+                            auto outR = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out1));
 
-                        if (outL != nullptr && outR != nullptr) {
-                            simd::interleaveStereo(outL, outR, mIntermediateStereoBuffer.data(), numFrames);
-                        }
-                    } else if (outCount == 1 && out0 >= 0) {
-                        auto outM = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
+                            if (outL != nullptr && outR != nullptr) {
+                                simd::interleaveStereo(outL, outR, mIntermediateStereoBuffer.data(), numFrames);
+                            }
+                        } else if (outCount == 1 && out0 >= 0) {
+                            auto outM = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
 
-                        if (outM != nullptr) {
-                            simd::interleaveMonoToStereo(outM, mIntermediateStereoBuffer.data(), numFrames);
+                            if (outM != nullptr) {
+                                simd::interleaveMonoToStereo(outM, mIntermediateStereoBuffer.data(), numFrames);
+                            }
                         }
                     }
                 }
@@ -350,6 +371,8 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
     auto instant_total_load = (bufferDurationNs > 0.0) ? (total_elapsed_ns / bufferDurationNs) : 0.0;
     mSmoothedTotalLoad = (mSmoothedTotalLoad * 0.9) + (instant_total_load * 0.1);
     mTotalCpuLoad.store(static_cast<float>(mSmoothedTotalLoad));
+
+    mRenderEpoch.fetch_add(1, std::memory_order_release);
 
     return oboe::DataCallbackResult::Continue;
 }

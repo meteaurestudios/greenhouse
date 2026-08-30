@@ -42,6 +42,12 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradle
    - Most AAP plugins expose parameters dynamically at runtime over the `parameters` AAPXS extension.
    - When instantiating a plugin (`NativeRemotePluginInstance`), if `plugin.parameters.isEmpty()`, query `instance.getParameterCount()` and `instance.getParameter(i)` to dynamically discover parameters. Do the same for `plugin.ports` via `instance.getPortCount()` and `instance.getPort(i)`.
 
+### Realtime Audio Thread Safety
+1. **Lock-Free Audio Callbacks**:
+   - The Oboe / AAudio audio render callback (`onAudioReady`) runs at highest realtime priority (`SCHED_FIFO`).
+   - **NEVER** use mutexes (`std::mutex`, `std::unique_lock`, `try_lock`), priority-inversion hazards, system calls, or dynamic heap allocations (`malloc`, `free`, `new`, `delete`) inside the audio callback or realtime render path.
+   - All state accessed in the audio thread MUST use lock-free atomics (e.g. `std::atomic<aap::PluginInstance*>`, atomic port indices, and atomic render epoch counters for control-thread quiescent-state synchronization).
+
 ### Jetpack Compose UI Patterns
 1. **Grid Item Keying**:
    - In `LazyVerticalGrid` / `LazyColumn` for parameter controls, always scope item keys to include the slot index and plugin ID:

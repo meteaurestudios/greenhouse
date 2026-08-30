@@ -362,7 +362,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             unloadSlot(slotIndex)
 
             try {
-                val instance = hostEngine.instantiatePlugin(plugin, sampleRate, framesPerCallback)
+                val (client, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
 
                 // Populate dynamic parameters and ports if missing from static aap_metadata.xml
                 if (plugin.parameters.isEmpty()) {
@@ -394,7 +394,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 audioPlayer?.setSlotBypassed(slotIndex, false)
-                audioPlayer?.setSlotPlugin(slotIndex, instance)
+                audioPlayer?.setSlotPlugin(slotIndex, instance, client)
 
                 // Dispatch initial default parameter values to plugin instance
                 plugin.parameters.forEach { param ->
@@ -431,6 +431,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Throwable) {
             Log.e(tag, "Error destroying plugin instance", e)
         }
+
+        hostEngine.unloadSlot(slotIndex)
 
         slots[slotIndex] = slots[slotIndex].copy(
             pluginInfo = null,

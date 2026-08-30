@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include <time.h>
+#include <unistd.h>
 #include <android/log.h>
 
 namespace aaphost
@@ -14,6 +15,9 @@ namespace aaphost
 
 constexpr int32_t DEFAULT_NUM_RACK_SLOTS = 3;
 constexpr int32_t MAX_DSP_BLOCK_FRAMES = 4096;
+constexpr uint64_t QUIESCENT_EPOCHS_TO_WAIT = 2;
+constexpr useconds_t QUIESCENT_POLL_INTERVAL_US = 500;
+constexpr int32_t MAX_QUIESCENT_WAIT_ATTEMPTS = 50; // 50 * 500us = 25ms maximum watchdog timeout
 
 struct RackSlot
 {
@@ -155,6 +159,9 @@ private:
 
     // Pre-allocated scratch buffers
     std::vector<float> mIntermediateStereoBuffer;
+
+    // Realtime render epoch tracking for lock-free quiescent state synchronization
+    std::atomic<uint64_t> mRenderEpoch{0};
 
     // Performance & CPU tracking
     std::atomic<float> mTotalCpuLoad{0.0f};

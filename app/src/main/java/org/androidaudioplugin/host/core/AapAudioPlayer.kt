@@ -3,6 +3,7 @@ package org.androidaudioplugin.host.core
 import android.content.Context
 import android.util.Log
 import org.androidaudioplugin.ParameterInformation
+import org.androidaudioplugin.hosting.AudioPluginClientBase
 import org.androidaudioplugin.hosting.InstanceState
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 import org.androidaudioplugin.hosting.UmpHelper
@@ -91,6 +92,7 @@ class AapAudioPlayer private constructor(
     }
 
     private val slotInstances = Array<NativeRemotePluginInstance?>(numSlots) { null }
+    private val slotClients = Array<AudioPluginClientBase?>(numSlots) { null }
     private val slotBypassed = BooleanArray(numSlots) { false }
 
     var isProcessing: Boolean = false
@@ -113,9 +115,14 @@ class AapAudioPlayer private constructor(
         return 0f
     }
 
-    fun setSlotPlugin(slotIndex: Int, instance: NativeRemotePluginInstance?) {
+    fun setSlotPlugin(
+        slotIndex: Int,
+        instance: NativeRemotePluginInstance?,
+        client: AudioPluginClientBase? = null
+    ) {
         if (slotIndex in 0 until numSlots) {
             slotInstances[slotIndex] = instance
+            slotClients[slotIndex] = client
             slotBypassed[slotIndex] = false
 
             if (instance != null && isProcessing && instance.state == InstanceState.INACTIVE) {
