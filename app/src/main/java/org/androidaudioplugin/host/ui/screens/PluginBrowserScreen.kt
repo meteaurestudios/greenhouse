@@ -175,7 +175,7 @@ fun PluginBrowserScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Plugin Catalog List
+        // Available Plugins List
         if (viewModel.filteredPlugins.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -185,7 +185,7 @@ fun PluginBrowserScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        imageVector = Icons.Default.Tune,
+                        imageVector = Icons.Default.Search,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = TextMuted
@@ -206,8 +206,11 @@ fun PluginBrowserScreen(
                     .weight(1f)
             ) {
                 items(viewModel.filteredPlugins, key = { it.pluginId ?: it.displayName }) { plugin ->
+                    val isSlotLoading = targetSlot.isLoading || viewModel.isInstantiating
+
                     PluginCard(
                         plugin = plugin,
+                        isEnabled = !isSlotLoading,
                         onLoad = {
                             viewModel.loadPluginIntoSlot(viewModel.targetBrowserSlotIndex, plugin)
                             onNavigateToRack()
@@ -222,6 +225,7 @@ fun PluginBrowserScreen(
 @Composable
 private fun PluginCard(
     plugin: PluginInformation,
+    isEnabled: Boolean = true,
     onLoad: () -> Unit
 ) {
     val catLower = plugin.category?.lowercase() ?: ""
@@ -296,9 +300,15 @@ private fun PluginCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF252A36))
-                        .border(1.dp, Color(0xFF3B4356), RoundedCornerShape(12.dp))
-                        .clickable { onLoad() }
+                        .background(if (isEnabled) Color(0xFF252A36) else Color(0xFF1B1E28))
+                        .border(
+                            1.dp,
+                            if (isEnabled) Color(0xFF3B4356) else Color(0xFF282D3B),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .clickable(enabled = isEnabled) {
+                            onLoad()
+                        }
                         .padding(horizontal = 14.dp, vertical = 7.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -306,7 +316,7 @@ private fun PluginCard(
                         text = "LOAD",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
+                        color = if (isEnabled) TextPrimary else TextMuted,
                         letterSpacing = 0.5.sp
                     )
                 }

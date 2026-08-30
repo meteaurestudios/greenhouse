@@ -362,20 +362,42 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        if (slots[slotIndex].isLoading || isInstantiating) {
+            return
+        }
+
         activeSlotIndex = slotIndex
         targetBrowserSlotIndex = slotIndex
 
+        isInstantiating = true
+        statusMessage = "Instantiating ${plugin.displayName} in ${slots[slotIndex].title}..."
+
+        val currentInst = slots[slotIndex].instance
+        audioPlayer?.setSlotBypassed(slotIndex, false)
+        audioPlayer?.setSlotPlugin(slotIndex, null)
+
+        if (currentInst != null) {
+            try {
+                currentInst.destroy()
+            } catch (e: Throwable) {
+                Log.e(tag, "Error destroying previous plugin instance", e)
+            }
+        }
+
+        hostEngine.unloadSlot(slotIndex)
+
+        slots[slotIndex] = slots[slotIndex].copy(
+            pluginInfo = null,
+            instance = null,
+            isBypassed = false,
+            selectedPresetIndex = 0,
+            isLoading = true,
+            loadingPluginName = plugin.displayName
+        )
+        slotParameterValues[slotIndex].clear()
+        slotNativeUiZoomStates[slotIndex].reset()
+
         viewModelScope.launch {
-            isInstantiating = true
-            statusMessage = "Instantiating ${plugin.displayName} in ${slots[slotIndex].title}..."
-
-            unloadSlot(slotIndex)
-
-            slots[slotIndex] = slots[slotIndex].copy(
-                isLoading = true,
-                loadingPluginName = plugin.displayName
-            )
-
             try {
                 val (client, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
 
@@ -448,10 +470,12 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer?.setSlotBypassed(slotIndex, false)
         audioPlayer?.setSlotPlugin(slotIndex, null)
 
-        try {
-            currentInst?.destroy()
-        } catch (e: Throwable) {
-            Log.e(tag, "Error destroying plugin instance", e)
+        if (currentInst != null) {
+            try {
+                currentInst.destroy()
+            } catch (e: Throwable) {
+                Log.e(tag, "Error destroying plugin instance", e)
+            }
         }
 
         hostEngine.unloadSlot(slotIndex)

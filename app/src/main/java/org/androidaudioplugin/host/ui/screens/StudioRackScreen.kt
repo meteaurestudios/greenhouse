@@ -1496,6 +1496,18 @@ private fun NoPluginInSlotView(
     slot: RackSlotData,
     onOpenBrowser: () -> Unit
 ) {
+    val slotColor = if (slot.index == 0) {
+        AccentViolet
+    } else {
+        AccentCyan
+    }
+
+    val iconVector = if (slot.index == 0) {
+        Icons.Default.Piano
+    } else {
+        Icons.Default.GraphicEq
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1506,32 +1518,53 @@ private fun NoPluginInSlotView(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(24.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Tune,
-                contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                tint = ElectricBlue
-            )
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(slotColor.copy(alpha = 0.12f))
+                    .border(1.dp, slotColor.copy(alpha = 0.35f), RoundedCornerShape(20.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = iconVector,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp),
+                    tint = slotColor
+                )
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
+
             Text(
                 text = "${slot.title} is Empty",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
-            Spacer(modifier = Modifier.height(8.dp))
+
+            Spacer(modifier = Modifier.height(6.dp))
+
             Text(
-                text = "Select an ${slot.slotType.lowercase(Locale.US)} plugin from the catalog.",
+                text = "Select an ${slot.slotType.lowercase(Locale.US)} plugin to insert into this slot.",
                 fontSize = 13.sp,
                 color = TextSecondary
             )
+
             Spacer(modifier = Modifier.height(20.dp))
+
             Button(
                 onClick = onOpenBrowser,
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = StudioBackground),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
             ) {
-                Text("BROWSE PLUGINS", fontWeight = FontWeight.Bold)
+                Text(
+                    text = "BROWSE",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    letterSpacing = 0.5.sp
+                )
             }
         }
     }
