@@ -57,6 +57,9 @@ class AapAudioPlayer private constructor(
         private external fun nativeSetFramesPerCallback(engineHandle: Long, framesPerCallback: Int)
 
         @JvmStatic
+        private external fun nativeGetBurstFrames(engineHandle: Long): Int
+
+        @JvmStatic
         private external fun nativeSetSlotPlugin(engineHandle: Long, slotIndex: Int, nativeClient: Long, instanceId: Int)
 
         @JvmStatic
@@ -73,6 +76,19 @@ class AapAudioPlayer private constructor(
     }
 
     private var nativeEngineHandle: Long = 0L
+
+    val actualBurstSize: Int
+        get() {
+            if (nativeEngineHandle != 0L) {
+                val burst = nativeGetBurstFrames(nativeEngineHandle)
+
+                if (burst > 0) {
+                    return burst
+                }
+            }
+
+            return 0
+        }
 
     var framesPerCallback: Int = initialFramesPerCallback
         private set

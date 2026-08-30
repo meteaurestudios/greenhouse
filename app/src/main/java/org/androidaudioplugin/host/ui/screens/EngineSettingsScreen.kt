@@ -5,8 +5,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.GraphicEq
@@ -19,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.host.ui.HostViewModel
@@ -30,10 +33,13 @@ fun EngineSettingsScreen(
     viewModel: HostViewModel,
     onNavigateBack: () -> Unit
 ) {
+    val scrollState = rememberScrollState()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(StudioBackground)
+            .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
         // Header with Back Button
@@ -99,7 +105,8 @@ fun EngineSettingsScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 InfoRow(label = "Output Sample Rate", value = "${viewModel.sampleRate} Hz")
-                InfoRow(label = "Hardware Burst Quantum", value = "${viewModel.baseBurstSize} frames")
+                InfoRow(label = "Hardware Burst Quantum", value = "${viewModel.actualBurstSize} frames")
+                InfoRow(label = "Audio Stream Mode", value = "LowLatency Exclusive", valueColor = NeonCyan)
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -117,15 +124,15 @@ fun EngineSettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Buffer Frames per Callback",
+                            text = "FIFO Render Block Size",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
-                        val activeMultiplier = if (viewModel.baseBurstSize > 0) {
-                            viewModel.framesPerCallback / viewModel.baseBurstSize
+                        val activeMultiplier = if (viewModel.actualBurstSize > 0) {
+                            viewModel.framesPerCallback / viewModel.actualBurstSize
                         } else {
-                            2
+                            4
                         }
                         Text(
                             text = "${viewModel.framesPerCallback} frames (${activeMultiplier}x Burst)",
@@ -142,7 +149,7 @@ fun EngineSettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         for (multiplier in viewModel.availableBurstMultipliers) {
-                            val frames = viewModel.baseBurstSize * multiplier
+                            val frames = viewModel.actualBurstSize * multiplier
                             val isSelected = (viewModel.framesPerCallback == frames)
                             val latencyMs = (frames.toFloat() / viewModel.sampleRate.toFloat()) * 1000.0f
                             val label = "${multiplier}x"
@@ -184,11 +191,11 @@ fun EngineSettingsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     val profileDesc = when {
-                        viewModel.framesPerCallback <= viewModel.baseBurstSize -> "Ultra-low latency (high Binder IPC frequency)"
-                        viewModel.framesPerCallback <= viewModel.baseBurstSize * 2 -> "Low latency (recommended for single instrument)"
-                        viewModel.framesPerCallback <= viewModel.baseBurstSize * 4 -> "Balanced (recommended for multi-slot AAP racks)"
-                        viewModel.framesPerCallback <= viewModel.baseBurstSize * 8 -> "Safe / Heavy DSP (optimal for multi-FX chains)"
-                        else -> "Relaxed latency (minimal CPU overhead)"
+                        viewModel.framesPerCallback <= viewModel.actualBurstSize * 2 -> "Low latency (recommended for single synth)"
+                        viewModel.framesPerCallback <= viewModel.actualBurstSize * 4 -> "Balanced (recommended default - responsive & glitch-free)"
+                        viewModel.framesPerCallback <= viewModel.actualBurstSize * 8 -> "Safe (great for multi-FX rack chains)"
+                        viewModel.framesPerCallback <= viewModel.actualBurstSize * 16 -> "High Headroom (optimal for heavy DSP & reverbs)"
+                        else -> "Maximum Stability (minimal CPU overhead / budget devices)"
                     }
 
                     Text(
@@ -268,6 +275,7 @@ fun EngineSettingsScreen(
 
                 val activeSlot = viewModel.activeSlot
                 val activePlugin = activeSlot.pluginInfo
+
                 if (activePlugin != null) {
                     InfoRow(label = "Active Slot Focus", value = "${activeSlot.title} (${activeSlot.slotType})")
                     InfoRow(label = "Loaded Plugin", value = activePlugin.displayName)
@@ -321,7 +329,7 @@ fun EngineSettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
+                .height(120.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(StudioSurfaceVariant)
                 .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp))
@@ -357,13 +365,17 @@ private fun InfoRow(
         Text(
             text = label,
             fontSize = 13.sp,
-            color = TextSecondary
+            color = TextSecondary,
+            modifier = Modifier.weight(1f, fill = false)
         )
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = value,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = valueColor
+            color = valueColor,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1.5f, fill = false)
         )
     }
 }

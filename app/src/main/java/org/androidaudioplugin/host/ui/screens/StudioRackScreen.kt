@@ -307,8 +307,8 @@ private fun MasterControlBanner(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Diagnostics & Info",
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Audio Engine Settings & Diagnostics",
                             tint = TextSecondary,
                             modifier = Modifier.size(16.dp)
                         )

@@ -72,6 +72,9 @@ JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradle
    - All C++ functions (constructors, destructors, member methods, and JNI functions) **MUST ALWAYS** place their opening curly bracket `{` on a new line.
 5. **C++ Member Variable Naming (`m` Prefix & CamelCase)**:
    - All C++ member variables (in classes and structs) **MUST ALWAYS** start with a lowercase `m` followed by CamelCase (e.g. `mSampleRate`, `mFramesPerCallback`, `mIsProcessing`, `mSlots`, `mAudioInPorts`, `mCpuLoad`).
+6. **No Magic / Hardcoded Numbers**:
+   - Never use raw numeric literals or magic values (e.g. `256`, `512`, `16384`, `4096`, `128`, `44100`, etc.) directly in business logic, fallbacks, or buffer calculations.
+   - Always define named, self-documenting constants (`constexpr`, `const val`, or `companion object` constants) such as `DEFAULT_FRAMES_PER_CALLBACK`, `DEFAULT_BURST_MULTIPLIER`, `FIFO_CAPACITY_FRAMES`, `MAX_DSP_BLOCK_FRAMES`, `DEFAULT_SAMPLE_RATE`, etc., with clear semantic meaning.
 
 
 

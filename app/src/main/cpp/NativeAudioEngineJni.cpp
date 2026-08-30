@@ -57,6 +57,19 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetFramesPerCallback(
     }
 }
 
+JNIEXPORT jint JNICALL
+Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetBurstFrames(
+        JNIEnv *env, jclass clazz, jlong engineHandle)
+{
+    auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
+
+    if (engine != nullptr) {
+        return engine->getFramesPerBurst();
+    }
+
+    return 0;
+}
+
 JNIEXPORT void JNICALL
 Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetSlotPlugin(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex, jlong nativeClient, jint instanceId)

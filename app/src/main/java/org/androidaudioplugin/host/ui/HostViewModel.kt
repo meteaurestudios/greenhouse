@@ -66,6 +66,11 @@ data class RackSlotData(
 class HostViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         const val NUM_RACK_SLOTS = 3
+        const val DEFAULT_SAMPLE_RATE = 44100
+        const val DEFAULT_BURST_SIZE = 128
+        const val DEFAULT_BURST_MULTIPLIER = 4
+        const val CPU_MONITOR_INTERVAL_MS = 100L
+        val AVAILABLE_BURST_MULTIPLIERS = listOf(2, 4, 8, 16, 32)
     }
 
     private val tag = "HostViewModel"
@@ -110,13 +115,15 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     val slotCpuLoads = mutableStateListOf<Float>().apply {
-        addAll(List(NUM_RACK_SLOTS) { 0f })
+        repeat(NUM_RACK_SLOTS) {
+            add(0f)
+        }
     }
 
     var isInstantiating by mutableStateOf(false)
         private set
 
-    var statusMessage by mutableStateOf<String?>("Scan complete. Select an AAP plugin from the catalog to load.")
+    var statusMessage by mutableStateOf("Welcome to AAP Studio Host")
         private set
 
     val slotParameterValues = Array(NUM_RACK_SLOTS) { mutableStateMapOf<Int, Double>() }
@@ -176,20 +183,27 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    val sampleRate: Int
-    val baseBurstSize: Int
-    var framesPerCallback by mutableIntStateOf(256)
+    var sampleRate: Int = DEFAULT_SAMPLE_RATE
+        private set
+
+    val actualBurstSize: Int
+        get() {
+            val nativeBurst = audioPlayer?.actualBurstSize ?: 0
+
+            if (nativeBurst > 0) {
+                return nativeBurst
+            }
+
+            return DEFAULT_BURST_SIZE
+        }
+
+    var framesPerCallback by mutableIntStateOf(DEFAULT_BURST_SIZE * DEFAULT_BURST_MULTIPLIER)
         private set
 
     val availableBurstMultipliers: List<Int>
         get() {
-            val base = if (baseBurstSize > 0) {
-                baseBurstSize
-            } else {
-                128
-            }
-
-            return listOf(1, 2, 4, 8).filter { (it * base) <= MAX_HOST_BUFFER_FRAMES }
+            val base = actualBurstSize
+            return AVAILABLE_BURST_MULTIPLIERS.filter { (it * base) <= MAX_HOST_BUFFER_FRAMES }
         }
 
     fun setBufferFramesPerCallback(newFrames: Int) {
@@ -199,7 +213,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             framesPerCallback = clampedFrames
             audioPlayer?.setFramesPerCallback(clampedFrames)
             val estimatedLatency = (clampedFrames.toFloat() / sampleRate.toFloat()) * 1000f
-            statusMessage = "Audio buffer updated to $clampedFrames frames (${String.format(Locale.US, "%.2f", estimatedLatency)} ms)"
+            statusMessage = "FIFO render block set to $clampedFrames frames (${String.format(Locale.US, "%.2f", estimatedLatency)} ms)"
         }
     }
 
@@ -207,14 +221,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        sampleRate = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 44100
-        val burst = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 128
-        baseBurstSize = if (burst > 0) {
-            burst
-        } else {
-            128
-        }
-        framesPerCallback = baseBurstSize * 2
+        sampleRate = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: DEFAULT_SAMPLE_RATE
+        framesPerCallback = DEFAULT_BURST_SIZE * DEFAULT_BURST_MULTIPLIER
 
         audioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback, numSlots = NUM_RACK_SLOTS)
 
@@ -255,7 +263,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                delay(100)
+                delay(CPU_MONITOR_INTERVAL_MS)
             }
         }
     }
@@ -489,8 +497,20 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             statusMessage = "Audio engine paused."
         } else {
             player.start()
-            isProcessing = true
-            statusMessage = "Audio engine ACTIVE (Low-latency audio rack running)."
+            isProcessing = player.isProcessing
+
+            if (isProcessing) {
+                val burst = player.actualBurstSize
+
+                if (burst > 0 && framesPerCallback == DEFAULT_BURST_SIZE * DEFAULT_BURST_MULTIPLIER) {
+                    framesPerCallback = burst * DEFAULT_BURST_MULTIPLIER
+                    player.setFramesPerCallback(framesPerCallback)
+                }
+
+                statusMessage = "Audio engine ACTIVE (FIFO decoupled render running)."
+            } else {
+                statusMessage = "Failed to start audio engine."
+            }
         }
     }
 
