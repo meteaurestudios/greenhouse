@@ -31,7 +31,7 @@ import java.util.Locale
 
 enum class StudioRackViewMode(val title: String) {
     PARAMETERS("Parameters"),
-    NATIVE_SURFACE("Native Plugin GUI"),
+    NATIVE_SURFACE("Plugin UI"),
     SPECS("Ports & Details")
 }
 
@@ -58,7 +58,9 @@ data class RackSlotData(
     val pluginInfo: PluginInformation? = null,
     val instance: NativeRemotePluginInstance? = null,
     val isBypassed: Boolean = false,
-    val selectedPresetIndex: Int = 0
+    val selectedPresetIndex: Int = 0,
+    val isLoading: Boolean = false,
+    val loadingPluginName: String? = null
 )
 
 class HostViewModel(application: Application) : AndroidViewModel(application) {
@@ -361,6 +363,11 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
             unloadSlot(slotIndex)
 
+            slots[slotIndex] = slots[slotIndex].copy(
+                isLoading = true,
+                loadingPluginName = plugin.displayName
+            )
+
             try {
                 val (client, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
 
@@ -390,7 +397,9 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                     pluginInfo = plugin,
                     instance = instance,
                     isBypassed = false,
-                    selectedPresetIndex = 0
+                    selectedPresetIndex = 0,
+                    isLoading = false,
+                    loadingPluginName = null
                 )
 
                 audioPlayer?.setSlotBypassed(slotIndex, false)
@@ -411,6 +420,11 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Throwable) {
                 Log.e(tag, "Failed to load plugin ${plugin.displayName}", e)
                 statusMessage = "Error loading plugin: ${e.localizedMessage ?: e.message}"
+
+                slots[slotIndex] = slots[slotIndex].copy(
+                    isLoading = false,
+                    loadingPluginName = null
+                )
             } finally {
                 isInstantiating = false
             }
@@ -438,7 +452,9 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             pluginInfo = null,
             instance = null,
             isBypassed = false,
-            selectedPresetIndex = 0
+            selectedPresetIndex = 0,
+            isLoading = false,
+            loadingPluginName = null
         )
         slotParameterValues[slotIndex].clear()
         slotNativeUiZoomStates[slotIndex].reset()

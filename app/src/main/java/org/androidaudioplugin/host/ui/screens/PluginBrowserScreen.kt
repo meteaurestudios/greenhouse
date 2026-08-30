@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -207,11 +206,8 @@ fun PluginBrowserScreen(
                     .weight(1f)
             ) {
                 items(viewModel.filteredPlugins, key = { it.pluginId ?: it.displayName }) { plugin ->
-                    val isSlotLoaded = targetSlot.pluginInfo?.pluginId == plugin.pluginId
                     PluginCard(
                         plugin = plugin,
-                        isSelected = isSlotLoaded,
-                        isInstantiating = viewModel.isInstantiating && isSlotLoaded,
                         onLoad = {
                             viewModel.loadPluginIntoSlot(viewModel.targetBrowserSlotIndex, plugin)
                             onNavigateToRack()
@@ -226,8 +222,6 @@ fun PluginBrowserScreen(
 @Composable
 private fun PluginCard(
     plugin: PluginInformation,
-    isSelected: Boolean,
-    isInstantiating: Boolean,
     onLoad: () -> Unit
 ) {
     val catLower = plugin.category?.lowercase() ?: ""
@@ -241,14 +235,10 @@ private fun PluginCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(
-                width = if (isSelected) 1.5.dp else 1.dp,
-                color = if (isSelected) AccentGold else StudioPanelBorder,
-                shape = RoundedCornerShape(16.dp)
-            ),
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) StudioSurfaceVariant else StudioSurface
+            containerColor = StudioSurface
         )
     ) {
         Column(
@@ -306,47 +296,19 @@ private fun PluginCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            if (isSelected) SignalGreen.copy(alpha = 0.15f) else Color(0xFF252A36)
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = if (isSelected) SignalGreen else Color(0xFF3B4356),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .clickable(enabled = !isInstantiating) { onLoad() }
+                        .background(Color(0xFF252A36))
+                        .border(1.dp, Color(0xFF3B4356), RoundedCornerShape(12.dp))
+                        .clickable { onLoad() }
                         .padding(horizontal = 14.dp, vertical = 7.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isInstantiating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            color = if (isSelected) SignalGreen else TextPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = SignalGreen
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                            }
-                            Text(
-                                text = if (isSelected) "LOADED" else "LOAD",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) SignalGreen else TextPrimary,
-                                letterSpacing = 0.5.sp
-                            )
-                        }
-                    }
+                    Text(
+                        text = "LOAD",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        letterSpacing = 0.5.sp
+                    )
                 }
             }
 
