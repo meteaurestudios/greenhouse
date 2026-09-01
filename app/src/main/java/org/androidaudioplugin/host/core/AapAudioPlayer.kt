@@ -73,6 +73,12 @@ class AapAudioPlayer private constructor(
 
         @JvmStatic
         private external fun nativeGetSlotCpuLoad(engineHandle: Long, slotIndex: Int): Float
+
+        @JvmStatic
+        private external fun nativeGetSlotLevels(engineHandle: Long, slotIndex: Int, outLevels: FloatArray)
+
+        @JvmStatic
+        private external fun nativeGetAllSlotLevels(engineHandle: Long, outLevels: FloatArray)
     }
 
     private var nativeEngineHandle: Long = 0L
@@ -129,6 +135,18 @@ class AapAudioPlayer private constructor(
         }
 
         return 0f
+    }
+
+    fun getSlotLevels(slotIndex: Int, outLevels: FloatArray) {
+        if (nativeEngineHandle != 0L && slotIndex in 0 until numSlots && outLevels.size >= 2) {
+            nativeGetSlotLevels(nativeEngineHandle, slotIndex, outLevels)
+        }
+    }
+
+    fun getAllSlotLevels(outLevels: FloatArray) {
+        if (nativeEngineHandle != 0L && outLevels.isNotEmpty()) {
+            nativeGetAllSlotLevels(nativeEngineHandle, outLevels)
+        }
     }
 
     fun setSlotPlugin(

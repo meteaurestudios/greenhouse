@@ -135,4 +135,42 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetSlotCpuLoad(
     return 0.0f;
 }
 
+JNIEXPORT void JNICALL
+Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetSlotLevels(
+        JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex, jfloatArray outLevels)
+{
+    auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
+
+    if (engine != nullptr && outLevels != nullptr) {
+        jsize len = env->GetArrayLength(outLevels);
+
+        if (len >= 2) {
+            float levels[2] = {0.0f, 0.0f};
+            engine->getSlotLevels(slotIndex, levels[0], levels[1]);
+            env->SetFloatArrayRegion(outLevels, 0, 2, levels);
+        }
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetAllSlotLevels(
+        JNIEnv *env, jclass clazz, jlong engineHandle, jfloatArray outLevels)
+{
+    auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
+
+    if (engine != nullptr && outLevels != nullptr) {
+        jsize len = env->GetArrayLength(outLevels);
+        int32_t slotCount = len / 2;
+
+        if (slotCount > 0) {
+            constexpr int32_t MAX_STACK_LEVELS = 32;
+            float stackBuffer[MAX_STACK_LEVELS] = {0.0f};
+            int32_t slotsToCopy = std::min(slotCount, MAX_STACK_LEVELS / 2);
+
+            engine->getAllSlotLevels(stackBuffer, slotsToCopy);
+            env->SetFloatArrayRegion(outLevels, 0, slotsToCopy * 2, stackBuffer);
+        }
+    }
+}
+
 } // extern "C"

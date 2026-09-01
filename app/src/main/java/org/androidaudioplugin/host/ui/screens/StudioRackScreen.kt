@@ -46,7 +46,9 @@ import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.host.ui.HostViewModel
 import org.androidaudioplugin.host.ui.RackSlotData
+import org.androidaudioplugin.host.ui.SlotLevel
 import org.androidaudioplugin.host.ui.StudioRackViewMode
+import org.androidaudioplugin.host.ui.components.SlotStereoLevelMeter
 import org.androidaudioplugin.host.ui.components.StudioKeyboard
 import org.androidaudioplugin.host.ui.theme.*
 import org.androidaudioplugin.hosting.GuiHelper
@@ -92,6 +94,7 @@ fun StudioRackScreen(
                 activeSlotIndex = currentSlotIndex,
                 isProcessing = viewModel.isProcessing,
                 slotCpuLoads = viewModel.slotCpuLoads,
+                slotLevels = viewModel.slotLevels,
                 onSelectSlot = { slotIdx ->
                     viewModel.selectActiveSlot(slotIdx)
                 },
@@ -332,6 +335,7 @@ private fun SignalRackHeader(
     activeSlotIndex: Int,
     isProcessing: Boolean,
     slotCpuLoads: List<Float>,
+    slotLevels: List<SlotLevel>,
     onSelectSlot: (Int) -> Unit,
     onAddPlugin: (Int) -> Unit,
     onToggleBypass: (Int) -> Unit,
@@ -345,6 +349,7 @@ private fun SignalRackHeader(
             val isSelected = slot.index == activeSlotIndex
             val isLoaded = slot.pluginInfo != null
             val isLoading = slot.isLoading
+            val slotLevel = slotLevels.getOrNull(slot.index) ?: SlotLevel()
 
             val badgeColor = if (slot.index == 0) {
                 AccentViolet
@@ -380,167 +385,187 @@ private fun SignalRackHeader(
                     }
                 )
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 9.dp, vertical = 9.dp)
+                        .padding(horizontal = 9.dp, vertical = 9.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Top Header Row: Bypass power icon or Mini Loader with Slot Type Capsule Label Box next to it
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
                     ) {
-
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                color = badgeColor,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            // Bypass power icon (always shown)
-                            Icon(
-                                imageVector = Icons.Default.PowerSettingsNew,
-                                contentDescription = "Bypassed",
-                                tint = when {
-                                    slot.isBypassed -> DangerRed
-                                    isLoaded -> SignalGreen
-                                    else -> TextMuted.copy(alpha = 0.4f)
-                                },
-                                modifier = Modifier
-                                    .size(15.dp)
-                                    .clip(CircleShape)
-                                    .clickable(
-                                        enabled = isLoaded,
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onToggleBypass(slot.index) }
-                            )
-                        }
-
-                        // Slot Type Capsule Label Box
-                        Box(
-                            modifier = Modifier
-                                .border(1.dp, badgeColor.copy(alpha = 0.7f), CircleShape)
-                                .clip(CircleShape)
-                                .background(badgeColor.copy(alpha = 0.15f))
-                                .padding(horizontal = 6.dp, vertical = 1.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = slot.slotType.lowercase(Locale.US),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = badgeColor
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    if (isLoading) {
-                        Text(
-                            text = slot.loadingPluginName ?: "Loading...",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        Text(
-                            text = "Loading...",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = TextMuted
-                        )
-                    } else if (isLoaded) {
-                        // Plugin Name with Close Cross Button next to it
+                        // Top Header Row: Bypass power icon or Mini Loader with Slot Type Capsule Label Box next to it
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(
-                                text = slot.pluginInfo?.displayName ?: "Empty Slot",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
 
-                            Spacer(modifier = Modifier.width(4.dp))
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = badgeColor,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                // Bypass power icon (always shown)
+                                Icon(
+                                    imageVector = Icons.Default.PowerSettingsNew,
+                                    contentDescription = "Bypassed",
+                                    tint = when {
+                                        slot.isBypassed -> DangerRed
+                                        isLoaded -> SignalGreen
+                                        else -> TextMuted.copy(alpha = 0.4f)
+                                    },
+                                    modifier = Modifier
+                                        .size(15.dp)
+                                        .clip(CircleShape)
+                                        .clickable(
+                                            enabled = isLoaded,
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { onToggleBypass(slot.index) }
+                                )
+                            }
 
+                            // Slot Type Capsule Label Box
                             Box(
                                 modifier = Modifier
-                                    .size(18.dp)
+                                    .border(1.dp, badgeColor.copy(alpha = 0.7f), CircleShape)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF282D3B))
-                                    .border(1.dp, StudioPanelBorder, CircleShape)
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) { onUnloadSlot(slot.index) },
+                                    .background(badgeColor.copy(alpha = 0.15f))
+                                    .padding(horizontal = 6.dp, vertical = 1.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Remove Plugin",
-                                    tint = TextPrimary,
-                                    modifier = Modifier.size(12.dp)
+                                Text(
+                                    text = slot.slotType.lowercase(Locale.US),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = badgeColor
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.weight(1f))
 
-                        val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
-                        val statusText = when {
-                            slot.isBypassed -> "Bypassed"
-                            isProcessing -> "DSP ${slotCpu.toInt()}%"
-                            else -> "ACTIVE"
-                        }
-
-                        Text(
-                            text = statusText,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            fontFamily = FontFamily.Monospace,
-                            color = if (slot.isBypassed) DangerRed else TextMuted
-                        )
-                    } else {
-                        Text(
-                            text = "Empty Slot",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(30.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF282D3B))
-                                .clickable { onAddPlugin(slot.index) },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        if (isLoading) {
                             Text(
-                                text = "+ ADD",
+                                text = slot.loadingPluginName ?: "Loading...",
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = NeonCyan,
-                                letterSpacing = 0.5.sp
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Text(
+                                text = "Loading...",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = TextMuted
+                            )
+                        } else if (isLoaded) {
+                            // Plugin Name with Close Cross Button next to it
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = slot.pluginInfo?.displayName ?: "Empty Slot",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF282D3B))
+                                        .border(1.dp, StudioPanelBorder, CircleShape)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { onUnloadSlot(slot.index) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove Plugin",
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
+                            val statusText = when {
+                                slot.isBypassed -> "Bypassed"
+                                isProcessing -> "DSP ${slotCpu.toInt()}%"
+                                else -> "ACTIVE"
+                            }
+
+                            Text(
+                                text = statusText,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.Monospace,
+                                color = if (slot.isBypassed) DangerRed else TextMuted
+                            )
+                        } else {
+                            Text(
+                                text = "Empty Slot",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(30.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF282D3B))
+                                    .clickable { onAddPlugin(slot.index) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "+ ADD",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = NeonCyan,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
                         }
+                    }
+
+                    // Stereo VU / Level Meter on the right of the slot card (only when a plugin is loaded)
+                    if (isLoaded) {
+                        SlotStereoLevelMeter(
+                            levelLeft = slotLevel.left,
+                            levelRight = slotLevel.right,
+                            isBypassed = slot.isBypassed,
+                            isProcessing = isProcessing,
+                            meterWidth = 12.dp,
+                            meterHeight = 86.dp
+                        )
                     }
                 }
             }

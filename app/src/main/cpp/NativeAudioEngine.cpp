@@ -169,6 +169,46 @@ void NativeAudioEngine::renderDspBlock(int32_t blockFrames)
         auto slot0_load = (blockDurationNs > 0.0) ? (slot0_ns / blockDurationNs) : 0.0;
         mSmoothedSlotLoad[0] = (mSmoothedSlotLoad[0] * DSP_LOAD_EMA_PREVIOUS_WEIGHT) + (slot0_load * DSP_LOAD_EMA_CURRENT_WEIGHT);
         mSlots[0]->mCpuLoad.store(static_cast<float>(mSmoothedSlotLoad[0]));
+
+        if (renderedSlot0) {
+            float peakL = 0.0f;
+            float peakR = 0.0f;
+            simd::measureStereoPeak(mIntermediateStereoBuffer.data(), frames, peakL, peakR);
+
+            auto prevL = mSlots[0]->mPeakL.load(std::memory_order_relaxed);
+            auto prevR = mSlots[0]->mPeakR.load(std::memory_order_relaxed);
+
+            float currentL = (peakL >= prevL) ? peakL : (prevL * METER_DECAY_FACTOR);
+            float currentR = (peakR >= prevR) ? peakR : (prevR * METER_DECAY_FACTOR);
+
+            if (currentL < METER_MIN_THRESHOLD) {
+                currentL = 0.0f;
+            }
+
+            if (currentR < METER_MIN_THRESHOLD) {
+                currentR = 0.0f;
+            }
+
+            mSlots[0]->mPeakL.store(currentL, std::memory_order_relaxed);
+            mSlots[0]->mPeakR.store(currentR, std::memory_order_relaxed);
+        } else {
+            auto prevL = mSlots[0]->mPeakL.load(std::memory_order_relaxed);
+            auto prevR = mSlots[0]->mPeakR.load(std::memory_order_relaxed);
+
+            float currentL = prevL * METER_DECAY_FACTOR;
+            float currentR = prevR * METER_DECAY_FACTOR;
+
+            if (currentL < METER_MIN_THRESHOLD) {
+                currentL = 0.0f;
+            }
+
+            if (currentR < METER_MIN_THRESHOLD) {
+                currentR = 0.0f;
+            }
+
+            mSlots[0]->mPeakL.store(currentL, std::memory_order_relaxed);
+            mSlots[0]->mPeakR.store(currentR, std::memory_order_relaxed);
+        }
     }
 
     // ----------------------------------------------------
@@ -177,6 +217,7 @@ void NativeAudioEngine::renderDspBlock(int32_t blockFrames)
     for (int32_t slotIdx = 1; slotIdx < mNumSlots; slotIdx++) {
         clock_gettime(CLOCK_MONOTONIC, &slot_start);
 
+        bool renderedEffect = false;
         auto inst = mSlots[slotIdx]->mInstance.load(std::memory_order_acquire);
 
         if (inst != nullptr && !mSlots[slotIdx]->mIsBypassed.load(std::memory_order_relaxed)) {
@@ -218,12 +259,14 @@ void NativeAudioEngine::renderDspBlock(int32_t blockFrames)
 
                             if (outL != nullptr && outR != nullptr) {
                                 simd::interleaveStereo(outL, outR, mIntermediateStereoBuffer.data(), frames);
+                                renderedEffect = true;
                             }
                         } else if (outCount == 1 && out0 >= 0) {
                             auto outM = static_cast<const float*>(aapBuffer->get_buffer(aapBuffer, out0));
 
                             if (outM != nullptr) {
                                 simd::interleaveMonoToStereo(outM, mIntermediateStereoBuffer.data(), frames);
+                                renderedEffect = true;
                             }
                         }
                     }
@@ -236,6 +279,46 @@ void NativeAudioEngine::renderDspBlock(int32_t blockFrames)
         auto slot_load = (blockDurationNs > 0.0) ? (slot_ns / blockDurationNs) : 0.0;
         mSmoothedSlotLoad[slotIdx] = (mSmoothedSlotLoad[slotIdx] * DSP_LOAD_EMA_PREVIOUS_WEIGHT) + (slot_load * DSP_LOAD_EMA_CURRENT_WEIGHT);
         mSlots[slotIdx]->mCpuLoad.store(static_cast<float>(mSmoothedSlotLoad[slotIdx]));
+
+        if (renderedEffect) {
+            float peakL = 0.0f;
+            float peakR = 0.0f;
+            simd::measureStereoPeak(mIntermediateStereoBuffer.data(), frames, peakL, peakR);
+
+            auto prevL = mSlots[slotIdx]->mPeakL.load(std::memory_order_relaxed);
+            auto prevR = mSlots[slotIdx]->mPeakR.load(std::memory_order_relaxed);
+
+            float currentL = (peakL >= prevL) ? peakL : (prevL * METER_DECAY_FACTOR);
+            float currentR = (peakR >= prevR) ? peakR : (prevR * METER_DECAY_FACTOR);
+
+            if (currentL < METER_MIN_THRESHOLD) {
+                currentL = 0.0f;
+            }
+
+            if (currentR < METER_MIN_THRESHOLD) {
+                currentR = 0.0f;
+            }
+
+            mSlots[slotIdx]->mPeakL.store(currentL, std::memory_order_relaxed);
+            mSlots[slotIdx]->mPeakR.store(currentR, std::memory_order_relaxed);
+        } else {
+            auto prevL = mSlots[slotIdx]->mPeakL.load(std::memory_order_relaxed);
+            auto prevR = mSlots[slotIdx]->mPeakR.load(std::memory_order_relaxed);
+
+            float currentL = prevL * METER_DECAY_FACTOR;
+            float currentR = prevR * METER_DECAY_FACTOR;
+
+            if (currentL < METER_MIN_THRESHOLD) {
+                currentL = 0.0f;
+            }
+
+            if (currentR < METER_MIN_THRESHOLD) {
+                currentR = 0.0f;
+            }
+
+            mSlots[slotIdx]->mPeakL.store(currentL, std::memory_order_relaxed);
+            mSlots[slotIdx]->mPeakR.store(currentR, std::memory_order_relaxed);
+        }
     }
 
     clock_gettime(CLOCK_MONOTONIC, &end_total);
@@ -391,6 +474,11 @@ void NativeAudioEngine::pause()
     }
 
     for (int32_t i = 0; i < mNumSlots; i++) {
+        mSlots[i]->mPeakL.store(0.0f, std::memory_order_release);
+        mSlots[i]->mPeakR.store(0.0f, std::memory_order_release);
+        mSlots[i]->mCpuLoad.store(0.0f, std::memory_order_release);
+        mSmoothedSlotLoad[i] = 0.0;
+
         auto inst = mSlots[i]->mInstance.load(std::memory_order_acquire);
 
         if (inst != nullptr) {
@@ -399,6 +487,9 @@ void NativeAudioEngine::pause()
             }
         }
     }
+
+    mSmoothedTotalLoad = 0.0;
+    mTotalCpuLoad.store(0.0f, std::memory_order_release);
 
     resetFifo();
     LOGI("Native Audio Engine paused");

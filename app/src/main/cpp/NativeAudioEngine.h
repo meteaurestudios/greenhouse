@@ -25,6 +25,8 @@ constexpr double DSP_LOAD_EMA_CURRENT_WEIGHT = 0.15;
 constexpr uint64_t QUIESCENT_EPOCHS_TO_WAIT = 2;
 constexpr useconds_t QUIESCENT_POLL_INTERVAL_US = 500;
 constexpr int32_t MAX_QUIESCENT_WAIT_ATTEMPTS = 50; // 50 * 500us = 25ms maximum watchdog timeout
+constexpr float METER_DECAY_FACTOR = 0.88f;
+constexpr float METER_MIN_THRESHOLD = 0.0001f;
 
 struct RackSlot
 {
@@ -37,6 +39,8 @@ struct RackSlot
     std::atomic<int32_t> mInPortCount{0};
     std::atomic<int32_t> mOutPortCount{0};
     std::atomic<float> mCpuLoad{0.0f};
+    std::atomic<float> mPeakL{0.0f};
+    std::atomic<float> mPeakR{0.0f};
 
     RackSlot() = default;
 
@@ -52,6 +56,8 @@ struct RackSlot
             mInPort1.store(-1, std::memory_order_release);
             mOutPort0.store(-1, std::memory_order_release);
             mOutPort1.store(-1, std::memory_order_release);
+            mPeakL.store(0.0f, std::memory_order_release);
+            mPeakR.store(0.0f, std::memory_order_release);
             return;
         }
 
@@ -157,6 +163,32 @@ public:
         }
 
         return 0.0f;
+    }
+
+    void getSlotLevels(int32_t slotIndex, float& outL, float& outR) const
+    {
+        if (slotIndex >= 0 && slotIndex < mNumSlots) {
+            outL = mSlots[slotIndex]->mPeakL.load(std::memory_order_relaxed);
+            outR = mSlots[slotIndex]->mPeakR.load(std::memory_order_relaxed);
+            return;
+        }
+
+        outL = 0.0f;
+        outR = 0.0f;
+    }
+
+    void getAllSlotLevels(float* outLevels, int32_t maxSlots) const
+    {
+        if (outLevels == nullptr || maxSlots <= 0) {
+            return;
+        }
+
+        int32_t count = std::min(mNumSlots, maxSlots);
+
+        for (int32_t i = 0; i < count; i++) {
+            outLevels[i * 2 + 0] = mSlots[i]->mPeakL.load(std::memory_order_relaxed);
+            outLevels[i * 2 + 1] = mSlots[i]->mPeakR.load(std::memory_order_relaxed);
+        }
     }
 
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream *audioStream, void *audioData, int32_t numFrames) override;

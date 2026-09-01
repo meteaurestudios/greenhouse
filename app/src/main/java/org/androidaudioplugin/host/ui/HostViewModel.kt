@@ -63,6 +63,11 @@ data class RackSlotData(
     val loadingPluginName: String? = null
 )
 
+data class SlotLevel(
+    val left: Float = 0f,
+    val right: Float = 0f
+)
+
 class HostViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         const val NUM_RACK_SLOTS = 3
@@ -70,6 +75,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         const val DEFAULT_BURST_SIZE = 128
         const val DEFAULT_BURST_MULTIPLIER = 4
         const val CPU_MONITOR_INTERVAL_MS = 100L
+        const val METER_MONITOR_INTERVAL_MS = 33L
+        const val CPU_UPDATE_TICKS = 3
         val AVAILABLE_BURST_MULTIPLIERS = listOf(2, 4, 8, 16, 32)
     }
 
@@ -93,6 +100,12 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
         for (i in 1 until NUM_RACK_SLOTS) {
             add(RackSlotData(i, "Slot ${i + 1}", "Effect"))
+        }
+    }
+
+    val slotLevels = mutableStateListOf<SlotLevel>().apply {
+        repeat(NUM_RACK_SLOTS) {
+            add(SlotLevel())
         }
     }
 
@@ -217,7 +230,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private var cpuMonitorJob: Job? = null
+    private var monitorJob: Job? = null
 
     init {
         val audioManager = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -227,27 +240,51 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback, numSlots = NUM_RACK_SLOTS)
 
         refreshPluginList()
-        startCpuMonitoring()
+        startMonitoring()
     }
 
-    private fun startCpuMonitoring() {
-        cpuMonitorJob?.cancel()
-        cpuMonitorJob = viewModelScope.launch(Dispatchers.Default) {
+    private fun startMonitoring() {
+        monitorJob?.cancel()
+        val rawLevels = FloatArray(NUM_RACK_SLOTS * 2)
+        var tickCount = 0
+
+        monitorJob = viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
                 val player = audioPlayer
 
                 if (player != null && isProcessing) {
-                    val total = player.totalCpuLoad
-                    val totalPercent = (total * 100f).coerceIn(0f, 100f)
+                    player.getAllSlotLevels(rawLevels)
+
+                    var updateCpu = false
+                    var totalPercent = 0f
+                    val slotLoads = if (tickCount % CPU_UPDATE_TICKS == 0) {
+                        updateCpu = true
+                        val total = player.totalCpuLoad
+                        totalPercent = (total * 100f).coerceIn(0f, 100f)
+                        FloatArray(NUM_RACK_SLOTS) { i ->
+                            (player.getSlotCpuLoad(i) * 100f).coerceIn(0f, 100f)
+                        }
+                    } else {
+                        null
+                    }
 
                     withContext(Dispatchers.Main) {
-                        totalCpuLoad = totalPercent
-
                         for (i in 0 until NUM_RACK_SLOTS) {
-                            val slotLoad = (player.getSlotCpuLoad(i) * 100f).coerceIn(0f, 100f)
+                            val l = rawLevels[i * 2]
+                            val r = rawLevels[i * 2 + 1]
 
-                            if (i < slotCpuLoads.size) {
-                                slotCpuLoads[i] = slotLoad
+                            if (i < slotLevels.size) {
+                                slotLevels[i] = SlotLevel(l, r)
+                            }
+                        }
+
+                        if (updateCpu && slotLoads != null) {
+                            totalCpuLoad = totalPercent
+
+                            for (i in 0 until NUM_RACK_SLOTS) {
+                                if (i < slotCpuLoads.size) {
+                                    slotCpuLoads[i] = slotLoads[i]
+                                }
                             }
                         }
                     }
@@ -260,10 +297,17 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                                 slotCpuLoads[i] = 0f
                             }
                         }
+
+                        for (i in 0 until slotLevels.size) {
+                            if (slotLevels[i].left != 0f || slotLevels[i].right != 0f) {
+                                slotLevels[i] = SlotLevel(0f, 0f)
+                            }
+                        }
                     }
                 }
 
-                delay(CPU_MONITOR_INTERVAL_MS)
+                tickCount++
+                delay(METER_MONITOR_INTERVAL_MS)
             }
         }
     }
@@ -490,6 +534,11 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         )
         slotParameterValues[slotIndex].clear()
         slotNativeUiZoomStates[slotIndex].reset()
+
+        if (slotIndex in 0 until slotLevels.size) {
+            slotLevels[slotIndex] = SlotLevel(0f, 0f)
+        }
+
         statusMessage = "Cleared ${slots[slotIndex].title}"
     }
 
@@ -505,6 +554,11 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         val newBypass = !slots[slotIndex].isBypassed
         slots[slotIndex] = slots[slotIndex].copy(isBypassed = newBypass)
         audioPlayer?.setSlotBypassed(slotIndex, newBypass)
+
+        if (newBypass && slotIndex in 0 until slotLevels.size) {
+            slotLevels[slotIndex] = SlotLevel(0f, 0f)
+        }
+
         statusMessage = "${slots[slotIndex].title} ${if (newBypass) "BYPASSED" else "ACTIVE"}"
     }
 
@@ -518,6 +572,11 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         if (isProcessing) {
             player.pause()
             isProcessing = false
+
+            for (i in 0 until slotLevels.size) {
+                slotLevels[i] = SlotLevel(0f, 0f)
+            }
+
             statusMessage = "Audio engine paused."
         } else {
             player.start()
