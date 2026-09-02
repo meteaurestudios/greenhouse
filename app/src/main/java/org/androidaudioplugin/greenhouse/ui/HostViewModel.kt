@@ -32,7 +32,7 @@ import java.util.Locale
 enum class StudioRackViewMode(val title: String) {
     PARAMETERS("Parameters"),
     NATIVE_SURFACE("Plugin UI"),
-    SPECS("Ports & Details")
+    PRESETS("Presets")
 }
 
 class SlotNativeUiZoomState {
@@ -51,6 +51,17 @@ class SlotNativeUiZoomState {
     }
 }
 
+val PluginInformation.hasCustomUi: Boolean
+    get() = !uiViewFactory.isNullOrBlank() ||
+            !uiWeb.isNullOrBlank() ||
+            !uiActivity.isNullOrBlank() ||
+            extensions.any { it.uri?.startsWith("urn://androidaudioplugin.org/extensions/gui") == true }
+
+data class PluginPreset(
+    val nativeIndex: Int,
+    val name: String
+)
+
 data class RackSlotData(
     val index: Int,
     val title: String,
@@ -58,10 +69,19 @@ data class RackSlotData(
     val pluginInfo: PluginInformation? = null,
     val instance: NativeRemotePluginInstance? = null,
     val isBypassed: Boolean = false,
-    val selectedPresetIndex: Int = 0,
+    val selectedPresetIndex: Int = -1,
+    val presetCount: Int = 0,
+    val presets: List<PluginPreset> = emptyList(),
+    val isLoadingPresets: Boolean = false,
     val isLoading: Boolean = false,
     val loadingPluginName: String? = null
-)
+) {
+    val presetNames: List<String>
+        get() = presets.map { it.name }
+
+    val hasCustomUi: Boolean
+        get() = pluginInfo?.hasCustomUi == true
+}
 
 data class SlotLevel(
     val left: Float = 0f,
@@ -318,6 +338,14 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     fun selectActiveSlot(slotIndex: Int) {
         if (slotIndex in 0 until NUM_RACK_SLOTS) {
             activeSlotIndex = slotIndex
+
+            val slot = slots[slotIndex]
+
+            if (currentViewMode == StudioRackViewMode.PRESETS && slot.presets.size <= 1) {
+                currentViewMode = StudioRackViewMode.PARAMETERS
+            } else if (currentViewMode == StudioRackViewMode.NATIVE_SURFACE && !slot.hasCustomUi) {
+                currentViewMode = StudioRackViewMode.PARAMETERS
+            }
         }
     }
 
@@ -434,7 +462,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             pluginInfo = null,
             instance = null,
             isBypassed = false,
-            selectedPresetIndex = 0,
+            selectedPresetIndex = -1,
+            presetCount = 0,
+            presets = emptyList(),
+            isLoadingPresets = false,
             isLoading = true,
             loadingPluginName = plugin.displayName
         )
@@ -443,23 +474,34 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                val (client, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
+                val (client, instance, rawPresetCount) = withContext(Dispatchers.IO) {
+                    val (c, inst) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
 
-                // Populate dynamic parameters and ports if missing from static aap_metadata.xml
-                if (plugin.parameters.isEmpty()) {
-                    val paramCount = instance.getParameterCount()
+                    // Populate dynamic parameters and ports if missing from static aap_metadata.xml
+                    if (plugin.parameters.isEmpty()) {
+                        val paramCount = inst.getParameterCount()
 
-                    for (i in 0 until paramCount) {
-                        plugin.parameters.add(instance.getParameter(i))
+                        for (i in 0 until paramCount) {
+                            plugin.parameters.add(inst.getParameter(i))
+                        }
                     }
-                }
 
-                if (plugin.ports.isEmpty()) {
-                    val portCount = instance.getPortCount()
+                    if (plugin.ports.isEmpty()) {
+                        val portCount = inst.getPortCount()
 
-                    for (i in 0 until portCount) {
-                        plugin.ports.add(instance.getPort(i))
+                        for (i in 0 until portCount) {
+                            plugin.ports.add(inst.getPort(i))
+                        }
                     }
+
+                    val presetCount = try {
+                        inst.getPresetCount()
+                    } catch (e: Throwable) {
+                        Log.w(tag, "Failed to query preset count", e)
+                        0
+                    }
+
+                    Triple(c, inst, presetCount)
                 }
 
                 slotParameterValues[slotIndex].clear()
@@ -471,7 +513,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                     pluginInfo = plugin,
                     instance = instance,
                     isBypassed = false,
-                    selectedPresetIndex = 0,
+                    selectedPresetIndex = -1,
+                    presetCount = rawPresetCount,
+                    presets = emptyList(),
+                    isLoadingPresets = rawPresetCount > 1,
                     isLoading = false,
                     loadingPluginName = null
                 )
@@ -486,11 +531,55 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
                 activeSlotIndex = slotIndex
 
+                if (currentViewMode == StudioRackViewMode.NATIVE_SURFACE && !plugin.hasCustomUi) {
+                    currentViewMode = StudioRackViewMode.PARAMETERS
+                } else if (currentViewMode == StudioRackViewMode.PRESETS && rawPresetCount <= 1) {
+                    currentViewMode = StudioRackViewMode.PARAMETERS
+                }
+
                 if (!isProcessing) {
                     toggleAudioPlayback()
                 }
 
                 statusMessage = "Loaded ${plugin.displayName} into ${slots[slotIndex].title} (${slots[slotIndex].slotType})"
+
+                // Asynchronously fetch preset names in the background without blocking plugin startup or audio
+                if (rawPresetCount > 1) {
+                    viewModelScope.launch {
+                        val loadedPresets = withContext(Dispatchers.IO) {
+                            val list = (0 until rawPresetCount).map { i ->
+                                val name = try {
+                                    val n = instance.getPresetName(i)
+
+                                    if (n.isNotBlank()) {
+                                        n
+                                    } else {
+                                        "Preset #${i + 1}"
+                                    }
+                                } catch (e: Throwable) {
+                                    "Preset #${i + 1}"
+                                }
+
+                                PluginPreset(nativeIndex = i, name = name)
+                            }
+
+                            list.sortedWith(
+                                compareBy<PluginPreset> { it.name.none { ch -> ch.isLetterOrDigit() } }
+                                    .thenBy(String.CASE_INSENSITIVE_ORDER) {
+                                        it.name.trimStart { ch -> !ch.isLetterOrDigit() }
+                                    }
+                                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                            )
+                        }
+
+                        if (slots[slotIndex].instance == instance) {
+                            slots[slotIndex] = slots[slotIndex].copy(
+                                presets = loadedPresets,
+                                isLoadingPresets = false
+                            )
+                        }
+                    }
+                }
             } catch (e: Throwable) {
                 Log.e(tag, "Failed to load plugin ${plugin.displayName}", e)
                 statusMessage = "Error loading plugin: ${e.localizedMessage ?: e.message}"
@@ -528,7 +617,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             pluginInfo = null,
             instance = null,
             isBypassed = false,
-            selectedPresetIndex = 0,
+            selectedPresetIndex = -1,
+            presetCount = 0,
+            presets = emptyList(),
+            isLoadingPresets = false,
             isLoading = false,
             loadingPluginName = null
         )
@@ -537,6 +629,14 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
         if (slotIndex in 0 until slotLevels.size) {
             slotLevels[slotIndex] = SlotLevel(0f, 0f)
+        }
+
+        val active = slots[activeSlotIndex]
+
+        if (currentViewMode == StudioRackViewMode.PRESETS && (slotIndex == activeSlotIndex || active.presetCount <= 1)) {
+            currentViewMode = StudioRackViewMode.PARAMETERS
+        } else if (currentViewMode == StudioRackViewMode.NATIVE_SURFACE && (slotIndex == activeSlotIndex || !active.hasCustomUi)) {
+            currentViewMode = StudioRackViewMode.PARAMETERS
         }
 
         statusMessage = "Cleared ${slots[slotIndex].title}"
@@ -614,14 +714,57 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer?.setParameterValue(slotIndex, parameter, value)
     }
 
-    fun setPreset(slotIndex: Int, index: Int) {
+    fun setPreset(slotIndex: Int, nativeIndex: Int) {
         if (slotIndex !in 0 until NUM_RACK_SLOTS) {
             return
         }
 
-        slots[slotIndex] = slots[slotIndex].copy(selectedPresetIndex = index)
-        audioPlayer?.setPresetIndex(slotIndex, index)
-        statusMessage = "${slots[slotIndex].title} Preset changed to #$index"
+        val slot = slots[slotIndex]
+
+        if (slot.presets.isEmpty()) {
+            return
+        }
+
+        val targetPreset = slot.presets.find { it.nativeIndex == nativeIndex } ?: slot.presets.first()
+        val targetNativeIndex = targetPreset.nativeIndex
+        val presetName = targetPreset.name
+
+        slots[slotIndex] = slot.copy(selectedPresetIndex = targetNativeIndex)
+        audioPlayer?.setPresetIndex(slotIndex, targetNativeIndex)
+
+        // Resync parameter values from plugin instance in background
+        val inst = slot.instance
+        val plugin = slot.pluginInfo
+
+        if (inst != null && plugin != null) {
+            viewModelScope.launch {
+                val updatedValues = withContext(Dispatchers.IO) {
+                    val values = mutableMapOf<Int, Double>()
+                    val paramCount = inst.getParameterCount()
+
+                    for (i in 0 until paramCount) {
+                        val param = if (i < plugin.parameters.size) {
+                            plugin.parameters[i]
+                        } else {
+                            null
+                        }
+
+                        if (param != null) {
+                            val currentVal = inst.getParameterValue(i)
+                            values[param.id] = currentVal
+                        }
+                    }
+
+                    values
+                }
+
+                updatedValues.forEach { (paramId, value) ->
+                    slotParameterValues[slotIndex][paramId] = value
+                }
+            }
+        }
+
+        statusMessage = "${slot.title} Preset: $presetName"
     }
 
     override fun onCleared() {

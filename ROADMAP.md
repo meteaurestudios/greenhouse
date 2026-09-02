@@ -49,10 +49,9 @@ This document outlines the architectural milestones, remaining tasks, and future
 
 ---
 
-## 4. 🛠️ Stability, Quality Assurance & Distribution
+## 4. 🛠️ Stability & Quality Assurance
 
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
 | **IPC Crash Monitor & Recovery** | `High` | Automatically detect if a remote AAP plugin service process crashes, displaying an alert with a "Re-instantiate" action instead of hanging the host UI. |
 | **Automated UI & Integration Tests** | `Medium` | Compose UI tests and native audio pipeline integration tests validating catalog loading, parameter state changes, and audio rendering. |
-| **App Logo & Vector Icon Assets** | `Medium` | Design custom vector icon, adaptive app icon launcher assets, and splash screen graphics for Greenhouse. |

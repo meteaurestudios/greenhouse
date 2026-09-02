@@ -285,10 +285,58 @@ fun EngineSettingsScreen(
                     InfoRow(label = "Active Slot Focus", value = "${activeSlot.title} (${activeSlot.slotType})")
                     InfoRow(label = "Loaded Plugin", value = activePlugin.displayName)
                     InfoRow(label = "Developer", value = activePlugin.developer ?: "Unknown")
+                    InfoRow(label = "Category", value = activePlugin.category ?: "Unspecified")
                     InfoRow(label = "Plugin ID", value = activePlugin.pluginId ?: "N/A")
                     InfoRow(label = "Package Name", value = activePlugin.packageName)
                     InfoRow(label = "Parameters Count", value = "${activePlugin.parameters.size}")
-                    InfoRow(label = "Ports Count", value = "${activePlugin.ports.size}")
+                    InfoRow(label = "Factory Presets", value = "${activeSlot.presets.size}")
+
+                    if (activePlugin.ports.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        HorizontalDivider(color = StudioPanelBorder)
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "AUDIO & MIDI PORTS (${activePlugin.ports.size})",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NeonCyan,
+                            letterSpacing = 0.5.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        activePlugin.ports.forEach { port ->
+                            val directionStr = if (port.direction == 0) "IN" else "OUT"
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = port.name,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextPrimary,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Text(
+                                    text = "$directionStr • ${port.content}",
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    }
                 } else {
                     Text(
                         text = "No plugin currently loaded in ${activeSlot.title} (${activeSlot.slotType}).",

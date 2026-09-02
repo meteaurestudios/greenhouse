@@ -5,6 +5,8 @@ import android.content.pm.ActivityInfo
 import android.os.Build
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
@@ -112,18 +115,17 @@ fun StudioRackScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // View Mode Selector & Preset Bar for Active Slot
+            // View Mode Selector Bar for Active Slot
             StatusAndModeSelectorBar(
                 activeSlot = activeSlot,
                 currentMode = viewModel.currentViewMode,
-                onModeSelected = { viewModel.updateViewMode(it) },
-                onPresetSelected = { viewModel.setPreset(activeSlot.index, it) }
+                onModeSelected = { viewModel.updateViewMode(it) }
             )
 
             Spacer(modifier = Modifier.height(10.dp))
         }
 
-        // Dynamic Main Panel (Parameter Controls / Native Embedded GUI / Ports Spec)
+        // Dynamic Main Panel (Parameter Controls / Native Embedded GUI / Presets / Ports Spec)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -170,8 +172,13 @@ fun StudioRackScreen(
                                 onToggleFoldRack = { isRackFolded = !isRackFolded }
                             )
                         }
-                        StudioRackViewMode.SPECS -> {
-                            PluginPortsAndSpecsView(plugin = activePlugin)
+                        StudioRackViewMode.PRESETS -> {
+                            PluginPresetsView(
+                                slot = activeSlot,
+                                onPresetSelected = { idx ->
+                                    viewModel.setPreset(activeSlot.index, idx)
+                                }
+                            )
                         }
                     }
                 }
@@ -281,30 +288,29 @@ private fun MasterControlBanner(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Status Dot, Title & Settings Info
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(if (isProcessing) SignalGreen else DangerRed)
+                // Left: Title
+                Text(
+                    text = "Greenhouse",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    letterSpacing = 0.3.sp
+                )
+
+                // Right: DSP CPU Meter & Settings Button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DspCpuMeter(
+                        cpuPercent = totalCpuLoad,
+                        isProcessing = isProcessing,
+                        onToggleProcessing = onToggleProcessing
                     )
 
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    Text(
-                        text = "AAP SIGNAL CHAIN",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        letterSpacing = 0.5.sp
-                    )
-
-                    Spacer(modifier = Modifier.width(2.dp))
-
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(24.dp)
                             .clip(CircleShape)
                             .clickable { onOpenSettings() },
                         contentAlignment = Alignment.Center
@@ -313,17 +319,10 @@ private fun MasterControlBanner(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Audio Engine Settings & Diagnostics",
                             tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
-
-                // Right: Interactive Real-Time DSP CPU Meter (click to activate / deactivate engine)
-                DspCpuMeter(
-                    cpuPercent = totalCpuLoad,
-                    isProcessing = isProcessing,
-                    onToggleProcessing = onToggleProcessing
-                )
             }
         }
     }
@@ -577,20 +576,38 @@ private fun SignalRackHeader(
 private fun StatusAndModeSelectorBar(
     activeSlot: RackSlotData,
     currentMode: StudioRackViewMode,
-    onModeSelected: (StudioRackViewMode) -> Unit,
-    onPresetSelected: (Int) -> Unit
+    onModeSelected: (StudioRackViewMode) -> Unit
 ) {
+    val modes = remember(activeSlot.pluginInfo, activeSlot.hasCustomUi, activeSlot.presetCount) {
+        val list = mutableListOf(StudioRackViewMode.PARAMETERS)
+
+        if (activeSlot.hasCustomUi) {
+            list.add(StudioRackViewMode.NATIVE_SURFACE)
+        }
+
+        if (activeSlot.presetCount > 1) {
+            list.add(StudioRackViewMode.PRESETS)
+        }
+
+        list
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.fillMaxWidth()
         ) {
-            items(StudioRackViewMode.values()) { mode ->
+            items(modes) { mode ->
                 val isSelected = currentMode == mode
+                val badgeText = if (mode == StudioRackViewMode.PRESETS && activeSlot.presetCount > 1) {
+                    " (${activeSlot.presetCount})"
+                } else {
+                    ""
+                }
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
@@ -601,10 +618,10 @@ private fun StatusAndModeSelectorBar(
                             shape = RoundedCornerShape(12.dp)
                         )
                         .clickable { onModeSelected(mode) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = mode.title,
+                        text = "${mode.title}$badgeText",
                         fontSize = 11.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) TextPrimary else TextSecondary
@@ -612,34 +629,102 @@ private fun StatusAndModeSelectorBar(
                 }
             }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.width(10.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(StudioSurface)
-                .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp))
-                .padding(horizontal = 10.dp, vertical = 4.dp)
+@Composable
+private fun PluginPresetsView(
+    slot: RackSlotData,
+    onPresetSelected: (Int) -> Unit
+) {
+    if (slot.isLoadingPresets) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Text("Preset #${activeSlot.selectedPresetIndex}", fontSize = 11.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
-            Spacer(modifier = Modifier.width(6.dp))
-            IconButton(
-                onClick = {
-                    if (activeSlot.selectedPresetIndex > 0) {
-                        onPresetSelected(activeSlot.selectedPresetIndex - 1)
-                    }
-                },
-                modifier = Modifier.size(24.dp)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
             ) {
-                Icon(Icons.Default.Remove, contentDescription = "Prev Preset", tint = AccentGold, modifier = Modifier.size(16.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = AccentGold,
+                    strokeWidth = 2.dp
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Loading presets...",
+                    fontSize = 11.sp,
+                    color = TextMuted
+                )
             }
-            IconButton(
-                onClick = { onPresetSelected(activeSlot.selectedPresetIndex + 1) },
-                modifier = Modifier.size(24.dp)
+        }
+
+        return
+    }
+
+    val presets = slot.presets
+
+    if (presets.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "This plugin exposes no factory presets.",
+                color = TextSecondary,
+                fontSize = 14.sp
+            )
+        }
+
+        return
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 160.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        items(presets.size, key = { idx -> "${slot.index}_${slot.pluginInfo?.pluginId ?: ""}_preset_${presets[idx].nativeIndex}" }) { idx ->
+            val preset = presets[idx]
+            val isPresetSelected = slot.selectedPresetIndex >= 0 && preset.nativeIndex == slot.selectedPresetIndex
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (isPresetSelected) Color(0xFF2E3444) else StudioSurface)
+                    .border(
+                        width = 1.dp,
+                        color = if (isPresetSelected) AccentGold.copy(alpha = 0.8f) else StudioPanelBorder,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .clickable {
+                        onPresetSelected(preset.nativeIndex)
+                    }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Next Preset", tint = AccentGold, modifier = Modifier.size(16.dp))
+                Text(
+                    text = "${idx + 1}.",
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = if (isPresetSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isPresetSelected) AccentGold else TextMuted
+                )
+
+                Text(
+                    text = preset.name,
+                    fontSize = 12.sp,
+                    fontWeight = if (isPresetSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (isPresetSelected) TextPrimary else TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -869,6 +954,44 @@ private fun NativeSurfaceInteractionToggle(
     }
 }
 
+private const val DEFAULT_NATIVE_UI_WIDTH = 800
+private const val DEFAULT_NATIVE_UI_HEIGHT = 600
+private const val NATIVE_UI_MIN_DIMENSION_PX = 100f
+private const val NATIVE_UI_STABILIZATION_DELAY_MS = 180L
+private const val NATIVE_UI_FADE_ANIMATION_MS = 350
+private const val NATIVE_UI_ZOOM_STEP = 0.15f
+private const val NATIVE_UI_ZOOM_ROUNDING_SCALE = 20.0
+private const val NATIVE_UI_MIN_SCALE = 0.05f
+private const val NATIVE_UI_MAX_SCALE = 3.0f
+private const val NATIVE_UI_FIT_SNAP_THRESHOLD = 0.02f
+
+@Composable
+private fun NativeUiLoadingView(
+    slot: RackSlotData,
+    modifier: Modifier = Modifier
+) {
+    val themeColor = if (slot.index == 0) {
+        AccentViolet
+    } else {
+        AccentCyan
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(16.dp))
+            .background(StudioBackground)
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(36.dp),
+            color = themeColor,
+            strokeWidth = 3.dp
+        )
+    }
+}
+
 @Composable
 private fun NativePluginSurfaceViewer(
     host: GuiHelper.NativeEmbeddedSurfaceControlHost,
@@ -894,14 +1017,15 @@ private fun NativePluginSurfaceViewer(
         val containerWidthPx = with(density) { maxWidth.toPx() }
         val containerHeightPx = with(density) { maxHeight.toPx() }
 
-        val nativeWidthPx = preferredSize.width.toFloat().coerceAtLeast(100f)
-        val nativeHeightPx = preferredSize.height.toFloat().coerceAtLeast(100f)
+        val nativeWidthPx = preferredSize.width.toFloat().coerceAtLeast(NATIVE_UI_MIN_DIMENSION_PX)
+        val nativeHeightPx = preferredSize.height.toFloat().coerceAtLeast(NATIVE_UI_MIN_DIMENSION_PX)
 
-        val fitScale = minOf(containerWidthPx / nativeWidthPx, containerHeightPx / nativeHeightPx, 1.0f).coerceAtLeast(0.05f)
+        val fitScale = minOf(containerWidthPx / nativeWidthPx, containerHeightPx / nativeHeightPx, 1.0f).coerceAtLeast(NATIVE_UI_MIN_SCALE)
+
         val effectiveScale = if (isFitMode) {
             fitScale
         } else {
-            currentScale.coerceAtLeast(0.05f)
+            currentScale.coerceAtLeast(NATIVE_UI_MIN_SCALE)
         }
 
         LaunchedEffect(fitScale) {
@@ -921,6 +1045,7 @@ private fun NativePluginSurfaceViewer(
         } else {
             containerWidthPx - scaledContentWidth
         }
+
         val maxTransX = if (scaledContentWidth <= containerWidthPx) {
             (containerWidthPx - scaledContentWidth) / 2f
         } else {
@@ -932,6 +1057,7 @@ private fun NativePluginSurfaceViewer(
         } else {
             containerHeightPx - scaledContentHeight
         }
+
         val maxTransY = if (scaledContentHeight <= containerHeightPx) {
             (containerHeightPx - scaledContentHeight) / 2f
         } else {
@@ -1055,28 +1181,47 @@ private fun NativePluginSurfaceContainer(
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM && instance != null) {
         var surfaceHost by remember { mutableStateOf<GuiHelper.NativeEmbeddedSurfaceControlHost?>(null) }
-        var preferredSize by remember { mutableStateOf(GuiHelper.Size(800, 600)) }
+        var preferredSize by remember { mutableStateOf(GuiHelper.Size(DEFAULT_NATIVE_UI_WIDTH, DEFAULT_NATIVE_UI_HEIGHT)) }
+        var isUiLoading by remember { mutableStateOf(true) }
 
         val zoomState = viewModel.slotNativeUiZoomStates[slot.index]
         var calculatedFitScale by remember { mutableFloatStateOf(1.0f) }
         var displayedScale by remember { mutableFloatStateOf(1.0f) }
 
         DisposableEffect(instance.instanceId) {
+            isUiLoading = true
+
             val host = GuiHelper.NativeEmbeddedSurfaceControlHost(
                 context = context,
                 pluginPackageName = plugin.packageName,
                 pluginId = plugin.pluginId ?: "",
                 instanceId = instance.instanceId
             )
+
+            host.contentSizeChangedListeners.add { newWidth, newHeight ->
+                if (newWidth > 0 && newHeight > 0) {
+                    preferredSize = GuiHelper.Size(newWidth, newHeight)
+                }
+            }
+
             surfaceHost = host
 
             coroutineScope.launch {
                 try {
-                    val size = host.getPreferredSizeOrFallback(800, 600)
+                    val size = host.getPreferredSizeOrFallback(
+                        DEFAULT_NATIVE_UI_WIDTH,
+                        DEFAULT_NATIVE_UI_HEIGHT
+                    )
+
                     preferredSize = size
                     host.connect(size.width, size.height)
                     host.show()
+
+                    delay(NATIVE_UI_STABILIZATION_DELAY_MS)
+
+                    isUiLoading = false
                 } catch (e: Throwable) {
+                    isUiLoading = false
                     viewModel.updateViewMode(StudioRackViewMode.PARAMETERS)
                 }
             }
@@ -1115,7 +1260,8 @@ private fun NativePluginSurfaceContainer(
                                 } else {
                                     zoomState.currentScale
                                 }
-                                val target = (Math.round((base + 0.15f) * 20.0) / 20.0).toFloat().coerceIn(0.05f, 3.0f)
+
+                                val target = (Math.round((base + NATIVE_UI_ZOOM_STEP) * NATIVE_UI_ZOOM_ROUNDING_SCALE) / NATIVE_UI_ZOOM_ROUNDING_SCALE).toFloat().coerceIn(NATIVE_UI_MIN_SCALE, NATIVE_UI_MAX_SCALE)
 
                                 zoomState.isFitMode = false
                                 zoomState.currentScale = target
@@ -1126,9 +1272,10 @@ private fun NativePluginSurfaceContainer(
                                 } else {
                                     zoomState.currentScale
                                 }
-                                val target = (Math.round((base - 0.15f) * 20.0) / 20.0).toFloat()
 
-                                if (target <= calculatedFitScale + 0.02f) {
+                                val target = (Math.round((base - NATIVE_UI_ZOOM_STEP) * NATIVE_UI_ZOOM_ROUNDING_SCALE) / NATIVE_UI_ZOOM_ROUNDING_SCALE).toFloat()
+
+                                if (target <= calculatedFitScale + NATIVE_UI_FIT_SNAP_THRESHOLD) {
                                     zoomState.isFitMode = true
                                     zoomState.isMoveMode = false
                                     zoomState.panOffsetX = 0f
@@ -1169,25 +1316,45 @@ private fun NativePluginSurfaceContainer(
                     }
                 }
 
-                // Sizable Centered Native Surface View
-                NativePluginSurfaceViewer(
-                    host = host,
-                    preferredSize = preferredSize,
-                    isFitMode = zoomState.isFitMode,
-                    isMoveMode = zoomState.isMoveMode,
-                    currentScale = zoomState.currentScale,
-                    panOffsetX = zoomState.panOffsetX,
-                    panOffsetY = zoomState.panOffsetY,
-                    onFitScaleCalculated = { calculatedFitScale = it },
-                    onEffectiveScaleCalculated = { displayedScale = it },
-                    onPanDelta = { dx, dy ->
-                        zoomState.panOffsetX += dx
-                        zoomState.panOffsetY += dy
-                    },
+                // Sizable Centered Native Surface View + Smooth Loading Overlay
+                Box(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth()
-                )
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    NativePluginSurfaceViewer(
+                        host = host,
+                        preferredSize = preferredSize,
+                        isFitMode = zoomState.isFitMode,
+                        isMoveMode = zoomState.isMoveMode,
+                        currentScale = zoomState.currentScale,
+                        panOffsetX = zoomState.panOffsetX,
+                        panOffsetY = zoomState.panOffsetY,
+                        onFitScaleCalculated = { calculatedFitScale = it },
+                        onEffectiveScaleCalculated = { displayedScale = it },
+                        onPanDelta = { dx, dy ->
+                            zoomState.panOffsetX += dx
+                            zoomState.panOffsetY += dy
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    val loadingAlpha by animateFloatAsState(
+                        targetValue = if (isUiLoading) 1.0f else 0.0f,
+                        animationSpec = tween(durationMillis = NATIVE_UI_FADE_ANIMATION_MS),
+                        label = "NativeUiLoadingAlpha"
+                    )
+
+                    if (loadingAlpha > 0.0f) {
+                        NativeUiLoadingView(
+                            slot = slot,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = loadingAlpha }
+                        )
+                    }
+                }
             }
         }
     } else {
@@ -1216,51 +1383,6 @@ private fun NativePluginSurfaceContainer(
     }
 }
 
-@Composable
-private fun PluginPortsAndSpecsView(plugin: PluginInformation) {
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        item {
-            Text("PLUGIN SPECIFICATIONS", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text("ID: ${plugin.pluginId ?: "N/A"}", fontSize = 12.sp, color = TextPrimary)
-            Text("Package: ${plugin.packageName}", fontSize = 12.sp, color = TextSecondary)
-            Text("Category: ${plugin.category ?: "Unspecified"}", fontSize = 12.sp, color = TextSecondary)
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = StudioPanelBorder)
-
-            Text("AUDIO & MIDI PORTS (${plugin.ports.size})", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = SignalGreen)
-        }
-
-        items(plugin.ports) { port ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp)),
-                colors = CardDefaults.cardColors(containerColor = StudioSurfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(port.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    Text(
-                        text = "Dir: ${if (port.direction == 0) "IN" else "OUT"} | Type: ${port.content}",
-                        fontSize = 11.sp,
-                        color = TextSecondary
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun ParameterCard(
