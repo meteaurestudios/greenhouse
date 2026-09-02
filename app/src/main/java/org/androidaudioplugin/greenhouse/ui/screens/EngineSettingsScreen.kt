@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
@@ -33,6 +34,10 @@ fun EngineSettingsScreen(
     viewModel: HostViewModel,
     onNavigateBack: () -> Unit
 ) {
+    BackHandler {
+        onNavigateBack()
+    }
+
     val scrollState = rememberScrollState()
 
     Column(

@@ -32,6 +32,7 @@ import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.data.PluginCategory
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.theme.*
+import androidx.activity.compose.BackHandler
 import java.util.Locale
 
 @Composable
@@ -39,6 +40,10 @@ fun PluginBrowserScreen(
     viewModel: HostViewModel,
     onNavigateToRack: () -> Unit
 ) {
+    BackHandler {
+        onNavigateToRack()
+    }
+
     val targetSlot = viewModel.slots[viewModel.targetBrowserSlotIndex.coerceIn(0, viewModel.slots.lastIndex)]
 
     Column(
@@ -286,7 +291,7 @@ private fun PluginCard(
                     Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
-                        text = "${plugin.developer ?: "Unknown Vendor"} • ${plugin.parameters.size} params • ${plugin.ports.size} ports",
+                        text = "${plugin.developer ?: "Unknown Vendor"} • ${plugin.ports.size} ports",
                         fontSize = 11.sp,
                         color = TextSecondary,
                         maxLines = 1,

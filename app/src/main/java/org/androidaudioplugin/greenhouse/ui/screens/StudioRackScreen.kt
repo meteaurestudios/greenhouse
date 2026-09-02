@@ -1528,7 +1528,7 @@ private fun NoPluginInSlotView(
     }
 
     val iconVector = if (slot.index == 0) {
-        Icons.Default.Piano
+        Icons.Default.MusicNote
     } else {
         Icons.Default.GraphicEq
     }

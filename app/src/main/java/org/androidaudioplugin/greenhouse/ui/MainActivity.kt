@@ -23,11 +23,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import org.androidaudioplugin.greenhouse.ui.screens.EngineSettingsScreen
 import org.androidaudioplugin.greenhouse.ui.screens.PluginBrowserScreen
@@ -50,6 +50,32 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private const val ROUTE_RACK = "rack"
+private const val ROUTE_BROWSER = "browser"
+private const val ROUTE_SETTINGS = "settings"
+
+private fun NavController.safeNavigate(route: String) {
+    val currentLifecycle = currentBackStackEntry?.lifecycle?.currentState
+
+    if (currentLifecycle == Lifecycle.State.RESUMED) {
+        navigate(route) {
+            launchSingleTop = true
+        }
+    }
+}
+
+private fun NavController.safePopBackToRack() {
+    if (previousBackStackEntry == null) {
+        return
+    }
+
+    val popped = popBackStack(ROUTE_RACK, inclusive = false)
+
+    if (!popped && currentDestination?.route != ROUTE_RACK) {
+        popBackStack()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainHostApp(
@@ -67,27 +93,27 @@ fun MainHostApp(
         ) {
             NavHost(
                 navController = navController,
-                startDestination = "rack"
+                startDestination = ROUTE_RACK
             ) {
-                composable("rack") {
+                composable(ROUTE_RACK) {
                     StudioRackScreen(
                         viewModel = viewModel,
-                        onNavigateToBrowser = { navController.navigate("browser") },
-                        onNavigateToSettings = { navController.navigate("settings") }
+                        onNavigateToBrowser = { navController.safeNavigate(ROUTE_BROWSER) },
+                        onNavigateToSettings = { navController.safeNavigate(ROUTE_SETTINGS) }
                     )
                 }
 
-                composable("browser") {
+                composable(ROUTE_BROWSER) {
                     PluginBrowserScreen(
                         viewModel = viewModel,
-                        onNavigateToRack = { navController.popBackStack() }
+                        onNavigateToRack = { navController.safePopBackToRack() }
                     )
                 }
 
-                composable("settings") {
+                composable(ROUTE_SETTINGS) {
                     EngineSettingsScreen(
                         viewModel = viewModel,
-                        onNavigateBack = { navController.popBackStack() }
+                        onNavigateBack = { navController.safePopBackToRack() }
                     )
                 }
             }
