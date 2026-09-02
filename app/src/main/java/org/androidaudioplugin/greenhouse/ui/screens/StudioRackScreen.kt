@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -158,6 +159,7 @@ fun StudioRackScreen(
                                 pluginId = activePlugin.pluginId ?: "",
                                 parameters = activePlugin.parameters,
                                 parameterValues = viewModel.slotParameterValues[activeSlot.index],
+                                gridState = viewModel.slotParameterGridStates[activeSlot.index],
                                 onValueChange = { param, valDouble ->
                                     viewModel.setParameterValue(activeSlot.index, param, valDouble)
                                 }
@@ -175,6 +177,7 @@ fun StudioRackScreen(
                         StudioRackViewMode.PRESETS -> {
                             PluginPresetsView(
                                 slot = activeSlot,
+                                gridState = viewModel.slotPresetGridStates[activeSlot.index],
                                 onPresetSelected = { idx ->
                                     viewModel.setPreset(activeSlot.index, idx)
                                 }
@@ -432,6 +435,7 @@ private fun SignalRackHeader(
                             // Slot Type Capsule Label Box
                             Box(
                                 modifier = Modifier
+                                    .weight(1f, fill = false)
                                     .border(1.dp, badgeColor.copy(alpha = 0.7f), CircleShape)
                                     .clip(CircleShape)
                                     .background(badgeColor.copy(alpha = 0.15f))
@@ -442,7 +446,9 @@ private fun SignalRackHeader(
                                     text = slot.slotType.lowercase(Locale.US),
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = badgeColor
+                                    color = badgeColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -635,6 +641,7 @@ private fun StatusAndModeSelectorBar(
 @Composable
 private fun PluginPresetsView(
     slot: RackSlotData,
+    gridState: LazyGridState,
     onPresetSelected: (Int) -> Unit
 ) {
     if (slot.isLoadingPresets) {
@@ -683,7 +690,8 @@ private fun PluginPresetsView(
     }
 
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 160.dp),
+        columns = GridCells.Adaptive(minSize = 130.dp),
+        state = gridState,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxSize()
@@ -705,9 +713,9 @@ private fun PluginPresetsView(
                     .clickable {
                         onPresetSelected(preset.nativeIndex)
                     }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = "${idx + 1}.",
@@ -719,7 +727,7 @@ private fun PluginPresetsView(
 
                 Text(
                     text = preset.name,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = if (isPresetSelected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (isPresetSelected) TextPrimary else TextSecondary,
                     maxLines = 1,
@@ -736,6 +744,7 @@ private fun ParameterControlRack(
     pluginId: String,
     parameters: List<ParameterInformation>,
     parameterValues: Map<Int, Double>,
+    gridState: LazyGridState,
     onValueChange: (ParameterInformation, Double) -> Unit
 ) {
     if (parameters.isEmpty()) {
@@ -751,9 +760,10 @@ private fun ParameterControlRack(
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 160.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            columns = GridCells.Adaptive(minSize = 130.dp),
+            state = gridState,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
             items(parameters, key = { param -> "${slotIndex}_${pluginId}_${param.id}" }) { param ->
@@ -1411,7 +1421,7 @@ private fun ParameterCard(
             ) {
                 Text(
                     text = parameter.name,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary,
                     maxLines = 1,
@@ -1419,9 +1429,11 @@ private fun ParameterCard(
                     modifier = Modifier.weight(1f)
                 )
 
+                Spacer(modifier = Modifier.width(4.dp))
+
                 Text(
                     text = String.format(Locale.US, "%.2f", value),
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = NeonCyan
                 )
@@ -1658,58 +1670,73 @@ private fun NoPluginInSlotView(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .clip(RoundedCornerShape(14.dp))
             .background(StudioBackground),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(24.dp)
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(slotColor.copy(alpha = 0.12f))
-                    .border(1.dp, slotColor.copy(alpha = 0.35f), RoundedCornerShape(20.dp)),
+                    .border(1.dp, slotColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = iconVector,
                     contentDescription = null,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(24.dp),
                     tint = slotColor
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "${slot.title} is Empty",
-                fontSize = 18.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             Text(
                 text = "Select an ${slot.slotType.lowercase(Locale.US)} plugin to insert into this slot.",
-                fontSize = 13.sp,
-                color = TextSecondary
+                fontSize = 11.sp,
+                color = TextSecondary,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Button(
                 onClick = onOpenBrowser,
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = StudioBackground),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
             ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
                 Text(
-                    text = "BROWSE",
+                    text = "BROWSE PLUGINS",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     letterSpacing = 0.5.sp
                 )
             }
@@ -1731,24 +1758,28 @@ private fun PluginLoadingView(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .clip(RoundedCornerShape(14.dp))
             .background(StudioBackground),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(24.dp)
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
             CircularProgressIndicator(
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(28.dp),
                 color = themeColor,
-                strokeWidth = 3.dp
+                strokeWidth = 2.5.dp
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = "Loading ${pluginName ?: "Plugin"}...",
-                fontSize = 15.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary,
                 textAlign = TextAlign.Center,
@@ -1756,12 +1787,15 @@ private fun PluginLoadingView(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             Text(
                 text = "Please wait while initializing ${slot.title} (${slot.slotType.lowercase(Locale.US)})...",
-                fontSize = 12.sp,
-                color = TextSecondary
+                fontSize = 11.sp,
+                color = TextSecondary,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
