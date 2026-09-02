@@ -1,4 +1,4 @@
-package org.androidaudioplugin.host.ui.components
+package org.androidaudioplugin.greenhouse.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
-import org.androidaudioplugin.host.ui.theme.*
+import org.androidaudioplugin.greenhouse.ui.theme.*
 import kotlin.math.log10
 import kotlin.math.max
 

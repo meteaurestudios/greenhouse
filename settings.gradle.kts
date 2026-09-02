@@ -17,7 +17,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "aap-test-host"
+rootProject.name = "greenhouse"
 
 include(":app")
 

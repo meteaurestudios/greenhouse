@@ -1,4 +1,4 @@
-package org.androidaudioplugin.host.ui
+package org.androidaudioplugin.greenhouse.ui
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -29,16 +29,16 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import org.androidaudioplugin.host.ui.screens.EngineSettingsScreen
-import org.androidaudioplugin.host.ui.screens.PluginBrowserScreen
-import org.androidaudioplugin.host.ui.screens.StudioRackScreen
-import org.androidaudioplugin.host.ui.theme.*
+import org.androidaudioplugin.greenhouse.ui.screens.EngineSettingsScreen
+import org.androidaudioplugin.greenhouse.ui.screens.PluginBrowserScreen
+import org.androidaudioplugin.greenhouse.ui.screens.StudioRackScreen
+import org.androidaudioplugin.greenhouse.ui.theme.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            AapHostTheme {
+            GreenhouseTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

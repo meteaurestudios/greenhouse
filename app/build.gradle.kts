@@ -28,7 +28,7 @@ val releaseKeyAlias = signingProp("release.key.alias", "RELEASE_KEY_ALIAS")
 val releaseKeyPassword = signingProp("release.key.password", "RELEASE_KEY_PASSWORD")
 
 android {
-    namespace = "org.androidaudioplugin.host"
+    namespace = "org.androidaudioplugin.greenhouse"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     buildToolsVersion = libs.versions.build.tools.get()
     ndkVersion = libs.versions.ndk.get()
@@ -39,7 +39,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.androidaudioplugin.host"
+        applicationId = "org.androidaudioplugin.greenhouse"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

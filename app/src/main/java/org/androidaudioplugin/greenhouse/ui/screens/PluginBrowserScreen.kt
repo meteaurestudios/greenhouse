@@ -1,4 +1,4 @@
-package org.androidaudioplugin.host.ui.screens
+package org.androidaudioplugin.greenhouse.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -28,12 +29,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.PluginInformation
-import org.androidaudioplugin.host.data.PluginCategory
+import org.androidaudioplugin.greenhouse.data.PluginCategory
+import org.androidaudioplugin.greenhouse.ui.HostViewModel
+import org.androidaudioplugin.greenhouse.ui.theme.*
 import java.util.Locale
-import org.androidaudioplugin.host.ui.HostViewModel
-import org.androidaudioplugin.host.ui.theme.*
-
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 @Composable
 fun PluginBrowserScreen(

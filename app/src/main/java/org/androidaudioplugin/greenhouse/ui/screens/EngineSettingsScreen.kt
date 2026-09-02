@@ -1,4 +1,4 @@
-package org.androidaudioplugin.host.ui.screens
+package org.androidaudioplugin.greenhouse.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,8 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.androidaudioplugin.host.ui.HostViewModel
-import org.androidaudioplugin.host.ui.theme.*
+import org.androidaudioplugin.greenhouse.ui.HostViewModel
+import org.androidaudioplugin.greenhouse.ui.theme.*
 import java.util.Locale
 
 @Composable

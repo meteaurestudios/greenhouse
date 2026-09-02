@@ -1,4 +1,4 @@
-# AAP Test Host Proguard & R8 Rules
+# Greenhouse Proguard & R8 Rules
 
 # Preserve all native methods across the host application
 -keepclasseswithmembernames class * {
@@ -6,8 +6,8 @@
 }
 
 # Preserve AapAudioPlayer and its companion object for JNI interop
--keep class org.androidaudioplugin.host.core.AapAudioPlayer { *; }
--keep class org.androidaudioplugin.host.core.AapAudioPlayer$* { *; }
+-keep class org.androidaudioplugin.greenhouse.core.AapAudioPlayer { *; }
+-keep class org.androidaudioplugin.greenhouse.core.AapAudioPlayer$* { *; }
 
 # Preserve AAP Core Hosting and IPC structures
 -keep class org.androidaudioplugin.** { *; }

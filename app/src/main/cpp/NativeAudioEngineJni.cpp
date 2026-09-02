@@ -4,7 +4,7 @@
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeCreate(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeCreate(
         JNIEnv *env, jclass clazz, jint sampleRate, jint framesPerCallback, jint channelCount, jint numSlots)
 {
     auto engine = new aaphost::NativeAudioEngine(sampleRate, framesPerCallback, channelCount, numSlots);
@@ -12,7 +12,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeCreate(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeDestroy(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeDestroy(
         JNIEnv *env, jclass clazz, jlong engineHandle)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -23,7 +23,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeDestroy(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeStart(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeStart(
         JNIEnv *env, jclass clazz, jlong engineHandle)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -36,7 +36,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeStart(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativePause(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativePause(
         JNIEnv *env, jclass clazz, jlong engineHandle)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -47,7 +47,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativePause(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetFramesPerCallback(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeSetFramesPerCallback(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint framesPerCallback)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -58,7 +58,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetFramesPerCallback(
 }
 
 JNIEXPORT jint JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetBurstFrames(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeGetBurstFrames(
         JNIEnv *env, jclass clazz, jlong engineHandle)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -71,7 +71,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetBurstFrames(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetSlotPlugin(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeSetSlotPlugin(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex, jlong nativeClient, jint instanceId)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -83,7 +83,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetSlotPlugin(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetSlotBypassed(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeSetSlotBypassed(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex, jboolean bypassed)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -94,7 +94,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSetSlotBypassed(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSendUmp(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeSendUmp(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex, jbyteArray data, jint length)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -110,7 +110,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeSendUmp(
 }
 
 JNIEXPORT jfloat JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetCpuLoad(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeGetCpuLoad(
         JNIEnv *env, jclass clazz, jlong engineHandle)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -123,7 +123,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetCpuLoad(
 }
 
 JNIEXPORT jfloat JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetSlotCpuLoad(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeGetSlotCpuLoad(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -136,7 +136,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetSlotCpuLoad(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetSlotLevels(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeGetSlotLevels(
         JNIEnv *env, jclass clazz, jlong engineHandle, jint slotIndex, jfloatArray outLevels)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);
@@ -153,7 +153,7 @@ Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetSlotLevels(
 }
 
 JNIEXPORT void JNICALL
-Java_org_androidaudioplugin_host_core_AapAudioPlayer_nativeGetAllSlotLevels(
+Java_org_androidaudioplugin_greenhouse_core_AapAudioPlayer_nativeGetAllSlotLevels(
         JNIEnv *env, jclass clazz, jlong engineHandle, jfloatArray outLevels)
 {
     auto engine = reinterpret_cast<aaphost::NativeAudioEngine*>(engineHandle);

@@ -1,4 +1,4 @@
-package org.androidaudioplugin.host.ui
+package org.androidaudioplugin.greenhouse.ui
 
 import android.app.Application
 import android.content.Context
@@ -21,11 +21,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
-import org.androidaudioplugin.host.core.AapAudioPlayer
-import org.androidaudioplugin.host.core.AapHostEngine
-import org.androidaudioplugin.host.core.MAX_HOST_BUFFER_FRAMES
-import org.androidaudioplugin.host.data.PluginCategory
-import org.androidaudioplugin.host.data.PluginRepository
+import org.androidaudioplugin.greenhouse.core.AapAudioPlayer
+import org.androidaudioplugin.greenhouse.core.AapHostEngine
+import org.androidaudioplugin.greenhouse.core.MAX_HOST_BUFFER_FRAMES
+import org.androidaudioplugin.greenhouse.data.PluginCategory
+import org.androidaudioplugin.greenhouse.data.PluginRepository
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 import java.util.Locale
 

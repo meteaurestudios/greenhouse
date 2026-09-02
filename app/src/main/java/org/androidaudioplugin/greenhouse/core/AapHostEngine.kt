@@ -1,4 +1,4 @@
-package org.androidaudioplugin.host.core
+package org.androidaudioplugin.greenhouse.core
 
 import android.content.Context
 import android.util.Log

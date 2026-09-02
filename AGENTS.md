@@ -1,19 +1,19 @@
-# AAP Test Host Development Guide (`AGENTS.md`)
+# Greenhouse Development Guide (`AGENTS.md`)
 
-This repository is **`aap-test-host`**, a modern Jetpack Compose Android host application for testing and playing **Android Audio Plugins (AAP)**.
+This repository is **`greenhouse`**, a modern Jetpack Compose Android host application for testing and playing **Android Audio Plugins (AAP)**.
 
 ---
 
 ## 1. Project Architecture & Structure
 
-- **`app/`**: Android application module (`org.androidaudioplugin.host`).
-  - **`host/core/AapHostEngine.kt`**: Connects to AAP services and instantiates `NativeRemotePluginInstance`.
-  - **`host/core/AapAudioPlayer.kt`**: Low-latency Oboe audio render engine, sample player, and MIDI UMP parameter / note dispatching.
-  - **`host/data/PluginRepository.kt`**: Discovers system & local AAP services via `AudioPluginHostHelper`.
-  - **`host/ui/HostViewModel.kt`**: ViewModel managing multi-slot rack state (Instrument slot 0, Effect slots 1 & 2), active parameter state maps, and plugin lifecycle.
-  - **`host/ui/screens/StudioRackScreen.kt`**: Studio rack UI (Signal chain, slot cards, parameter controls, native plugin surfaces).
-  - **`host/ui/screens/PluginBrowserScreen.kt`**: Plugin catalog browser with category filters and search.
-  - **`host/ui/screens/EngineSettingsScreen.kt`**: Audio hardware specs and diagnostic monitor.
+- **`app/`**: Android application module (`org.androidaudioplugin.greenhouse`).
+  - **`greenhouse/core/AapHostEngine.kt`**: Connects to AAP services and instantiates `NativeRemotePluginInstance`.
+  - **`greenhouse/core/AapAudioPlayer.kt`**: Low-latency Oboe audio render engine, sample player, and MIDI UMP parameter / note dispatching.
+  - **`greenhouse/data/PluginRepository.kt`**: Discovers system & local AAP services via `AudioPluginHostHelper`.
+  - **`greenhouse/ui/HostViewModel.kt`**: ViewModel managing multi-slot rack state (Instrument slot 0, Effect slots 1 & 2), active parameter state maps, and plugin lifecycle.
+  - **`greenhouse/ui/screens/StudioRackScreen.kt`**: Studio rack UI (Signal chain, slot cards, parameter controls, native plugin surfaces).
+  - **`greenhouse/ui/screens/PluginBrowserScreen.kt`**: Plugin catalog browser with category filters and search.
+  - **`greenhouse/ui/screens/EngineSettingsScreen.kt`**: Audio hardware specs and diagnostic monitor.
 - **`external/aap-core/`**: Submodule containing core AAP runtime (`:androidaudioplugin`) and Compose UI interop (`:androidaudioplugin-ui-compose`).
 
 > **CRITICAL RULE: Submodule Immutability**  

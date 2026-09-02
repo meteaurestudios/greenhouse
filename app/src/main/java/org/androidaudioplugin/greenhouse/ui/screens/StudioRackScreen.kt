@@ -1,4 +1,4 @@
-package org.androidaudioplugin.host.ui.screens
+package org.androidaudioplugin.greenhouse.ui.screens
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
@@ -44,13 +44,13 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
-import org.androidaudioplugin.host.ui.HostViewModel
-import org.androidaudioplugin.host.ui.RackSlotData
-import org.androidaudioplugin.host.ui.SlotLevel
-import org.androidaudioplugin.host.ui.StudioRackViewMode
-import org.androidaudioplugin.host.ui.components.SlotStereoLevelMeter
-import org.androidaudioplugin.host.ui.components.StudioKeyboard
-import org.androidaudioplugin.host.ui.theme.*
+import org.androidaudioplugin.greenhouse.ui.HostViewModel
+import org.androidaudioplugin.greenhouse.ui.RackSlotData
+import org.androidaudioplugin.greenhouse.ui.SlotLevel
+import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
+import org.androidaudioplugin.greenhouse.ui.components.SlotStereoLevelMeter
+import org.androidaudioplugin.greenhouse.ui.components.StudioKeyboard
+import org.androidaudioplugin.greenhouse.ui.theme.*
 import org.androidaudioplugin.hosting.GuiHelper
 import java.util.Locale
 

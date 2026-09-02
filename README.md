@@ -1,8 +1,8 @@
-# AAP Test Host
+# Greenhouse
 
-[![Build](https://github.com/meteaurestudios/aap-test-host/actions/workflows/build.yml/badge.svg)](https://github.com/meteaurestudios/aap-test-host/actions/workflows/build.yml)
+[![Build](https://github.com/meteaurestudios/greenhouse/actions/workflows/build.yml/badge.svg)](https://github.com/meteaurestudios/greenhouse/actions/workflows/build.yml)
 
-**AAP Test Host** is an Android host application for testing and playing **[Android Audio Plugins (AAP)](https://github.com/atsushieno/aap-core)** in real time.
+**Greenhouse** is an open-source Android host application for testing and playing **[Android Audio Plugins (AAP)](https://github.com/atsushieno/aap-core)** in real time.
 
 ---
 
@@ -19,7 +19,7 @@
 
 ## Installation
 
-1. Go to the [**Releases**](https://github.com/meteaurestudios/aap-test-host/releases) page.
+1. Go to the [**Releases**](https://github.com/meteaurestudios/greenhouse/releases) page.
 2. Download the latest `app-release.apk`.
 3. Install the APK on your Android device (Android 10+ / API 29+).
 4. Launch the app and explore your installed AAP plugins!
