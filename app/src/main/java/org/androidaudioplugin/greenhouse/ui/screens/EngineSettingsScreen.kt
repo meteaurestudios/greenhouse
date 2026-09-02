@@ -163,10 +163,10 @@ fun EngineSettingsScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) ElectricBlue else StudioSurface)
+                                    .background(if (isSelected) SproutGreen else StudioSurface)
                                     .border(
                                         1.dp,
-                                        if (isSelected) ElectricBlue else StudioPanelBorder,
+                                        if (isSelected) SproutGreen else StudioPanelBorder,
                                         RoundedCornerShape(8.dp)
                                     )
                                     .clickable {
@@ -180,13 +180,13 @@ fun EngineSettingsScreen(
                                         text = label,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) TextPrimary else TextSecondary
+                                        color = if (isSelected) StudioBackground else TextSecondary
                                     )
                                     Text(
                                         text = String.format(Locale.US, "%.1fms", latencyMs),
                                         fontSize = 9.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) TextPrimary.copy(alpha = 0.9f) else TextMuted
+                                        color = if (isSelected) StudioBackground.copy(alpha = 0.8f) else TextMuted
                                     )
                                 }
                             }
@@ -356,7 +356,7 @@ fun EngineSettingsScreen(
         ) {
             Button(
                 onClick = { viewModel.refreshPluginList() },
-                colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue, contentColor = TextPrimary),
+                colors = ButtonDefaults.buttonColors(containerColor = SproutGreen, contentColor = StudioBackground),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.weight(1f)
             ) {

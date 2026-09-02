@@ -30,10 +30,7 @@ const val NOMINAL_METER_DB = -6.0f
 const val CLIP_AMPLITUDE_THRESHOLD = 0.98f
 const val SILENCE_AMPLITUDE_THRESHOLD = 0.0001f
 
-val MeterNormalColor = SignalGreen
-val MeterWarningColor = WarningOrange
-val MeterClipColor = DangerRed
-val MeterTrackBackground = Color(0xFF101217)
+
 
 fun amplitudeToNormalizedLevel(amplitude: Float): Float {
     if (amplitude <= SILENCE_AMPLITUDE_THRESHOLD) {
@@ -120,7 +117,7 @@ private fun ChannelMeterBar(
 
         // Background Track
         drawRoundRect(
-            color = Color(0xFF181B22),
+            color = MeterTrackBackground,
             size = size,
             cornerRadius = CornerRadius(2f, 2f)
         )
@@ -233,7 +230,7 @@ private fun HorizontalChannelBar(
 
         // Background Track
         drawRoundRect(
-            color = Color(0xFF181B22),
+            color = MeterTrackBackground,
             size = size,
             cornerRadius = CornerRadius(2f, 2f)
         )

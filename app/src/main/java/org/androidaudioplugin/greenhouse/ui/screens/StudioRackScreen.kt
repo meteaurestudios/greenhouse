@@ -5,8 +5,7 @@ import android.content.pm.ActivityInfo
 import android.os.Build
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -52,8 +51,7 @@ import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.SlotLevel
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
-import org.androidaudioplugin.greenhouse.ui.components.SlotStereoLevelMeter
-import org.androidaudioplugin.greenhouse.ui.components.StudioKeyboard
+import org.androidaudioplugin.greenhouse.ui.components.*
 import org.androidaudioplugin.greenhouse.ui.theme.*
 import org.androidaudioplugin.hosting.GuiHelper
 import java.util.Locale
@@ -146,6 +144,7 @@ fun StudioRackScreen(
                 } else if (activePlugin == null) {
                     NoPluginInSlotView(
                         slot = activeSlot,
+                        isProcessing = viewModel.isProcessing,
                         onOpenBrowser = {
                             viewModel.openBrowserForSlot(activeSlot.index)
                             onNavigateToBrowser()
@@ -196,6 +195,16 @@ fun StudioRackScreen(
     }
 }
 
+private const val CPU_HIGH_THRESHOLD_PERCENT = 80f
+private const val CPU_MEDIUM_THRESHOLD_PERCENT = 50f
+private val DSP_PILL_PADDING_HORIZONTAL = 10.dp
+private val DSP_PILL_PADDING_VERTICAL = 5.dp
+private val DSP_PILL_SPACING = 6.dp
+private val DSP_LED_SIZE = 6.dp
+private val DSP_METER_BAR_WIDTH = 32.dp
+private val DSP_METER_BAR_HEIGHT = 5.dp
+private val DSP_PERCENT_TEXT_WIDTH = 28.dp
+
 @Composable
 private fun DspCpuMeter(
     cpuPercent: Float,
@@ -204,67 +213,110 @@ private fun DspCpuMeter(
 ) {
     val meterColor = when {
         !isProcessing -> TextMuted
-        cpuPercent > 80f -> DangerRed
-        cpuPercent > 50f -> WarningOrange
-        else -> SignalGreen
+        cpuPercent > CPU_HIGH_THRESHOLD_PERCENT -> DangerRed
+        cpuPercent > CPU_MEDIUM_THRESHOLD_PERCENT -> WarningOrange
+        else -> SproutGreen
+    }
+
+    val backgroundColor = if (isProcessing) {
+        StudioSurfaceElevated
+    } else {
+        DangerRed.copy(alpha = 0.08f)
+    }
+
+    val borderColor = if (isProcessing) {
+        StudioPanelBorder
+    } else {
+        DangerRed.copy(alpha = 0.4f)
+    }
+
+    val ledColor = if (isProcessing) {
+        SproutGreen
+    } else {
+        DangerRed
+    }
+
+    val labelColor = if (isProcessing) {
+        SproutGreen
+    } else {
+        TextMuted
     }
 
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isProcessing) StudioSurface else DangerRed.copy(alpha = 0.08f))
+            .clip(CircleShape)
+            .background(backgroundColor)
             .border(
                 width = 1.dp,
-                color = if (isProcessing) StudioPanelBorder else DangerRed.copy(alpha = 0.4f),
-                shape = RoundedCornerShape(8.dp)
+                color = borderColor,
+                shape = CircleShape
             )
             .clickable { onToggleProcessing() }
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = DSP_PILL_PADDING_HORIZONTAL, vertical = DSP_PILL_PADDING_VERTICAL),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(DSP_PILL_SPACING)
     ) {
         Box(
             modifier = Modifier
-                .size(7.dp)
+                .size(DSP_LED_SIZE)
                 .clip(CircleShape)
-                .background(if (isProcessing) SignalGreen else DangerRed)
+                .background(ledColor)
         )
 
         Text(
             text = "DSP",
-            fontSize = 9.sp,
+            fontSize = 9.5.sp,
             fontWeight = FontWeight.Bold,
-            color = if (isProcessing) NeonCyan else TextMuted
+            color = labelColor
         )
 
         Box(
             modifier = Modifier
-                .width(36.dp)
-                .height(6.dp)
+                .width(DSP_METER_BAR_WIDTH)
+                .height(DSP_METER_BAR_HEIGHT)
                 .clip(CircleShape)
                 .background(StudioBackground)
         ) {
+            val fillFraction = if (isProcessing) {
+                (cpuPercent / 100f).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth((if (isProcessing) cpuPercent / 100f else 0f).coerceIn(0f, 1f))
+                    .fillMaxWidth(fillFraction)
                     .clip(CircleShape)
                     .background(meterColor)
             )
         }
 
+        val dspValueText = if (isProcessing) {
+            "${cpuPercent.toInt()}%"
+        } else {
+            "OFF"
+        }
+
         Text(
-            text = if (isProcessing) "${cpuPercent.toInt()}%" else "OFF",
+            text = dspValueText,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
             textAlign = TextAlign.End,
-            modifier = Modifier.width(30.dp),
+            modifier = Modifier.width(DSP_PERCENT_TEXT_WIDTH),
             maxLines = 1,
             color = meterColor
         )
     }
 }
+
+private val BANNER_LOGO_SIZE = 28.dp
+private val BANNER_LOGO_ICON_SIZE = 16.dp
+private val BANNER_SETTINGS_BUTTON_SIZE = 30.dp
+private val BANNER_SETTINGS_ICON_SIZE = 16.dp
+private val BANNER_CORNER_RADIUS = 20.dp
+private val BANNER_SPACING = 10.dp
 
 @Composable
 private fun MasterControlBanner(
@@ -277,28 +329,49 @@ private fun MasterControlBanner(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(20.dp)),
+            .clip(RoundedCornerShape(BANNER_CORNER_RADIUS))
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(BANNER_CORNER_RADIUS)),
         colors = CardDefaults.cardColors(containerColor = StudioSurfaceVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Title
-                Text(
-                    text = "Greenhouse",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    letterSpacing = 0.3.sp
-                )
+                // Left: Minimalist Botanical Emblem & Brand Title
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(BANNER_SPACING)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(BANNER_LOGO_SIZE)
+                            .clip(CircleShape)
+                            .background(StudioSurfaceElevated)
+                            .border(1.dp, SproutGreen.copy(alpha = 0.45f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Spa,
+                            contentDescription = "Greenhouse Emblem",
+                            tint = SproutGreen,
+                            modifier = Modifier.size(BANNER_LOGO_ICON_SIZE)
+                        )
+                    }
+
+                    Text(
+                        text = "Greenhouse",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TextPrimary,
+                        letterSpacing = 0.4.sp
+                    )
+                }
 
                 // Right: DSP CPU Meter & Settings Button
                 Row(
@@ -313,8 +386,10 @@ private fun MasterControlBanner(
 
                     Box(
                         modifier = Modifier
-                            .size(24.dp)
+                            .size(BANNER_SETTINGS_BUTTON_SIZE)
                             .clip(CircleShape)
+                            .background(StudioSurfaceElevated)
+                            .border(1.dp, StudioPanelBorder, CircleShape)
                             .clickable { onOpenSettings() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -322,11 +397,67 @@ private fun MasterControlBanner(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Audio Engine Settings & Diagnostics",
                             tint = TextSecondary,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(BANNER_SETTINGS_ICON_SIZE)
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+private val SIGNAL_CONNECTOR_WIDTH = 10.dp
+private val SIGNAL_CONNECTOR_HEIGHT = 104.dp
+private val SLOT_CARD_HEIGHT = 104.dp
+private val SLOT_CARD_CORNER_RADIUS = 12.dp
+private val SLOT_TOP_ACCENT_BAR_HEIGHT = 2.5.dp
+
+@Composable
+private fun SignalFlowConnector(
+    isActive: Boolean,
+    color: Color = SproutGreen,
+    modifier: Modifier = Modifier
+) {
+    val arrowColor = if (isActive) {
+        color
+    } else {
+        StudioPanelBorder
+    }
+
+    Box(
+        modifier = modifier
+            .width(SIGNAL_CONNECTOR_WIDTH)
+            .height(SIGNAL_CONNECTOR_HEIGHT),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(3.5.dp)
+                    .clip(CircleShape)
+                    .background(arrowColor)
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "Signal Flow",
+                tint = arrowColor,
+                modifier = Modifier.size(12.dp)
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(3.5.dp)
+                    .clip(CircleShape)
+                    .background(arrowColor)
+            )
         }
     }
 }
@@ -345,28 +476,29 @@ private fun SignalRackHeader(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        slots.forEach { slot ->
+        slots.forEachIndexed { index, slot ->
             val isSelected = slot.index == activeSlotIndex
             val isLoaded = slot.pluginInfo != null
             val isLoading = slot.isLoading
             val slotLevel = slotLevels.getOrNull(slot.index) ?: SlotLevel()
 
             val badgeColor = if (slot.index == 0) {
-                AccentViolet
+                BlossomCoral
             } else {
-                AccentCyan
+                PeriwinkleBlue
             }
 
             val borderColor = when {
-                isSelected -> AccentGold
-                isLoaded -> NeonCyan.copy(alpha = 0.5f)
+                isSelected -> badgeColor
+                isLoaded -> SproutGreen.copy(alpha = 0.5f)
                 else -> StudioPanelBorder
             }
 
             val borderWidth = if (isSelected) {
-                2.dp
+                1.5.dp
             } else {
                 1.dp
             }
@@ -374,11 +506,11 @@ private fun SignalRackHeader(
             Card(
                 modifier = Modifier
                     .weight(1f)
-                    .height(104.dp)
-                    .border(borderWidth, borderColor, RoundedCornerShape(16.dp))
-                    .clip(RoundedCornerShape(16.dp))
+                    .height(SLOT_CARD_HEIGHT)
+                    .border(borderWidth, borderColor, RoundedCornerShape(SLOT_CARD_CORNER_RADIUS))
+                    .clip(RoundedCornerShape(SLOT_CARD_CORNER_RADIUS))
                     .clickable { onSelectSlot(slot.index) },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(SLOT_CARD_CORNER_RADIUS),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected) {
                         StudioSurfaceVariant
@@ -387,192 +519,231 @@ private fun SignalRackHeader(
                     }
                 )
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 9.dp, vertical = 9.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (isSelected) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(SLOT_TOP_ACCENT_BAR_HEIGHT)
+                                .background(badgeColor)
+                                .align(Alignment.TopCenter)
+                        )
+                    }
+
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
+                            .fillMaxSize()
+                            .padding(
+                                start = 9.dp,
+                                end = 9.dp,
+                                top = if (isSelected) 10.dp else 9.dp,
+                                bottom = 9.dp
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Top Header Row: Bypass power icon or Mini Loader with Slot Type Capsule Label Box next to it
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
                         ) {
-
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    color = badgeColor,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                // Bypass power icon (always shown)
-                                Icon(
-                                    imageVector = Icons.Default.PowerSettingsNew,
-                                    contentDescription = "Bypassed",
-                                    tint = when {
-                                        slot.isBypassed -> DangerRed
-                                        isLoaded -> SignalGreen
-                                        else -> TextMuted.copy(alpha = 0.4f)
-                                    },
-                                    modifier = Modifier
-                                        .size(15.dp)
-                                        .clip(CircleShape)
-                                        .clickable(
-                                            enabled = isLoaded,
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null
-                                        ) { onToggleBypass(slot.index) }
-                                )
-                            }
-
-                            // Slot Type Capsule Label Box
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .border(1.dp, badgeColor.copy(alpha = 0.7f), CircleShape)
-                                    .clip(CircleShape)
-                                    .background(badgeColor.copy(alpha = 0.15f))
-                                    .padding(horizontal = 6.dp, vertical = 1.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = slot.slotType.lowercase(Locale.US),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = badgeColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.weight(1f))
-
-                        if (isLoading) {
-                            Text(
-                                text = slot.loadingPluginName ?: "Loading...",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            Text(
-                                text = "Loading...",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = TextMuted
-                            )
-                        } else if (isLoaded) {
-                            // Plugin Name with Close Cross Button next to it
+                            // Top Header Row: Bypass power icon or Mini Loader with Slot Type Capsule Label Box next to it
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text(
-                                    text = slot.pluginInfo?.displayName ?: "Empty Slot",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false)
-                                )
 
-                                Spacer(modifier = Modifier.width(4.dp))
+                                if (isLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        color = badgeColor,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    // Bypass power icon (always shown)
+                                    Icon(
+                                        imageVector = Icons.Default.PowerSettingsNew,
+                                        contentDescription = "Bypassed",
+                                        tint = when {
+                                            slot.isBypassed -> DangerRed
+                                            isLoaded -> SignalGreen
+                                            else -> TextMuted.copy(alpha = 0.4f)
+                                        },
+                                        modifier = Modifier
+                                            .size(15.dp)
+                                            .clip(CircleShape)
+                                            .clickable(
+                                                enabled = isLoaded,
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null
+                                            ) {
+                                                onToggleBypass(slot.index)
+                                            }
+                                    )
+                                }
 
+                                val slotTag = when (slot.index) {
+                                    0 -> "01 · INST"
+                                    1 -> "02 · FX 1"
+                                    else -> "03 · FX 2"
+                                }
+
+                                // Slot Type 2D Flat Industrial Badge
                                 Box(
                                     modifier = Modifier
-                                        .size(18.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF282D3B))
-                                        .border(1.dp, StudioPanelBorder, CircleShape)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null
-                                        ) { onUnloadSlot(slot.index) },
+                                        .weight(1f, fill = false)
+                                        .border(1.dp, badgeColor.copy(alpha = 0.45f), RoundedCornerShape(4.dp))
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(badgeColor.copy(alpha = 0.12f))
+                                        .padding(horizontal = 5.dp, vertical = 1.5.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Remove Plugin",
-                                        tint = TextPrimary,
-                                        modifier = Modifier.size(12.dp)
+                                    Text(
+                                        text = slotTag,
+                                        fontSize = 8.5.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.6.sp,
+                                        color = badgeColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.weight(1f))
 
-                            val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
-                            val statusText = when {
-                                slot.isBypassed -> "Bypassed"
-                                isProcessing -> "DSP ${slotCpu.toInt()}%"
-                                else -> "ACTIVE"
-                            }
-
-                            Text(
-                                text = statusText,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                fontFamily = FontFamily.Monospace,
-                                color = if (slot.isBypassed) DangerRed else TextMuted
-                            )
-                        } else {
-                            Text(
-                                text = "Empty Slot",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(30.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF282D3B))
-                                    .clickable { onAddPlugin(slot.index) },
-                                contentAlignment = Alignment.Center
-                            ) {
+                            if (isLoading) {
                                 Text(
-                                    text = "+ ADD",
+                                    text = slot.loadingPluginName ?: "Loading...",
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = NeonCyan,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                Text(
+                                    text = "LOADING...",
+                                    fontSize = 8.5.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextMuted,
                                     letterSpacing = 0.5.sp
                                 )
+                            } else if (isLoaded) {
+                                // Plugin Name with Close Cross Button next to it
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = slot.pluginInfo?.displayName ?: "Empty Slot",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+
+                                    Spacer(modifier = Modifier.width(4.dp))
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(StudioSurfaceElevated)
+                                            .border(1.dp, StudioPanelBorder, RoundedCornerShape(4.dp))
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null
+                                            ) { onUnloadSlot(slot.index) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Remove Plugin",
+                                            tint = TextPrimary,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
+                                val statusText = when {
+                                    slot.isBypassed -> "BYPASSED"
+                                    isProcessing -> "DSP ${slotCpu.toInt()}%"
+                                    else -> "ACTIVE"
+                                }
+
+                                Text(
+                                    text = statusText,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 0.5.sp,
+                                    color = if (slot.isBypassed) DangerRed else TextMuted
+                                )
+                            } else {
+                                Text(
+                                    text = "Empty Slot",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(StudioSurfaceElevated)
+                                        .border(1.dp, StudioPanelBorder, RoundedCornerShape(6.dp))
+                                        .clickable { onAddPlugin(slot.index) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "+ ADD",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SproutGreen,
+                                        letterSpacing = 0.8.sp
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    // Stereo VU / Level Meter on the right of the slot card (only when a plugin is loaded)
-                    if (isLoaded) {
-                        SlotStereoLevelMeter(
-                            levelLeft = slotLevel.left,
-                            levelRight = slotLevel.right,
-                            isBypassed = slot.isBypassed,
-                            isProcessing = isProcessing,
-                            meterWidth = 12.dp,
-                            meterHeight = 86.dp
-                        )
+                        // Stereo VU / Level Meter on the right of the slot card (only when a plugin is loaded)
+                        if (isLoaded) {
+                            SlotStereoLevelMeter(
+                                levelLeft = slotLevel.left,
+                                levelRight = slotLevel.right,
+                                isBypassed = slot.isBypassed,
+                                isProcessing = isProcessing,
+                                meterWidth = 12.dp,
+                                meterHeight = 86.dp
+                            )
+                        }
                     }
                 }
+            }
+
+            if (index < slots.lastIndex) {
+                val isFlowActive = isProcessing && isLoaded && !slot.isBypassed
+                SignalFlowConnector(
+                    isActive = isFlowActive,
+                    color = if (slot.index == 0) BlossomCoral else PeriwinkleBlue
+                )
             }
         }
     }
@@ -617,10 +788,10 @@ private fun StatusAndModeSelectorBar(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) Color(0xFF282D3B) else StudioSurface)
+                        .background(if (isSelected) StudioSurfaceElevated else StudioSurface)
                         .border(
                             width = 1.dp,
-                            color = if (isSelected) AccentGold.copy(alpha = 0.6f) else StudioPanelBorder,
+                            color = if (isSelected) SproutGreen.copy(alpha = 0.8f) else StudioPanelBorder,
                             shape = RoundedCornerShape(12.dp)
                         )
                         .clickable { onModeSelected(mode) }
@@ -704,10 +875,10 @@ private fun PluginPresetsView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (isPresetSelected) Color(0xFF2E3444) else StudioSurface)
+                    .background(if (isPresetSelected) StudioSurfaceElevated else StudioSurface)
                     .border(
                         width = 1.dp,
-                        color = if (isPresetSelected) AccentGold.copy(alpha = 0.8f) else StudioPanelBorder,
+                        color = if (isPresetSelected) SproutGreen.copy(alpha = 0.8f) else StudioPanelBorder,
                         shape = RoundedCornerShape(10.dp)
                     )
                     .clickable {
@@ -760,7 +931,7 @@ private fun ParameterControlRack(
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 130.dp),
+            columns = GridCells.Fixed(3),
             state = gridState,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -771,6 +942,7 @@ private fun ParameterControlRack(
                 ParameterCard(
                     parameter = param,
                     value = currentValue,
+                    slotIndex = slotIndex,
                     onValueChange = { newValue -> onValueChange(param, newValue) }
                 )
             }
@@ -792,7 +964,7 @@ private fun NativeSurfaceZoomToolbar(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xD9181C26))
+            .background(StudioSurfaceVariant.copy(alpha = 0.95f))
             .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp))
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -804,7 +976,7 @@ private fun NativeSurfaceZoomToolbar(
             modifier = Modifier
                 .size(24.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (canZoomOut) Color(0xFF282D3B) else Color(0xFF1E212A))
+                .background(if (canZoomOut) StudioSurfaceElevated else StudioSurface)
                 .clickable(
                     enabled = canZoomOut,
                     interactionSource = remember { MutableInteractionSource() },
@@ -824,7 +996,7 @@ private fun NativeSurfaceZoomToolbar(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (isFitMode) Color(0xFF282D3B) else Color.Transparent)
+                .background(if (isFitMode) StudioSurfaceElevated else Color.Transparent)
                 .padding(horizontal = 6.dp, vertical = 3.dp)
         ) {
             val zoomPercent = "${(displayedScale * 100).toInt()}%"
@@ -842,7 +1014,7 @@ private fun NativeSurfaceZoomToolbar(
             modifier = Modifier
                 .size(24.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFF282D3B))
+                .background(StudioSurfaceElevated)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
@@ -864,7 +1036,7 @@ private fun NativeSurfaceZoomToolbar(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF282D3B))
+                    .background(StudioSurfaceElevated)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
@@ -900,7 +1072,7 @@ private fun NativeSurfaceInteractionToggle(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (isTweakActive) Color(0xFF282D3B) else Color(0x80181C26))
+                .background(if (isTweakActive) StudioSurfaceElevated else StudioSurface.copy(alpha = 0.6f))
                 .border(1.dp, if (isTweakActive) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
                 .clickable(
                     interactionSource = tweakInteractionSource,
@@ -934,7 +1106,7 @@ private fun NativeSurfaceInteractionToggle(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (isMoveActive) Color(0xFF282D3B) else Color(0x80181C26))
+                .background(if (isMoveActive) StudioSurfaceElevated else StudioSurface.copy(alpha = 0.6f))
                 .border(1.dp, if (isMoveActive) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
                 .clickable(
                     interactionSource = moveInteractionSource,
@@ -1019,7 +1191,7 @@ private fun NativePluginSurfaceViewer(
     BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF10131A))
+            .background(StudioBackground)
             .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
         contentAlignment = Alignment.Center
     ) {
@@ -1093,7 +1265,7 @@ private fun NativePluginSurfaceViewer(
                     clipToPadding = true
                     outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
                     clipToOutline = true
-                    setBackgroundColor(android.graphics.Color.parseColor("#10131A"))
+                    setBackgroundColor(android.graphics.Color.parseColor("#121614"))
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -1398,74 +1570,96 @@ private fun NativePluginSurfaceContainer(
 private fun ParameterCard(
     parameter: ParameterInformation,
     value: Double,
+    slotIndex: Int = 0,
     onValueChange: (Double) -> Unit
 ) {
     val range = parameter.minimumValue..parameter.maximumValue
+    val activeAccent = when (slotIndex) {
+        0 -> BlossomCoral
+        else -> PeriwinkleBlue
+    }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp)),
-        colors = CardDefaults.cardColors(containerColor = StudioSurfaceVariant)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = StudioSurface)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp)
+                .padding(horizontal = 6.dp, vertical = 7.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // 1. Parameter Name Header
+            Text(
+                text = parameter.name,
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            // 2. 2D Flat Rotary Encoder Knob (Vertical drag + double-tap to reset)
+            FlatRotaryKnob(
+                value = value,
+                minimumValue = parameter.minimumValue,
+                maximumValue = parameter.maximumValue,
+                defaultValue = parameter.defaultValue,
+                activeColor = activeAccent,
+                size = 54.dp,
+                onValueChange = onValueChange
+            )
+
+            // 3. Combined Value & Range Row: [MIN] [CURRENT VALUE] [MAX]
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = parameter.name,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                Text(
-                    text = String.format(Locale.US, "%.2f", value),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = NeonCyan
-                )
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Slider(
-                value = value.toFloat(),
-                onValueChange = { onValueChange(it.toDouble()) },
-                valueRange = range.start.toFloat()..range.endInclusive.toFloat(),
-                colors = SliderDefaults.colors(
-                    thumbColor = NeonCyan,
-                    activeTrackColor = NeonCyan,
-                    inactiveTrackColor = KnobArcBackground
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
                     text = String.format(Locale.US, "%.1f", range.start),
-                    fontSize = 9.sp,
-                    color = TextMuted
+                    fontSize = 7.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = TextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(activeAccent.copy(alpha = 0.12f))
+                        .border(1.dp, activeAccent.copy(alpha = 0.35f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = String.format(Locale.US, "%.2f", value),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.2.sp,
+                        color = activeAccent
+                    )
+                }
+
                 Text(
                     text = String.format(Locale.US, "%.1f", range.endInclusive),
-                    fontSize = 9.sp,
-                    color = TextMuted
+                    fontSize = 7.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = TextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -1475,9 +1669,16 @@ private fun ParameterCard(
 private fun getNoteName(note: Int): String {
     val noteNames = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
     val name = noteNames[note % 12]
-    val oct = (note / 12) - 2
+    val oct = (note / 12) - 1
     return "$name$oct"
 }
+
+private val KEYBOARD_HEIGHT = 90.dp
+private val KEYBOARD_BLACK_KEY_HEIGHT = 52.dp
+private const val KEYBOARD_NUM_WHITE_KEYS = 14
+private val KEYBOARD_PANEL_CORNER_RADIUS = 12.dp
+private val KEYBOARD_CONTROL_BUTTON_SIZE = 26.dp
+private val KEYBOARD_CONTROL_ICON_SIZE = 14.dp
 
 @Composable
 private fun MidiKeyboardSection(
@@ -1486,6 +1687,7 @@ private fun MidiKeyboardSection(
     val noteOnStates = viewModel.keyboardNoteOnStates
     val octave = viewModel.keyboardOctave
     val isHoldEnabled = viewModel.isKeyboardHoldActive
+    var isKeyboardFolded by remember { mutableStateOf(false) }
 
     // Start & End notes covering full MIDI range 0..127 across octaves 0..9
     val startNote = octave * 12
@@ -1493,159 +1695,262 @@ private fun MidiKeyboardSection(
     val startNoteName = getNoteName(startNote)
     val endNoteName = getNoteName(endNote)
 
-    Column(
-        modifier = Modifier.fillMaxWidth()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(KEYBOARD_PANEL_CORNER_RADIUS),
+        colors = CardDefaults.cardColors(containerColor = StudioSurfaceVariant),
+        border = androidx.compose.foundation.BorderStroke(1.dp, StudioPanelBorder)
     ) {
-        // Controls Row: Octave Stepper on Left + HOLD Button on Right
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Left: Octave Stepper (- / Note Range / +)
+            // Attached Control Header Strip
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Octave Down (-)
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (octave > 0) StudioSurfaceVariant else StudioSurfaceVariant.copy(alpha = 0.4f))
-                        .border(1.dp, if (octave > 0) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
-                        .clickable(enabled = octave > 0) { viewModel.keyboardOctave = octave - 1 },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Remove,
-                        contentDescription = "Octave Down",
-                        tint = if (octave > 0) AccentGold else TextMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                // Note Range Display Badge (e.g. C2 – B3, spans full MIDI range 0..127 across octaves 0..9)
-                Box(
-                    modifier = Modifier
-                        .height(30.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(StudioSurfaceVariant)
-                        .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(horizontal = 10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(SignalGreen)
-                        )
-                        Text(
-                            text = "$startNoteName – $endNoteName",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
-                }
-
-                // Octave Up (+)
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (octave < 9) StudioSurfaceVariant else StudioSurfaceVariant.copy(alpha = 0.4f))
-                        .border(1.dp, if (octave < 9) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
-                        .clickable(enabled = octave < 9) { viewModel.keyboardOctave = octave + 1 },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Octave Up",
-                        tint = if (octave < 9) AccentGold else TextMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-
-            // Right: HOLD Mode Toggle Button
-            Box(
                 modifier = Modifier
-                    .height(30.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isHoldEnabled) AccentCyan.copy(alpha = 0.2f) else StudioSurfaceVariant)
-                    .border(
-                        width = 1.dp,
-                        color = if (isHoldEnabled) AccentCyan else StudioPanelBorder,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    .clickable {
-                        viewModel.toggleKeyboardHold()
-                    }
-                    .padding(horizontal = 10.dp),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Left: Octave Stepper (- / OCT RANGE / +)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    val isOctaveDownEnabled = octave > 0
+                    val isOctaveUpEnabled = octave < 9
+
+                    // Octave Down (-)
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(if (isHoldEnabled) AccentCyan else TextMuted)
-                    )
-                    Text(
-                        text = "HOLD",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isHoldEnabled) AccentCyan else TextSecondary,
-                        letterSpacing = 0.5.sp
-                    )
+                            .size(KEYBOARD_CONTROL_BUTTON_SIZE)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (isOctaveDownEnabled) {
+                                    StudioSurfaceElevated
+                                } else {
+                                    StudioSurfaceElevated.copy(alpha = 0.4f)
+                                }
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isOctaveDownEnabled) {
+                                    StudioPanelBorder
+                                } else {
+                                    Color.Transparent
+                                },
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .clickable(enabled = isOctaveDownEnabled) {
+                                viewModel.keyboardOctave = octave - 1
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "Octave Down",
+                            tint = if (isOctaveDownEnabled) {
+                                SproutGreen
+                            } else {
+                                TextMuted
+                            },
+                            modifier = Modifier.size(KEYBOARD_CONTROL_ICON_SIZE)
+                        )
+                    }
+
+                    // Note Range Display Badge (e.g. C3 – B4)
+                    Box(
+                        modifier = Modifier
+                            .height(KEYBOARD_CONTROL_BUTTON_SIZE)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(StudioSurfaceElevated)
+                            .border(1.dp, StudioPanelBorder, RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .clip(CircleShape)
+                                    .background(SproutGreen)
+                            )
+
+                            Text(
+                                text = "$startNoteName – $endNoteName",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+
+                    // Octave Up (+)
+                    Box(
+                        modifier = Modifier
+                            .size(KEYBOARD_CONTROL_BUTTON_SIZE)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (isOctaveUpEnabled) {
+                                    StudioSurfaceElevated
+                                } else {
+                                    StudioSurfaceElevated.copy(alpha = 0.4f)
+                                }
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isOctaveUpEnabled) {
+                                    StudioPanelBorder
+                                } else {
+                                    Color.Transparent
+                                },
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .clickable(enabled = isOctaveUpEnabled) {
+                                viewModel.keyboardOctave = octave + 1
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Octave Up",
+                            tint = if (isOctaveUpEnabled) {
+                                SproutGreen
+                            } else {
+                                TextMuted
+                            },
+                            modifier = Modifier.size(KEYBOARD_CONTROL_ICON_SIZE)
+                        )
+                    }
+                }
+
+                // Right: HOLD Mode Toggle Button & Fold/Hide Button
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // HOLD Button
+                    Box(
+                        modifier = Modifier
+                            .height(KEYBOARD_CONTROL_BUTTON_SIZE)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (isHoldEnabled) {
+                                    SproutGreen.copy(alpha = 0.15f)
+                                } else {
+                                    StudioSurfaceElevated
+                                }
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (isHoldEnabled) {
+                                    SproutGreen
+                                } else {
+                                    StudioPanelBorder
+                                },
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .clickable {
+                                viewModel.toggleKeyboardHold()
+                            }
+                            .padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(5.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isHoldEnabled) {
+                                            SproutGreen
+                                        } else {
+                                            TextMuted
+                                        }
+                                    )
+                            )
+
+                            Text(
+                                text = "HOLD",
+                                fontSize = 9.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isHoldEnabled) {
+                                    SproutGreen
+                                } else {
+                                    TextSecondary
+                                },
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+
+                    // Hide / Fold Toggle Button
+                    Box(
+                        modifier = Modifier
+                            .size(KEYBOARD_CONTROL_BUTTON_SIZE)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(StudioSurfaceElevated)
+                            .border(1.dp, StudioPanelBorder, RoundedCornerShape(6.dp))
+                            .clickable {
+                                isKeyboardFolded = !isKeyboardFolded
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isKeyboardFolded) {
+                                Icons.Default.KeyboardArrowUp
+                            } else {
+                                Icons.Default.KeyboardArrowDown
+                            },
+                            contentDescription = if (isKeyboardFolded) {
+                                "Show Keyboard"
+                            } else {
+                                "Hide Keyboard"
+                            },
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            // Attached Keyboard Surface
+            if (!isKeyboardFolded) {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = StudioPanelBorder
+                )
 
-        // Keyboard Surface (Positioned at bottom of page)
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(95.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF0F1117))
-                .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
-                .padding(2.dp)
-        ) {
-            val availableWidth = maxWidth
-            val computedWhiteKeyWidth = availableWidth / 14
-
-            StudioKeyboard(
-                noteOnStates = noteOnStates.toList(),
-                octaveZeroBased = octave,
-                numWhiteKeys = 14, // 2 Full Octaves
-                whiteKeyWidth = computedWhiteKeyWidth,
-                totalHeight = 90.dp,
-                blackKeyHeight = 52.dp,
-                whiteKeyColor = Color(0xFFF1F5F9), // Pristine Matte Off-White
-                blackKeyColor = Color(0xFF171A21), // Deep Obsidian Matte Black
-                whiteNoteOnColor = ElectricBlue,    // High-visibility Electric Blue for all key highlights
-                blackNoteOnColor = ElectricBlue,    // High-visibility Electric Blue for all key highlights
-                onNoteOn = { note ->
-                    viewModel.onKeyboardNoteOn(note)
-                },
-                onNoteOff = { note ->
-                    viewModel.onKeyboardNoteOff(note)
-                },
-                modifier = Modifier.fillMaxSize()
-            )
+                StudioKeyboard(
+                    noteOnStates = noteOnStates.toList(),
+                    octaveZeroBased = octave,
+                    numWhiteKeys = KEYBOARD_NUM_WHITE_KEYS,
+                    totalHeight = KEYBOARD_HEIGHT,
+                    blackKeyHeight = KEYBOARD_BLACK_KEY_HEIGHT,
+                    whiteKeyColor = KeyboardWhiteKey,
+                    blackKeyColor = KeyboardBlackKey,
+                    whiteNoteOnColor = SproutGreen,
+                    blackNoteOnColor = SproutGreen,
+                    onNoteOn = { note ->
+                        viewModel.onKeyboardNoteOn(note)
+                    },
+                    onNoteOff = { note ->
+                        viewModel.onKeyboardNoteOff(note)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(KEYBOARD_HEIGHT)
+                )
+            }
         }
     }
 }
@@ -1653,24 +1958,13 @@ private fun MidiKeyboardSection(
 @Composable
 private fun NoPluginInSlotView(
     slot: RackSlotData,
+    isProcessing: Boolean,
     onOpenBrowser: () -> Unit
 ) {
-    val slotColor = if (slot.index == 0) {
-        AccentViolet
-    } else {
-        AccentCyan
-    }
-
-    val iconVector = if (slot.index == 0) {
-        Icons.Default.MusicNote
-    } else {
-        Icons.Default.GraphicEq
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(StudioBackground),
         contentAlignment = Alignment.Center
     ) {
@@ -1679,51 +1973,45 @@ private fun NoPluginInSlotView(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(slotColor.copy(alpha = 0.12f))
-                    .border(1.dp, slotColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = iconVector,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = slotColor
-                )
-            }
+            GreenhouseMascot(
+                size = 72.dp,
+                isAnimated = true,
+                isListening = isProcessing
+            )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "${slot.title} is Empty",
-                fontSize = 15.sp,
+                text = "${slot.title} is ready",
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
 
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Select an ${slot.slotType.lowercase(Locale.US)} plugin to insert into this slot.",
-                fontSize = 11.sp,
+                text = if (slot.index == 0) {
+                    "Plant an instrument plugin to start playing."
+                } else {
+                    "Give your melody room to breathe and expand."
+                },
+                fontSize = 12.sp,
                 color = TextSecondary,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Button(
                 onClick = onOpenBrowser,
-                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = StudioBackground),
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = SproutGreen, contentColor = StudioBackground),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -1735,7 +2023,7 @@ private fun NoPluginInSlotView(
 
                 Text(
                     text = "BROWSE PLUGINS",
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     fontSize = 12.sp,
                     letterSpacing = 0.5.sp
                 )
@@ -1750,15 +2038,15 @@ private fun PluginLoadingView(
     pluginName: String?
 ) {
     val themeColor = if (slot.index == 0) {
-        AccentViolet
+        BlossomCoral
     } else {
-        AccentCyan
+        PeriwinkleBlue
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(StudioBackground),
         contentAlignment = Alignment.Center
     ) {
@@ -1767,19 +2055,27 @@ private fun PluginLoadingView(
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
+            GreenhouseMascot(
+                size = 64.dp,
+                isAnimated = true,
+                isListening = true
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             CircularProgressIndicator(
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier.size(24.dp),
                 color = themeColor,
                 strokeWidth = 2.5.dp
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "Loading ${pluginName ?: "Plugin"}...",
-                fontSize = 14.sp,
+                text = "Nurturing ${pluginName ?: "Plugin"}...",
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary,
                 textAlign = TextAlign.Center,
@@ -1787,10 +2083,10 @@ private fun PluginLoadingView(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Please wait while initializing ${slot.title} (${slot.slotType.lowercase(Locale.US)})...",
+                text = "Initializing ${slot.title} (${slot.slotType.lowercase(Locale.US)})...",
                 fontSize = 11.sp,
                 color = TextSecondary,
                 textAlign = TextAlign.Center,

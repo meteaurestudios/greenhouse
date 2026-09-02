@@ -71,7 +71,8 @@ fun PluginBrowserScreen(
                     modifier = Modifier
                         .size(38.dp)
                         .clip(CircleShape)
-                        .background(StudioSurfaceVariant)
+                        .background(StudioSurfaceElevated)
+                        .border(1.dp, StudioPanelBorder, CircleShape)
                         .clickable { onNavigateToRack() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -79,7 +80,7 @@ fun PluginBrowserScreen(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back to Rack",
                         tint = TextPrimary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
@@ -89,10 +90,10 @@ fun PluginBrowserScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = "SELECT PLUGIN FOR ${targetSlot.title.uppercase(Locale.US)}",
+                        text = "PLUGINS FOR ${targetSlot.title.uppercase(Locale.US)}",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = AccentGold,
+                        color = SproutGreen,
                         letterSpacing = 0.5.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -116,34 +117,35 @@ fun PluginBrowserScreen(
                 modifier = Modifier
                     .size(38.dp)
                     .clip(CircleShape)
-                    .background(StudioSurfaceVariant)
+                    .background(StudioSurfaceElevated)
+                    .border(1.dp, StudioPanelBorder, CircleShape)
                     .clickable { viewModel.refreshPluginList() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Rescan Plugins",
-                    tint = NeonCyan,
-                    modifier = Modifier.size(20.dp)
+                    tint = SproutGreen,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Search Bar
+        // Search Bar with Frosted Botanical Pill Styling
         OutlinedTextField(
             value = viewModel.searchQuery,
             onValueChange = { viewModel.updateSearchQuery(it) },
-            placeholder = { Text("Search by name, developer, or ID...", color = TextMuted) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = NeonCyan) },
-            shape = RoundedCornerShape(16.dp),
+            placeholder = { Text("Search plugins by name or vendor...", color = TextMuted, fontSize = 13.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SproutGreen, modifier = Modifier.size(20.dp)) },
+            shape = RoundedCornerShape(24.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .background(StudioSurface),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = NeonCyan,
+                focusedBorderColor = SproutGreen,
                 unfocusedBorderColor = StudioPanelBorder,
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary
@@ -164,11 +166,11 @@ fun PluginBrowserScreen(
                     modifier = Modifier
                         .border(
                             width = 1.dp,
-                            color = if (isSelected) AccentGold else StudioPanelBorder,
+                            color = if (isSelected) SproutGreen else StudioPanelBorder,
                             shape = CircleShape
                         )
                         .clip(CircleShape)
-                        .background(if (isSelected) Color(0xFF282D3B) else StudioSurface)
+                        .background(if (isSelected) StudioSurfaceElevated else StudioSurface)
                         .clickable { viewModel.selectDeveloper(dev) }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
@@ -240,11 +242,11 @@ private fun PluginCard(
 ) {
     val catLower = plugin.category?.lowercase() ?: ""
     val tagColor = when {
-        catLower.contains("synth") || catLower.contains("instrument") -> AccentViolet
-        catLower.contains("effect") || catLower.contains("delay") || catLower.contains("reverb") || catLower.contains("chorus") -> AccentCyan
-        else -> AccentGold
+        catLower.contains("synth") || catLower.contains("instrument") -> BlossomCoral
+        catLower.contains("effect") || catLower.contains("delay") || catLower.contains("reverb") || catLower.contains("chorus") -> PeriwinkleBlue
+        else -> SproutGreen
     }
-    val tagBg = tagColor.copy(alpha = 0.12f)
+    val tagBg = tagColor.copy(alpha = 0.15f)
 
     Card(
         modifier = Modifier
@@ -310,10 +312,10 @@ private fun PluginCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isEnabled) Color(0xFF252A36) else Color(0xFF1B1E28))
+                        .background(if (isEnabled) SproutGreen.copy(alpha = 0.15f) else StudioSurface)
                         .border(
                             1.dp,
-                            if (isEnabled) Color(0xFF3B4356) else Color(0xFF282D3B),
+                            if (isEnabled) SproutGreen.copy(alpha = 0.8f) else StudioPanelBorder,
                             RoundedCornerShape(12.dp)
                         )
                         .clickable(enabled = isEnabled) {
@@ -326,7 +328,7 @@ private fun PluginCard(
                         text = "LOAD",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isEnabled) TextPrimary else TextMuted,
+                        color = if (isEnabled) SproutGreen else TextMuted,
                         letterSpacing = 0.5.sp
                     )
                 }

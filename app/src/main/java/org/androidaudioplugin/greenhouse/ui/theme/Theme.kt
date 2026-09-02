@@ -11,12 +11,14 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val StudioDarkColorScheme = darkColorScheme(
-    primary = NeonCyan,
+    primary = SproutGreen,
     onPrimary = StudioBackground,
-    primaryContainer = ElectricBlue,
+    primaryContainer = StudioSurfaceVariant,
     onPrimaryContainer = TextPrimary,
-    secondary = NeonPurple,
-    onSecondary = TextPrimary,
+    secondary = BlossomCoral,
+    onSecondary = StudioBackground,
+    tertiary = PeriwinkleBlue,
+    onTertiary = StudioBackground,
     background = StudioBackground,
     onBackground = TextPrimary,
     surface = StudioSurface,
