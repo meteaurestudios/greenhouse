@@ -6,6 +6,7 @@ import android.os.Build
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -22,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,14 +35,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -52,6 +60,8 @@ import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.SlotLevel
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
 import org.androidaudioplugin.greenhouse.ui.components.*
+import org.androidaudioplugin.greenhouse.ui.model.ParameterType
+import org.androidaudioplugin.greenhouse.ui.model.inferredType
 import org.androidaudioplugin.greenhouse.ui.theme.*
 import org.androidaudioplugin.hosting.GuiHelper
 import java.util.Locale
@@ -83,7 +93,7 @@ fun StudioRackScreen(
             MasterControlBanner(
                 slots = viewModel.slots,
                 isProcessing = viewModel.isProcessing,
-                totalCpuLoad = viewModel.totalCpuLoad,
+                totalCpuLoadProvider = { viewModel.totalCpuLoad },
                 onToggleProcessing = { viewModel.toggleAudioPlayback() },
                 onOpenSettings = onNavigateToSettings
             )
@@ -95,8 +105,8 @@ fun StudioRackScreen(
                 slots = viewModel.slots,
                 activeSlotIndex = currentSlotIndex,
                 isProcessing = viewModel.isProcessing,
-                slotCpuLoads = viewModel.slotCpuLoads,
-                slotLevels = viewModel.slotLevels,
+                slotCpuLoadsProvider = { viewModel.slotCpuLoads },
+                slotLevelsProvider = { viewModel.slotLevels },
                 onSelectSlot = { slotIdx ->
                     viewModel.selectActiveSlot(slotIdx)
                 },
@@ -207,10 +217,12 @@ private val DSP_PERCENT_TEXT_WIDTH = 28.dp
 
 @Composable
 private fun DspCpuMeter(
-    cpuPercent: Float,
+    cpuPercentProvider: () -> Float,
     isProcessing: Boolean,
     onToggleProcessing: () -> Unit
 ) {
+    val cpuPercent = cpuPercentProvider()
+
     val meterColor = when {
         !isProcessing -> TextMuted
         cpuPercent > CPU_HIGH_THRESHOLD_PERCENT -> DangerRed
@@ -322,7 +334,7 @@ private val BANNER_SPACING = 10.dp
 private fun MasterControlBanner(
     slots: List<RackSlotData>,
     isProcessing: Boolean,
-    totalCpuLoad: Float,
+    totalCpuLoadProvider: () -> Float,
     onToggleProcessing: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -379,7 +391,7 @@ private fun MasterControlBanner(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     DspCpuMeter(
-                        cpuPercent = totalCpuLoad,
+                        cpuPercentProvider = totalCpuLoadProvider,
                         isProcessing = isProcessing,
                         onToggleProcessing = onToggleProcessing
                     )
@@ -467,13 +479,16 @@ private fun SignalRackHeader(
     slots: List<RackSlotData>,
     activeSlotIndex: Int,
     isProcessing: Boolean,
-    slotCpuLoads: List<Float>,
-    slotLevels: List<SlotLevel>,
+    slotCpuLoadsProvider: () -> List<Float>,
+    slotLevelsProvider: () -> List<SlotLevel>,
     onSelectSlot: (Int) -> Unit,
     onAddPlugin: (Int) -> Unit,
     onToggleBypass: (Int) -> Unit,
     onUnloadSlot: (Int) -> Unit
 ) {
+    val slotCpuLoads = slotCpuLoadsProvider()
+    val slotLevels = slotLevelsProvider()
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -860,54 +875,83 @@ private fun PluginPresetsView(
         return
     }
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 130.dp),
-        state = gridState,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        items(presets.size, key = { idx -> "${slot.index}_${slot.pluginInfo?.pluginId ?: ""}_preset_${presets[idx].nativeIndex}" }) { idx ->
-            val preset = presets[idx]
-            val isPresetSelected = slot.selectedPresetIndex >= 0 && preset.nativeIndex == slot.selectedPresetIndex
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 130.dp),
+            state = gridState,
+            horizontalArrangement = Arrangement.spacedBy(PRESET_GRID_SPACING),
+            verticalArrangement = Arrangement.spacedBy(PRESET_GRID_SPACING),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(end = 8.dp)
+        ) {
+            items(presets.size, key = { idx -> "${slot.index}_${slot.pluginInfo?.pluginId ?: ""}_preset_${presets[idx].nativeIndex}" }) { idx ->
+                val preset = presets[idx]
+                val isPresetSelected = slot.selectedPresetIndex >= 0 && preset.nativeIndex == slot.selectedPresetIndex
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (isPresetSelected) StudioSurfaceElevated else StudioSurface)
-                    .border(
-                        width = 1.dp,
-                        color = if (isPresetSelected) SproutGreen.copy(alpha = 0.8f) else StudioPanelBorder,
-                        shape = RoundedCornerShape(10.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isPresetSelected) StudioSurfaceElevated else StudioSurface)
+                        .border(
+                            width = 1.dp,
+                            color = if (isPresetSelected) SproutGreen.copy(alpha = 0.8f) else StudioPanelBorder,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable {
+                            onPresetSelected(preset.nativeIndex)
+                        }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "${idx + 1}.",
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = if (isPresetSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isPresetSelected) AccentGold else TextMuted
                     )
-                    .clickable {
-                        onPresetSelected(preset.nativeIndex)
-                    }
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "${idx + 1}.",
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = if (isPresetSelected) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isPresetSelected) AccentGold else TextMuted
-                )
 
-                Text(
-                    text = preset.name,
-                    fontSize = 11.sp,
-                    fontWeight = if (isPresetSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isPresetSelected) TextPrimary else TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    Text(
+                        text = preset.name,
+                        fontSize = 11.sp,
+                        fontWeight = if (isPresetSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isPresetSelected) TextPrimary else TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
+
+        GridVerticalScrollBar(
+            gridState = gridState,
+            totalItems = presets.size,
+            estimatedRowHeightDp = PRESET_ITEM_HEIGHT + PRESET_GRID_SPACING,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .offset(x = SCROLLBAR_HORIZONTAL_OFFSET)
+                .fillMaxHeight()
+                .width(SCROLLBAR_WIDTH)
+                .padding(vertical = SCROLLBAR_TRACK_PADDING)
+        )
     }
 }
+
+private const val PARAMETER_SEARCH_THRESHOLD = 12
+private const val GRID_COLUMN_COUNT = 3
+private val PRESET_ITEM_HEIGHT = 38.dp
+private val PRESET_GRID_SPACING = 8.dp
+private val SCROLLBAR_WIDTH = 3.5.dp
+private val SCROLLBAR_HORIZONTAL_OFFSET = 5.dp
+private val SCROLLBAR_TRACK_PADDING = 4.dp
+private val SCROLLBAR_CORNER_RADIUS = 2.dp
+private const val SCROLLBAR_MIN_THUMB_RATIO = 0.08f
+private const val SCROLLBAR_MAX_THUMB_RATIO = 0.7f
+private const val SCROLLBAR_TRACK_ALPHA = 0.2f
+private const val SCROLLBAR_THUMB_ALPHA = 0.38f
 
 @Composable
 private fun ParameterControlRack(
@@ -930,22 +974,281 @@ private fun ParameterControlRack(
             )
         }
     } else {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            state = gridState,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(parameters, key = { param -> "${slotIndex}_${pluginId}_${param.id}" }) { param ->
-                val currentValue = parameterValues[param.id] ?: param.defaultValue
-                ParameterCard(
-                    parameter = param,
-                    value = currentValue,
-                    slotIndex = slotIndex,
-                    onValueChange = { newValue -> onValueChange(param, newValue) }
+        var isSearchVisible by remember(pluginId) { mutableStateOf(false) }
+        var searchQuery by remember(pluginId) { mutableStateOf("") }
+
+        val filteredParameters = remember(parameters, searchQuery) {
+            if (searchQuery.isBlank()) {
+                parameters
+            } else {
+                val query = searchQuery.trim().lowercase()
+                parameters.filter { param ->
+                    param.name.lowercase().contains(query)
+                }
+            }
+        }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (parameters.size > PARAMETER_SEARCH_THRESHOLD) {
+                if (isSearchVisible || searchQuery.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(StudioSurface)
+                                .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = "Search Parameters",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    BasicTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        singleLine = true,
+                                        cursorBrush = SolidColor(SproutGreen),
+                                        textStyle = TextStyle(
+                                            color = TextPrimary,
+                                            fontSize = 12.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        decorationBox = { innerTextField ->
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                contentAlignment = Alignment.CenterStart
+                                            ) {
+                                                if (searchQuery.isEmpty()) {
+                                                    Text(
+                                                        text = "Search parameters...",
+                                                        color = TextMuted,
+                                                        fontSize = 12.sp,
+                                                        fontFamily = FontFamily.Monospace
+                                                    )
+                                                }
+
+                                                innerTextField()
+                                            }
+                                        }
+                                    )
+                                }
+
+                                if (searchQuery.isNotEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .clickable { searchQuery = "" },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = "Clear Search",
+                                            tint = TextSecondary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(StudioSurface)
+                                .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
+                                .clickable {
+                                    searchQuery = ""
+                                    isSearchVisible = false
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Close Search",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Text(
+                            text = "${filteredParameters.size}/${parameters.size}",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = TextMuted
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .height(28.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(StudioSurface)
+                                .border(1.dp, StudioPanelBorder, RoundedCornerShape(8.dp))
+                                .clickable { isSearchVisible = true }
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = "Filter Parameters",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(13.dp)
+                                )
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                Text(
+                                    text = "Filter (${parameters.size})",
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(GRID_COLUMN_COUNT),
+                    state = gridState,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(end = 8.dp)
+                ) {
+                    items(
+                        items = filteredParameters,
+                        key = { param -> param.id },
+                        contentType = { param -> param.inferredType.javaClass.simpleName }
+                    ) { param ->
+                        val currentValue = parameterValues[param.id] ?: param.defaultValue
+                        val paramType = param.inferredType
+                        ParameterCard(
+                            paramName = param.name,
+                            paramType = paramType,
+                            defaultValue = param.defaultValue,
+                            minimumValue = param.minimumValue,
+                            maximumValue = param.maximumValue,
+                            value = currentValue,
+                            slotIndex = slotIndex,
+                            onValueChange = { newValue -> onValueChange(param, newValue) }
+                        )
+                    }
+                }
+
+                GridVerticalScrollBar(
+                    gridState = gridState,
+                    totalItems = filteredParameters.size,
+                    estimatedRowHeightDp = PARAMETER_CARD_HEIGHT + 8.dp,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .offset(x = SCROLLBAR_HORIZONTAL_OFFSET)
+                        .fillMaxHeight()
+                        .width(SCROLLBAR_WIDTH)
+                        .padding(vertical = SCROLLBAR_TRACK_PADDING)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun GridVerticalScrollBar(
+    gridState: LazyGridState,
+    totalItems: Int,
+    estimatedRowHeightDp: Dp,
+    defaultColumnCount: Int = GRID_COLUMN_COUNT,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val rowHeightPx = with(density) { estimatedRowHeightDp.toPx() }
+
+    Canvas(modifier = modifier) {
+        val viewportHeightPx = size.height
+        val visibleItems = gridState.layoutInfo.visibleItemsInfo
+
+        val actualCols = if (visibleItems.isNotEmpty()) {
+            val firstY = visibleItems[0].offset.y
+            val countInFirstRow = visibleItems.count { it.offset.y == firstY }
+            countInFirstRow.coerceAtLeast(1)
+        } else {
+            defaultColumnCount.coerceAtLeast(1)
+        }
+
+        val totalRows = kotlin.math.ceil(totalItems.toDouble() / actualCols).toFloat()
+        val totalContentHeightPx = totalRows * rowHeightPx
+
+        if (totalContentHeightPx > viewportHeightPx && viewportHeightPx > 0f) {
+            // 1. Draw subtle background track
+            drawRoundRect(
+                color = StudioSurfaceVariant.copy(alpha = SCROLLBAR_TRACK_ALPHA),
+                cornerRadius = CornerRadius(SCROLLBAR_CORNER_RADIUS.toPx())
+            )
+
+            // 2. Read scroll state only during draw phase (zero composable body recompositions)
+            val firstVisibleIndex = gridState.firstVisibleItemIndex
+            val firstVisibleOffset = gridState.firstVisibleItemScrollOffset
+
+            val firstVisibleRow = firstVisibleIndex / actualCols
+            val currentScrollOffsetPx = (firstVisibleRow * rowHeightPx) + firstVisibleOffset
+            val totalScrollDistancePx = (totalContentHeightPx - viewportHeightPx).coerceAtLeast(1f)
+
+            val scrollProgress = (currentScrollOffsetPx / totalScrollDistancePx).coerceIn(0f, 1f)
+            val thumbHeightRatio = (viewportHeightPx / totalContentHeightPx)
+                .coerceIn(SCROLLBAR_MIN_THUMB_RATIO, SCROLLBAR_MAX_THUMB_RATIO)
+
+            val thumbHeightPx = viewportHeightPx * thumbHeightRatio
+            val maxTravelPx = viewportHeightPx - thumbHeightPx
+            val thumbTopY = scrollProgress * maxTravelPx
+
+            drawRoundRect(
+                color = TextSecondary.copy(alpha = SCROLLBAR_THUMB_ALPHA),
+                topLeft = Offset(0f, thumbTopY),
+                size = Size(size.width, thumbHeightPx),
+                cornerRadius = CornerRadius(SCROLLBAR_CORNER_RADIUS.toPx())
+            )
         }
     }
 }
@@ -1566,36 +1869,66 @@ private fun NativePluginSurfaceContainer(
 }
 
 
+private const val PARAMETER_BOOLEAN_ACTIVE_THRESHOLD = 0.5
+private const val PARAMETER_ENUM_MATCH_EPSILON = 0.0001
+private const val PARAMETER_INT_DISCRETE_STEP = 1.0
+private val PARAMETER_CARD_HEIGHT = 112.dp
+private val PARAMETER_KNOB_SIZE = 54.dp
+private val PARAMETER_CARD_CORNER_RADIUS = 12.dp
+
+private fun formatFastDecimal(value: Double, decimals: Int): String {
+    if (decimals == 1) {
+        val rounded = kotlin.math.round(value * 10.0).toLong()
+        val whole = rounded / 10
+        val frac = kotlin.math.abs(rounded % 10)
+        return "$whole.$frac"
+    }
+
+    val rounded = kotlin.math.round(value * 100.0).toLong()
+    val whole = rounded / 100
+    val frac = kotlin.math.abs(rounded % 100)
+
+    if (frac < 10) {
+        return "$whole.0$frac"
+    } else {
+        return "$whole.$frac"
+    }
+}
+
 @Composable
 private fun ParameterCard(
-    parameter: ParameterInformation,
+    paramName: String,
+    paramType: ParameterType,
+    defaultValue: Double,
+    minimumValue: Double,
+    maximumValue: Double,
     value: Double,
     slotIndex: Int = 0,
     onValueChange: (Double) -> Unit
 ) {
-    val range = parameter.minimumValue..parameter.maximumValue
     val activeAccent = when (slotIndex) {
         0 -> BlossomCoral
         else -> PeriwinkleBlue
     }
 
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = StudioSurface)
+            .height(PARAMETER_CARD_HEIGHT)
+            .clip(RoundedCornerShape(PARAMETER_CARD_CORNER_RADIUS))
+            .background(StudioSurface)
+            .border(1.dp, StudioPanelBorder, RoundedCornerShape(PARAMETER_CARD_CORNER_RADIUS))
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 7.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             // 1. Parameter Name Header
             Text(
-                text = parameter.name,
+                text = paramName,
                 fontSize = 9.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary,
@@ -1605,62 +1938,123 @@ private fun ParameterCard(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(5.dp))
-
-            // 2. 2D Flat Rotary Encoder Knob (Vertical drag + double-tap to reset)
-            FlatRotaryKnob(
-                value = value,
-                minimumValue = parameter.minimumValue,
-                maximumValue = parameter.maximumValue,
-                defaultValue = parameter.defaultValue,
-                activeColor = activeAccent,
-                size = 54.dp,
-                onValueChange = onValueChange
-            )
-
-            // 3. Combined Value & Range Row: [MIN] [CURRENT VALUE] [MAX]
-            Row(
+            // 2. Dedicated Type Control Area
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .weight(1f),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = String.format(Locale.US, "%.1f", range.start),
-                    fontSize = 7.5.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = TextMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                when (paramType) {
+                    is ParameterType.BoolType -> {
+                        BooleanParameterToggle(
+                            isOn = value >= PARAMETER_BOOLEAN_ACTIVE_THRESHOLD,
+                            offLabel = paramType.offLabel,
+                            onLabel = paramType.onLabel,
+                            activeColor = activeAccent,
+                            onToggle = onValueChange
+                        )
+                    }
+
+                    is ParameterType.EnumType -> {
+                        EnumParameterSelector(
+                            currentValue = value,
+                            options = paramType.options,
+                            activeColor = activeAccent,
+                            onSelect = onValueChange
+                        )
+                    }
+
+                    is ParameterType.IntType -> {
+                        FlatRotaryKnob(
+                            value = value,
+                            minimumValue = paramType.min.toDouble(),
+                            maximumValue = paramType.max.toDouble(),
+                            defaultValue = defaultValue,
+                            step = PARAMETER_INT_DISCRETE_STEP,
+                            activeColor = activeAccent,
+                            size = PARAMETER_KNOB_SIZE,
+                            onValueChange = onValueChange
+                        )
+                    }
+
+                    is ParameterType.FloatType -> {
+                        FlatRotaryKnob(
+                            value = value,
+                            minimumValue = minimumValue,
+                            maximumValue = maximumValue,
+                            defaultValue = defaultValue,
+                            step = null,
+                            activeColor = activeAccent,
+                            size = PARAMETER_KNOB_SIZE,
+                            onValueChange = onValueChange
+                        )
+                    }
+                }
+            }
+
+            // 3. Combined Value & Range Row: [MIN] [CURRENT VALUE / BADGE] [MAX]
+            if (paramType !is ParameterType.BoolType) {
+                val valueText = when (paramType) {
+                    is ParameterType.EnumType -> {
+                        val currentOpt = paramType.options.firstOrNull { option ->
+                            kotlin.math.abs(option.value - value) < PARAMETER_ENUM_MATCH_EPSILON
+                        }
+                        currentOpt?.name ?: formatFastDecimal(value, 1)
+                    }
+
+                    is ParameterType.IntType -> "${value.toInt()}"
+                    is ParameterType.FloatType -> formatFastDecimal(value, 2)
+                    is ParameterType.BoolType -> ""
+                }
 
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(activeAccent.copy(alpha = 0.12f))
-                        .border(1.dp, activeAccent.copy(alpha = 0.35f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                        .fillMaxWidth()
+                        .padding(horizontal = 2.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = String.format(Locale.US, "%.2f", value),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = paramType.minText,
+                        fontSize = 7.5.sp,
                         fontFamily = FontFamily.Monospace,
-                        letterSpacing = 0.2.sp,
-                        color = activeAccent
+                        color = TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(activeAccent.copy(alpha = 0.12f))
+                            .border(1.dp, activeAccent.copy(alpha = 0.35f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = valueText,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.2.sp,
+                            color = activeAccent,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Text(
+                        text = paramType.maxText,
+                        fontSize = 7.5.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.CenterEnd)
                     )
                 }
-
-                Text(
-                    text = String.format(Locale.US, "%.1f", range.endInclusive),
-                    fontSize = 7.5.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = TextMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
