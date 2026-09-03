@@ -9,10 +9,11 @@
 ## Features
 
 - **Plugin Rack**: Load an instrument and chain audio effect plugins in series.
-- **Live MIDI Keyboard**: Play instruments in real time using the built-in touch keyboard.
+- **Hardware MIDI Controllers**: Connect external USB, Bluetooth LE, and virtual MIDI keyboards or controllers with hot-plug support, continuous 14-bit pitch bend, polyphonic/channel pressure, and CC modulation.
+- **Live MIDI Keyboard**: Play instruments in real time using the built-in multi-touch keyboard with octave shifting and note latching.
 - **Native Plugin GUIs**: View and interact directly with native plugin interfaces.
 - **Parameter Controls**: Adjust plugin parameters with dedicated knobs and sliders.
-- **Low-Latency Audio**: High-performance C++ audio rendering powered by Oboe.
+- **Low-Latency Audio**: High-performance C++ audio rendering powered by Oboe with real-time level meters and CPU diagnostics.
 - **Plugin Browser**: Search and filter installed AAP plugins on your device.
 
 ---

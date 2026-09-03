@@ -22,6 +22,9 @@ class AapAudioPlayer private constructor(
     companion object {
         private const val TAG = "AapAudioPlayer"
         const val DEFAULT_NUM_RACK_SLOTS = 3
+        const val MIDI2_SIGNED_32BIT_MAX = 0x8000_0000L
+        const val MIDI2_32BIT_MAX = 0xFFFF_FFFFL
+        const val MIDI2_16BIT_MAX = 0xFFFF
 
         init {
             try {
@@ -220,28 +223,45 @@ class AapAudioPlayer private constructor(
     }
 
     fun sendNoteOn(note: Int, velocity: Float = 1.0f) {
-        val velocity16 = (velocity.coerceIn(0.0f, 1.0f) * 0xFFFF).toInt()
+        val velocity16 = (velocity.coerceIn(0.0f, 1.0f) * MIDI2_16BIT_MAX).toInt()
         val ump = Ump(UmpFactory.midi2NoteOn(0, 0, note, 0, velocity16, 0))
         sendUmpToSlot(0, ump.toPlatformNativeBytes())
     }
 
     fun sendNoteOff(note: Int, velocity: Float = 0.0f) {
-        val velocity16 = (velocity.coerceIn(0.0f, 1.0f) * 0xFFFF).toInt()
+        val velocity16 = (velocity.coerceIn(0.0f, 1.0f) * MIDI2_16BIT_MAX).toInt()
         val ump = Ump(UmpFactory.midi2NoteOff(0, 0, note, 0, velocity16, 0))
         sendUmpToSlot(0, ump.toPlatformNativeBytes())
     }
 
     fun sendPitchBend(slotIndex: Int = 0, note: Int = -1, value: Float) {
+        // UmpFactory.midi2PitchBend expects signed 32-bit: -0x80000000L (-2147483648) to +0x7FFFFFFFL (+2147483647) with 0L at center
+        val signed32 = (value.coerceIn(-1.0f, 1.0f).toDouble() * MIDI2_SIGNED_32BIT_MAX.toDouble()).toLong().coerceIn(-MIDI2_SIGNED_32BIT_MAX, MIDI2_SIGNED_32BIT_MAX - 1L)
+
         val ump = if (note < 0) {
-            UmpFactory.midi2PitchBend(0, 0, (0x1_0000_0000 * value).toLong())
+            UmpFactory.midi2PitchBend(0, 0, signed32)
         } else {
-            UmpFactory.midi2PerNotePitchBend(0, 0, note, (0x1_0000_0000 * value).toLong())
+            UmpFactory.midi2PerNotePitchBend(0, 0, note, signed32)
         }
+
         sendUmpToSlot(slotIndex, Ump(ump).toPlatformNativeBytes())
     }
 
     fun sendPressure(slotIndex: Int = 0, note: Int = -1, value: Float) {
-        val ump = Ump(UmpFactory.midi2PAf(0, 0, note, (0x1_0000_0000 * value).toLong()))
+        val pressure32 = (value.coerceIn(0.0f, 1.0f).toDouble() * MIDI2_32BIT_MAX.toDouble()).toLong().coerceIn(0L, MIDI2_32BIT_MAX)
+
+        val ump = if (note < 0) {
+            UmpFactory.midi2CAf(0, 0, pressure32)
+        } else {
+            UmpFactory.midi2PAf(0, 0, note, pressure32)
+        }
+
+        sendUmpToSlot(slotIndex, Ump(ump).toPlatformNativeBytes())
+    }
+
+    fun sendControlChange(slotIndex: Int = 0, controller: Int, value: Float) {
+        val data32 = (value.coerceIn(0.0f, 1.0f).toDouble() * MIDI2_32BIT_MAX.toDouble()).toLong().coerceIn(0L, MIDI2_32BIT_MAX)
+        val ump = Ump(UmpFactory.midi2CC(0, 0, controller, data32))
         sendUmpToSlot(slotIndex, ump.toPlatformNativeBytes())
     }
 

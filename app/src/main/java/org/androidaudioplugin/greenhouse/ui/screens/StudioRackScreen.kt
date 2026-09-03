@@ -91,6 +91,7 @@ fun StudioRackScreen(
         if (!isRackFolded) {
             // Master Control Banner
             MasterControlBanner(
+                viewModel = viewModel,
                 slots = viewModel.slots,
                 isProcessing = viewModel.isProcessing,
                 totalCpuLoadProvider = { viewModel.totalCpuLoad },
@@ -331,7 +332,367 @@ private val BANNER_CORNER_RADIUS = 20.dp
 private val BANNER_SPACING = 10.dp
 
 @Composable
+private fun MidiDeviceSelectionDialog(
+    viewModel: HostViewModel,
+    onDismiss: () -> Unit
+) {
+    val activeDev = viewModel.activeMidiDevice
+    val isConnected = viewModel.isMidiDeviceConnected
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .clip(RoundedCornerShape(20.dp))
+                .border(1.dp, StudioPanelBorder, RoundedCornerShape(20.dp)),
+            colors = CardDefaults.cardColors(containerColor = StudioSurface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(StudioSurfaceElevated)
+                                .border(1.dp, SproutGreen.copy(alpha = 0.45f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            MidiDin5Icon(
+                                tint = SproutGreen,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "MIDI CONTROLLERS",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SproutGreen,
+                                letterSpacing = 0.5.sp
+                            )
+
+                            Spacer(modifier = Modifier.height(1.dp))
+
+                            Text(
+                                text = if (isConnected && activeDev != null) {
+                                    "1 controller active"
+                                } else {
+                                    "${viewModel.availableMidiDevices.size} device(s) detected"
+                                },
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(StudioSurfaceElevated)
+                            .border(1.dp, StudioPanelBorder, CircleShape)
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                HorizontalDivider(color = StudioPanelBorder, thickness = 1.dp)
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Active Controller Card
+                if (activeDev != null && isConnected) {
+                    val activeName = org.androidaudioplugin.greenhouse.core.MidiControllerManager.getDeviceDisplayName(activeDev)
+                    val activeDevMan = org.androidaudioplugin.greenhouse.core.MidiControllerManager.getDeviceManufacturer(activeDev)
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SproutGreen.copy(alpha = 0.08f))
+                            .border(1.dp, SproutGreen.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "ACTIVE CONTROLLER",
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SproutGreen,
+                                    letterSpacing = 0.5.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                Text(
+                                    text = activeName,
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+
+                                Text(
+                                    text = "$activeDevMan • ${activeDev.outputPortCount} output port(s)",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.disconnectMidiDevice() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = DangerRed.copy(alpha = 0.15f),
+                                    contentColor = DangerRed
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "DISCONNECT",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // Show Virtual MIDI Devices Checkbox Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(StudioSurfaceVariant)
+                        .border(1.dp, StudioPanelBorder, RoundedCornerShape(10.dp))
+                        .clickable { viewModel.updateShowVirtualMidiDevices(!viewModel.showVirtualMidiDevices) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "Show Virtual MIDI Devices",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+
+                        Text(
+                            text = "Include virtual & loopback MIDI endpoints",
+                            fontSize = 10.sp,
+                            color = TextSecondary
+                        )
+                    }
+
+                    Checkbox(
+                        checked = viewModel.showVirtualMidiDevices,
+                        onCheckedChange = { viewModel.updateShowVirtualMidiDevices(it) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = SproutGreen,
+                            checkmarkColor = StudioBackground,
+                            uncheckedColor = TextMuted
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "AVAILABLE MIDI INPUT DEVICES (${viewModel.availableMidiDevices.size})",
+                    fontSize = 10.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = NeonCyan,
+                    letterSpacing = 0.5.sp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (viewModel.availableMidiDevices.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(StudioSurfaceVariant)
+                            .border(1.dp, StudioPanelBorder, RoundedCornerShape(10.dp))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No MIDI devices found.\nConnect a USB or Bluetooth MIDI keyboard to begin.",
+                            fontSize = 12.sp,
+                            color = TextMuted,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 17.sp
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        viewModel.availableMidiDevices.forEach { dev ->
+                            val isThisSelected = (dev.id == activeDev?.id) && isConnected
+                            val dName = org.androidaudioplugin.greenhouse.core.MidiControllerManager.getDeviceDisplayName(dev)
+                            val dMan = org.androidaudioplugin.greenhouse.core.MidiControllerManager.getDeviceManufacturer(dev)
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (isThisSelected) {
+                                            SproutGreen.copy(alpha = 0.12f)
+                                        } else {
+                                            StudioSurfaceVariant
+                                        }
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isThisSelected) {
+                                            SproutGreen.copy(alpha = 0.6f)
+                                        } else {
+                                            StudioPanelBorder
+                                        },
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable {
+                                        if (isThisSelected) {
+                                            viewModel.disconnectMidiDevice()
+                                        } else {
+                                            viewModel.selectMidiDevice(dev)
+                                        }
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = dName,
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isThisSelected) {
+                                                SproutGreen
+                                            } else {
+                                                TextPrimary
+                                            }
+                                        )
+
+                                        Spacer(modifier = Modifier.height(1.dp))
+
+                                        Text(
+                                            text = "$dMan • ${dev.outputPortCount} output port(s)",
+                                            fontSize = 10.5.sp,
+                                            color = TextSecondary
+                                        )
+                                    }
+
+                                    if (isThisSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(SproutGreen.copy(alpha = 0.2f))
+                                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                text = "IN USE",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = SproutGreen
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.rescanMidiDevices() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = StudioSurfaceElevated,
+                            contentColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = SproutGreen
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("RESCAN", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SproutGreen,
+                            contentColor = StudioBackground
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("DONE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MasterControlBanner(
+    viewModel: HostViewModel,
     slots: List<RackSlotData>,
     isProcessing: Boolean,
     totalCpuLoadProvider: () -> Float,
@@ -2096,6 +2457,7 @@ private fun MidiKeyboardSection(
     val octave = viewModel.keyboardOctave
     val isHoldEnabled = viewModel.isKeyboardHoldActive
     var isKeyboardFolded by remember { mutableStateOf(false) }
+    var showMidiMenuDialog by remember { mutableStateOf(false) }
 
     // Start & End notes covering full MIDI range 0..127 across octaves 0..9
     val startNote = octave * 12
@@ -2237,11 +2599,50 @@ private fun MidiKeyboardSection(
                     }
                 }
 
-                // Right: HOLD Mode Toggle Button & Fold/Hide Button
+                // Center / Right Controls
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val hasMidiDeviceAttached = viewModel.availableMidiDevices.isNotEmpty() || viewModel.isMidiDeviceConnected
+                    val isMidiInUse = viewModel.isMidiDeviceConnected && viewModel.activeMidiDevice != null
+
+                    // MIDI Controller Icon Button (Always visible if hardware controller is connected to the device)
+                    if (hasMidiDeviceAttached) {
+                        Box(
+                            modifier = Modifier
+                                .size(KEYBOARD_CONTROL_BUTTON_SIZE)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (isMidiInUse) {
+                                        SproutGreen.copy(alpha = 0.15f)
+                                    } else {
+                                        StudioSurfaceElevated
+                                    }
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isMidiInUse) {
+                                        SproutGreen.copy(alpha = 0.5f)
+                                    } else {
+                                        StudioPanelBorder
+                                    },
+                                    shape = RoundedCornerShape(6.dp)
+                                )
+                                .clickable { showMidiMenuDialog = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            MidiDin5Icon(
+                                tint = if (isMidiInUse) {
+                                    SproutGreen
+                                } else {
+                                    TextMuted
+                                },
+                                modifier = Modifier.size(KEYBOARD_CONTROL_ICON_SIZE)
+                            )
+                        }
+                    }
+
                     // HOLD Button
                     Box(
                         modifier = Modifier
@@ -2360,6 +2761,13 @@ private fun MidiKeyboardSection(
                 )
             }
         }
+    }
+
+    if (showMidiMenuDialog) {
+        MidiDeviceSelectionDialog(
+            viewModel = viewModel,
+            onDismiss = { showMidiMenuDialog = false }
+        )
     }
 }
 

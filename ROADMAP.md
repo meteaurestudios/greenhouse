@@ -10,6 +10,9 @@ This document outlines the architectural milestones, remaining tasks, and future
 - ✅ **Decoupled FIFO Render Architecture & MMAP Burst Detection**: Lock-free circular ring buffers decoupling the high-priority Oboe audio callback from the AAP plugin graph execution, coupled with native Android MMAP burst size detection and configurable buffer multiplier settings.
 - ✅ **Real-Time Per-Slot VU & Peak Level Meters**: Lock-free SIMD-accelerated peak & RMS stereo audio meter extraction in C++ (`AudioSimd.h`) paired with phosphor green/amber/red LED level meter UI on each rack slot card.
 - ✅ **Real-Time DSP CPU Load Monitors**: Live DSP callback load meter in the master workstation banner, per-slot load badges on active rack cards, and comprehensive hardware diagnostics in Engine Settings.
+- ✅ **Hardware MIDI Controller Input & Stream Parser (`MidiControllerManager`)**:
+  - Real-time Android `MidiManager` USB, Bluetooth LE, and Virtual MIDI controller support with dynamic hot-plugging and auto-reconnection.
+  - Low-latency byte stream parser for MIDI 1.0 (Note On/Off, zero-velocity Note Off, Running Status, 14-bit continuous Pitch Bend, Channel & Polyphonic Pressure, and Control Changes) converted to MIDI 2.0 UMP.
 - ✅ **Adaptive Native Plugin UI Display**: Smart proportional auto-fit, calibrated 15% zoom stepping aligned to 5% multiples, seamless 2D translation (`MOVE` mode), frictionless single-touch consecutive knob tweaking (`TWEAK` mode), stationary glass toolbar with far-left mode toggle, and full-screen immersive mode with playable live MIDI keyboard.
 - ✅ **Dynamic Multi-Slot Workstation Rack**: Configurable $N$-slot signal chains with active slot focus, parameter modulation, bypass toggles, and safe concurrent teardown/instantiation guards.
 - ✅ **Live Interactive MIDI Keyboard**: Octave shifting, note latch/hold mode, and polyphonic MIDI 2.0 UMP event dispatching.
@@ -23,7 +26,6 @@ This document outlines the architectural milestones, remaining tasks, and future
 
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
-| **Hardware MIDI Input Event Handling** | `High` | Connect external USB / Bluetooth MIDI controllers via Android MIDI Service / `ktmidi` to process hardware note-on/off and CC events in real-time into AAP. *(Top Priority)* |
 | **Pitch & Mod Wheels** | `High` | Add vertical pitch bend and modulation wheel controls alongside the on-screen MIDI keyboard. |
 | **Master Output Gain & Soft Limiter** | `Medium` | Add a master output gain slider and soft-clipper/limiter on the workstation banner to prevent digital clipping when testing high-gain plugins or polyphonic synths. |
 
@@ -41,7 +43,6 @@ This document outlines the architectural milestones, remaining tasks, and future
 
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
-| **MIDI Hot-Plugging & Device Status Indicator** | `Medium` | Display connected hardware MIDI devices in the header status bar and handle hot-plug connection/disconnection events. |
 | **Parameter Search & Grouping** | `Medium` | Search bar and collapsible group sections in the parameter list for complex plugins with dozens/hundreds of parameters. |
 | **Native GUI Fallback & Error Handling** | `Medium` | Display a smooth fallback message and retry option if a remote native plugin UI surface crashes or fails IPC binding. |
 | **Tablet & Landscape Optimization** | `Low` | Expanded dual-pane workstation view for tablet and landscape screen orientations. |

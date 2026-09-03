@@ -3,6 +3,7 @@ package org.androidaudioplugin.greenhouse.ui
 import android.app.Application
 import android.content.Context
 import android.media.AudioManager
+import android.media.midi.MidiDeviceInfo
 import android.util.Log
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.getValue
@@ -25,6 +26,7 @@ import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.core.AapAudioPlayer
 import org.androidaudioplugin.greenhouse.core.AapHostEngine
 import org.androidaudioplugin.greenhouse.core.MAX_HOST_BUFFER_FRAMES
+import org.androidaudioplugin.greenhouse.core.MidiControllerManager
 import org.androidaudioplugin.greenhouse.data.PluginCategory
 import org.androidaudioplugin.greenhouse.data.PluginRepository
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
@@ -178,6 +180,144 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
     }
     var keyboardOctave by mutableIntStateOf(4)
     var isKeyboardHoldActive by mutableStateOf(false)
+
+    // Hardware MIDI Controller State
+    var availableMidiDevices by mutableStateOf<List<MidiDeviceInfo>>(emptyList())
+        private set
+
+    var activeMidiDevice by mutableStateOf<MidiDeviceInfo?>(null)
+        private set
+
+    var isMidiDeviceConnected by mutableStateOf(false)
+        private set
+
+    var lastMidiEventText by mutableStateOf<String?>(null)
+        private set
+
+    var midiStatusMessage by mutableStateOf<String?>(null)
+        private set
+
+    private val midiEventListener = object : MidiControllerManager.MidiEventListener {
+        override fun onMidiDevicesChanged(devices: List<MidiDeviceInfo>, activeDevice: MidiDeviceInfo?) {
+            viewModelScope.launch(Dispatchers.Main) {
+                availableMidiDevices = devices
+                activeMidiDevice = activeDevice
+                isMidiDeviceConnected = (activeDevice != null)
+            }
+        }
+
+        override fun onMidiDeviceConnectionStateChanged(device: MidiDeviceInfo?, isConnected: Boolean, message: String) {
+            viewModelScope.launch(Dispatchers.Main) {
+                activeMidiDevice = device
+                isMidiDeviceConnected = isConnected
+                midiStatusMessage = message
+                statusMessage = message
+            }
+        }
+
+        override fun onNoteOn(note: Int, velocity: Float) {
+            viewModelScope.launch(Dispatchers.Main) {
+                if (note in 0..127) {
+                    keyboardNoteOnStates[note] = 1L
+                    val velInt = (velocity * 127f).toInt()
+                    lastMidiEventText = "Note On: ${MidiControllerManager.getNoteName(note)} ($velInt)"
+                }
+            }
+
+            audioPlayer?.sendNoteOn(note, velocity)
+        }
+
+        override fun onNoteOff(note: Int, velocity: Float) {
+            viewModelScope.launch(Dispatchers.Main) {
+                if (note in 0..127 && !isKeyboardHoldActive) {
+                    keyboardNoteOnStates[note] = 0L
+                    lastMidiEventText = "Note Off: ${MidiControllerManager.getNoteName(note)}"
+                }
+            }
+
+            audioPlayer?.sendNoteOff(note, velocity)
+        }
+
+        private var lastMidiUiUpdateTimestamp = 0L
+
+        override fun onPitchBend(value: Float) {
+            audioPlayer?.sendPitchBend(0, -1, value)
+
+            val now = System.currentTimeMillis()
+
+            if (now - lastMidiUiUpdateTimestamp > 50L) {
+                lastMidiUiUpdateTimestamp = now
+
+                viewModelScope.launch(Dispatchers.Main) {
+                    lastMidiEventText = "Pitch Bend: ${String.format(Locale.US, "%.2f", value)}"
+                }
+            }
+        }
+
+        override fun onPressure(note: Int, value: Float) {
+            audioPlayer?.sendPressure(0, note, value)
+
+            val now = System.currentTimeMillis()
+
+            if (now - lastMidiUiUpdateTimestamp > 50L) {
+                lastMidiUiUpdateTimestamp = now
+
+                viewModelScope.launch(Dispatchers.Main) {
+                    val target = if (note >= 0) {
+                        MidiControllerManager.getNoteName(note)
+                    } else {
+                        "Channel"
+                    }
+                    lastMidiEventText = "Pressure ($target): ${String.format(Locale.US, "%.2f", value)}"
+                }
+            }
+        }
+
+        override fun onControlChange(controller: Int, value: Float) {
+            audioPlayer?.sendControlChange(0, controller, value)
+
+            val now = System.currentTimeMillis()
+
+            if (now - lastMidiUiUpdateTimestamp > 50L) {
+                lastMidiUiUpdateTimestamp = now
+
+                viewModelScope.launch(Dispatchers.Main) {
+                    val valInt = (value * 127f).toInt()
+                    lastMidiEventText = "CC #$controller: $valInt"
+                }
+            }
+        }
+
+        override fun onRawUmp(bytes: ByteArray) {
+            // Direct UMP forwarding
+        }
+    }
+
+    private val midiControllerManager = MidiControllerManager(application, midiEventListener)
+
+    var showVirtualMidiDevices by mutableStateOf(false)
+        private set
+
+    fun updateShowVirtualMidiDevices(show: Boolean) {
+        showVirtualMidiDevices = show
+        midiControllerManager.includeVirtualDevices = show
+    }
+
+    fun selectMidiDevice(device: MidiDeviceInfo) {
+        midiControllerManager.openDevice(device)
+    }
+
+    fun disconnectMidiDevice() {
+        midiControllerManager.closeCurrentDevice()
+        activeMidiDevice = null
+        isMidiDeviceConnected = false
+        midiStatusMessage = "MIDI Controller Disconnected"
+        statusMessage = "MIDI Controller Disconnected"
+    }
+
+    fun rescanMidiDevices() {
+        midiControllerManager.rescanDevices()
+    }
 
     fun toggleKeyboardHold() {
         isKeyboardHoldActive = !isKeyboardHoldActive
@@ -812,6 +952,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         try {
+            midiControllerManager.close()
             audioPlayer?.close()
             hostEngine.close()
         } catch (e: Throwable) {
