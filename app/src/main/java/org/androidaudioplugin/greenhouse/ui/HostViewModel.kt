@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.media.AudioManager
 import android.util.Log
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -161,6 +162,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
     val slotParameterValues = Array(NUM_RACK_SLOTS) { mutableStateMapOf<Int, Double>() }
     val slotNativeUiZoomStates = Array(NUM_RACK_SLOTS) { SlotNativeUiZoomState() }
+    val slotParameterGridStates = Array(NUM_RACK_SLOTS) { LazyGridState() }
+    val slotPresetGridStates = Array(NUM_RACK_SLOTS) { LazyGridState() }
 
     // Persistent Keyboard State (survives screen navigation and slot changes)
     val keyboardNoteOnStates = mutableStateListOf<Long>().apply {
@@ -471,6 +474,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         )
         slotParameterValues[slotIndex].clear()
         slotNativeUiZoomStates[slotIndex].reset()
+        slotParameterGridStates[slotIndex] = LazyGridState()
+        slotPresetGridStates[slotIndex] = LazyGridState()
 
         viewModelScope.launch {
             try {
@@ -626,6 +631,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         )
         slotParameterValues[slotIndex].clear()
         slotNativeUiZoomStates[slotIndex].reset()
+        slotParameterGridStates[slotIndex] = LazyGridState()
+        slotPresetGridStates[slotIndex] = LazyGridState()
 
         if (slotIndex in 0 until slotLevels.size) {
             slotLevels[slotIndex] = SlotLevel(0f, 0f)

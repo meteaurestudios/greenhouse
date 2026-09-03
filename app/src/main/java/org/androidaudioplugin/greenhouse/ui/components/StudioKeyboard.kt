@@ -12,7 +12,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.changedToDown
@@ -21,10 +23,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.sp
+import org.androidaudioplugin.greenhouse.ui.theme.*
 
 private val WHITE_KEY_TO_SEMITONES = intArrayOf(0, 2, 4, 5, 7, 9, 11)
 private val BLACK_KEY_OFFSETS = floatArrayOf(0.05f, 0.1f, 0f, 0.05f, 0.15f, 0.25f, 0f)
 private val HAS_BLACK_KEY = booleanArrayOf(true, true, false, true, true, true, false)
+private val NOTE_NAMES = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 @Composable
 fun StudioKeyboard(
@@ -34,15 +44,16 @@ fun StudioKeyboard(
     whiteKeyWidth: Dp? = null,
     blackKeyHeight: Dp = 52.dp,
     totalHeight: Dp = 90.dp,
-    whiteKeyColor: Color = Color(0xFFF1F5F9),
-    blackKeyColor: Color = Color(0xFF171A21),
-    whiteNoteOnColor: Color = Color(0xFF38BDF8),
-    blackNoteOnColor: Color = Color(0xFF38BDF8),
+    whiteKeyColor: Color = KeyboardWhiteKey,
+    blackKeyColor: Color = KeyboardBlackKey,
+    whiteNoteOnColor: Color = SproutGreen,
+    blackNoteOnColor: Color = SproutGreenBright,
     onNoteOn: (note: Int) -> Unit,
     onNoteOff: (note: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
 
     BoxWithConstraints(modifier = modifier) {
         val totalWidthPx = constraints.maxWidth.toFloat()
@@ -142,6 +153,7 @@ fun StudioKeyboard(
                                         val note = findNoteAtPosition(change.position)
 
                                         if (note != null) {
+                                            change.consume()
                                             pointerIdToNote[pointerId] = note
                                             val count = pointerIdToNote.values.count { it == note }
 
@@ -150,34 +162,40 @@ fun StudioKeyboard(
                                             }
                                         }
                                     } else if (change.changedToUp() || !change.pressed) {
-                                        val oldNote = pointerIdToNote.remove(pointerId)
+                                        if (pointerIdToNote.containsKey(pointerId)) {
+                                            change.consume()
+                                            val oldNote = pointerIdToNote.remove(pointerId)
 
-                                        if (oldNote != null) {
-                                            val count = pointerIdToNote.values.count { it == oldNote }
+                                            if (oldNote != null) {
+                                                val count = pointerIdToNote.values.count { it == oldNote }
 
-                                            if (count == 0) {
-                                                onNoteOff(oldNote)
+                                                if (count == 0) {
+                                                    onNoteOff(oldNote)
+                                                }
                                             }
                                         }
                                     } else if (change.pressed) {
-                                        val currentNote = findNoteAtPosition(change.position)
-                                        val previousNote = pointerIdToNote[pointerId]
+                                        if (pointerIdToNote.containsKey(pointerId)) {
+                                            change.consume()
+                                            val currentNote = findNoteAtPosition(change.position)
+                                            val previousNote = pointerIdToNote[pointerId]
 
-                                        if (currentNote != null && currentNote != previousNote) {
-                                            pointerIdToNote[pointerId] = currentNote
+                                            if (currentNote != null && currentNote != previousNote) {
+                                                pointerIdToNote[pointerId] = currentNote
 
-                                            if (previousNote != null) {
-                                                val oldCount = pointerIdToNote.values.count { it == previousNote }
+                                                if (previousNote != null) {
+                                                    val oldCount = pointerIdToNote.values.count { it == previousNote }
 
-                                                if (oldCount == 0) {
-                                                    onNoteOff(previousNote)
+                                                    if (oldCount == 0) {
+                                                        onNoteOff(previousNote)
+                                                    }
                                                 }
-                                            }
 
-                                            val newCount = pointerIdToNote.values.count { it == currentNote }
+                                                val newCount = pointerIdToNote.values.count { it == currentNote }
 
-                                            if (newCount == 1) {
-                                                onNoteOn(currentNote)
+                                                if (newCount == 1) {
+                                                    onNoteOn(currentNote)
+                                                }
                                             }
                                         }
                                     }
@@ -196,35 +214,67 @@ fun StudioKeyboard(
         ) {
             // Draw background frame
             drawRect(
-                color = Color.Black,
-                size = size,
-                style = Stroke(width = 1.dp.toPx())
+                color = StudioBackground,
+                size = size
             )
 
-            // 1. Draw White Keys
-            for (pair in whiteKeyRects) {
+            // 1. Draw 2D Flat White Keys
+            for (i in 0 until numWhiteKeys) {
+                val pair = whiteKeyRects[i]
                 val note = pair.first
                 val rect = pair.second
                 val isNoteOn = note in 0..127 && (noteOnStates.getOrNull(note) ?: 0L) > 0L
                 val keyFillColor = if (isNoteOn) whiteNoteOnColor else whiteKeyColor
+                val isRootC = (note % 12 == 0)
 
                 drawRoundRect(
                     color = keyFillColor,
                     topLeft = Offset(rect.left, rect.top),
                     size = Size(rect.width - 1.5f, rect.height),
-                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
                 )
 
-                // Divider line between white keys
+                // Clean divider line between white keys
                 drawLine(
-                    color = Color(0xFF1E2430),
+                    color = KeyboardDivider,
                     start = Offset(rect.right - 1f, 0f),
                     end = Offset(rect.right - 1f, rect.bottom),
                     strokeWidth = 1.dp.toPx()
                 )
+
+                // Note Label: Root C key or Active Pressed Note
+                if (isNoteOn) {
+                    val noteName = "${NOTE_NAMES[note % 12]}${note / 12 - 1}"
+                    val textLayout = textMeasurer.measure(
+                        text = noteName,
+                        style = TextStyle(
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Black,
+                            color = StudioBackground
+                        )
+                    )
+                    val textX = rect.left + (rect.width - textLayout.size.width) / 2f
+                    val textY = rect.bottom - textLayout.size.height - 4.dp.toPx()
+                    drawText(textLayout, topLeft = Offset(textX, textY))
+                } else if (isRootC) {
+                    val rootName = "C${note / 12 - 1}"
+                    val textLayout = textMeasurer.measure(
+                        text = rootName,
+                        style = TextStyle(
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = TextMuted
+                        )
+                    )
+                    val textX = rect.left + (rect.width - textLayout.size.width) / 2f
+                    val textY = rect.bottom - textLayout.size.height - 4.dp.toPx()
+                    drawText(textLayout, topLeft = Offset(textX, textY))
+                }
             }
 
-            // 2. Draw Black Keys
+            // 2. Draw 2D Flat Black Keys
             for (pair in blackKeyRects) {
                 val note = pair.first
                 val rect = pair.second
@@ -235,17 +285,34 @@ fun StudioKeyboard(
                     color = keyFillColor,
                     topLeft = rect.topLeft,
                     size = rect.size,
-                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
                 )
 
-                // Subtle edge highlight for black keys
+                // Clean subtle edge outline for black keys
                 drawRoundRect(
-                    color = if (isNoteOn) Color.White.copy(alpha = 0.4f) else Color(0xFF333846),
+                    color = if (isNoteOn) Color.White.copy(alpha = 0.5f) else KeyboardBlackKeyOutline,
                     topLeft = rect.topLeft,
                     size = rect.size,
-                    cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
                     style = Stroke(width = 1.dp.toPx())
                 )
+
+                // Note Label on pressed black key
+                if (isNoteOn) {
+                    val noteName = "${NOTE_NAMES[note % 12]}${note / 12 - 1}"
+                    val textLayout = textMeasurer.measure(
+                        text = noteName,
+                        style = TextStyle(
+                            fontSize = 7.5.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Black,
+                            color = StudioBackground
+                        )
+                    )
+                    val textX = rect.left + (rect.width - textLayout.size.width) / 2f
+                    val textY = rect.bottom - textLayout.size.height - 4.dp.toPx()
+                    drawText(textLayout, topLeft = Offset(textX, textY))
+                }
             }
         }
     }
