@@ -89,6 +89,13 @@ data class SlotLevel(
     val right: Float = 0f
 )
 
+private data class PluginInstantiationResult(
+    val client: org.androidaudioplugin.hosting.AudioPluginClientBase,
+    val instance: NativeRemotePluginInstance,
+    val presetCount: Int,
+    val initialParamValues: Map<Int, Double>
+)
+
 class HostViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         const val NUM_RACK_SLOTS = 3
@@ -479,7 +486,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             try {
-                val (client, instance, rawPresetCount) = withContext(Dispatchers.IO) {
+                val instantiationResult = withContext(Dispatchers.IO) {
                     val (c, inst) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
 
                     // Populate dynamic parameters and ports if missing from static aap_metadata.xml
@@ -506,13 +513,41 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                         0
                     }
 
-                    Triple(c, inst, presetCount)
+                    val initialValues = mutableMapOf<Int, Double>()
+                    val paramCount = inst.getParameterCount()
+
+                    if (paramCount > 0) {
+                        for (i in 0 until paramCount) {
+                            val param = if (i < plugin.parameters.size) {
+                                plugin.parameters[i]
+                            } else {
+                                null
+                            }
+
+                            if (param != null) {
+                                val currentVal = try {
+                                    inst.getParameterValue(i)
+                                } catch (e: Throwable) {
+                                    param.defaultValue
+                                }
+
+                                initialValues[param.id] = currentVal
+                            }
+                        }
+                    } else {
+                        plugin.parameters.forEach { param ->
+                            initialValues[param.id] = param.defaultValue
+                        }
+                    }
+
+                    PluginInstantiationResult(c, inst, presetCount, initialValues)
                 }
 
+                val instance = instantiationResult.instance
+                val rawPresetCount = instantiationResult.presetCount
+
                 slotParameterValues[slotIndex].clear()
-                plugin.parameters.forEach { param ->
-                    slotParameterValues[slotIndex][param.id] = param.defaultValue
-                }
+                slotParameterValues[slotIndex].putAll(instantiationResult.initialParamValues)
 
                 slots[slotIndex] = slots[slotIndex].copy(
                     pluginInfo = plugin,
@@ -527,12 +562,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                 )
 
                 audioPlayer?.setSlotBypassed(slotIndex, false)
-                audioPlayer?.setSlotPlugin(slotIndex, instance, client)
-
-                // Dispatch initial default parameter values to plugin instance
-                plugin.parameters.forEach { param ->
-                    audioPlayer?.setParameterValue(slotIndex, param, param.defaultValue)
-                }
+                audioPlayer?.setSlotPlugin(slotIndex, instance, instantiationResult.client)
 
                 activeSlotIndex = slotIndex
 

@@ -754,10 +754,24 @@ private fun SignalRackHeader(
             }
 
             if (index < slots.lastIndex) {
-                val isFlowActive = isProcessing && isLoaded && !slot.isBypassed
+                val isUpstreamActive = isProcessing && (slots.firstOrNull()?.let { slot0 ->
+                    slot0.pluginInfo != null && !slot0.isBypassed
+                } ?: false)
+                val hasDownstreamLoaded = slots.drop(index + 1).any { nextSlot ->
+                    nextSlot.pluginInfo != null
+                }
+                val isCurrentSlotActive = isProcessing && isLoaded && !slot.isBypassed
+                val isFlowActive = isCurrentSlotActive || (isUpstreamActive && hasDownstreamLoaded)
+
+                val connectorColor = if (slot.index == 0) {
+                    BlossomCoral
+                } else {
+                    PeriwinkleBlue
+                }
+
                 SignalFlowConnector(
                     isActive = isFlowActive,
-                    color = if (slot.index == 0) BlossomCoral else PeriwinkleBlue
+                    color = connectorColor
                 )
             }
         }
