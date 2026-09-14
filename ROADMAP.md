@@ -14,6 +14,7 @@ This document outlines the architectural milestones, remaining tasks, and future
   - Real-time Android `MidiManager` USB, Bluetooth LE, and Virtual MIDI controller support with dynamic hot-plugging and auto-reconnection.
   - Low-latency byte stream parser for MIDI 1.0 (Note On/Off, zero-velocity Note Off, Running Status, 14-bit continuous Pitch Bend, Channel & Polyphonic Pressure, and Control Changes) converted to MIDI 2.0 UMP.
 - ✅ **Adaptive Native Plugin UI Display**: Smart proportional auto-fit, calibrated 15% zoom stepping aligned to 5% multiples, seamless 2D translation (`MOVE` mode), frictionless single-touch consecutive knob tweaking (`TWEAK` mode), stationary glass toolbar with far-left mode toggle, and full-screen immersive mode with playable live MIDI keyboard.
+- ✅ **Native GUI Fallback & Out-of-Process Crash Recovery**: Resilient IPC surface host (`GreenhouseSurfaceControlHost`) catching remote service crashes, preventing host main-thread termination, and presenting a studio-themed fallback card with one-click slot reload and parameter failover.
 - ✅ **Dynamic Multi-Slot Workstation Rack**: Configurable $N$-slot signal chains with active slot focus, parameter modulation, bypass toggles, and safe concurrent teardown/instantiation guards.
 - ✅ **Live Interactive MIDI Keyboard**: Octave shifting, note latch/hold mode, and polyphonic MIDI 2.0 UMP event dispatching.
 - ✅ **Comprehensive Plugin Browser**: Instant developer filtering, category badges, text search, and direct slot routing.
@@ -43,8 +44,7 @@ This document outlines the architectural milestones, remaining tasks, and future
 
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
-| **Parameter Search & Grouping** | `Medium` | Search bar and collapsible group sections in the parameter list for complex plugins with dozens/hundreds of parameters. |
-| **Native GUI Fallback & Error Handling** | `Medium` | Display a smooth fallback message and retry option if a remote native plugin UI surface crashes or fails IPC binding. |
+| **Parameter Grouping** | `Medium` | Collapsible group sections in the parameter list for complex plugins with dozens/hundreds of parameters. |
 | **Tablet & Landscape Optimization** | `Low` | Expanded dual-pane workstation view for tablet and landscape screen orientations. |
 | **Drag-and-Drop Slot Reordering** | `Low` | Allow reordering effect slots via intuitive drag-and-drop handles on the rack signal chain. |
 
@@ -54,5 +54,4 @@ This document outlines the architectural milestones, remaining tasks, and future
 
 | Feature / Task | Priority | Description |
 | :--- | :--- | :--- |
-| **IPC Crash Monitor & Recovery** | `High` | Automatically detect if a remote AAP plugin service process crashes, displaying an alert with a "Re-instantiate" action instead of hanging the host UI. |
 | **Automated UI & Integration Tests** | `Medium` | Compose UI tests and native audio pipeline integration tests validating catalog loading, parameter state changes, and audio rendering. |
