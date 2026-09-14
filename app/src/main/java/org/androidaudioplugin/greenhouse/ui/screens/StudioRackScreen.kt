@@ -55,6 +55,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
+import org.androidaudioplugin.greenhouse.ui.GreenhouseSurfaceControlHost
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.SlotLevel
@@ -1854,7 +1855,7 @@ private fun NativeUiLoadingView(
 
 @Composable
 private fun NativePluginSurfaceViewer(
-    host: GuiHelper.NativeEmbeddedSurfaceControlHost,
+    host: GreenhouseSurfaceControlHost,
     preferredSize: GuiHelper.Size,
     isFitMode: Boolean,
     isMoveMode: Boolean,
@@ -2027,6 +2028,247 @@ private fun NativePluginSurfaceViewer(
     }
 }
 
+private val FALLBACK_CARD_MAX_WIDTH = 460.dp
+private val FALLBACK_CARD_CORNER_RADIUS = 20.dp
+private val FALLBACK_CARD_PADDING = 24.dp
+private val FALLBACK_ICON_SIZE = 40.dp
+private val FALLBACK_ICON_CONTAINER_SIZE = 64.dp
+private const val FALLBACK_BORDER_ALPHA = 0.45f
+private const val FALLBACK_ICON_BG_ALPHA = 0.15f
+private val FALLBACK_ACTION_SPACING = 10.dp
+private val FALLBACK_ACTION_CORNER_RADIUS = 10.dp
+
+private sealed interface NativeUiStatus {
+    object Loading : NativeUiStatus
+    object Ready : NativeUiStatus
+    data class Error(
+        val message: String,
+        val details: String? = null,
+        val isProcessDead: Boolean = false
+    ) : NativeUiStatus
+}
+
+@Composable
+private fun NativeUiErrorFallbackCard(
+    plugin: PluginInformation,
+    errorMessage: String,
+    errorDetails: String?,
+    isProcessDead: Boolean,
+    onRetry: () -> Unit,
+    onSwitchToParameters: () -> Unit,
+    onReloadPlugin: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(FALLBACK_CARD_CORNER_RADIUS))
+            .background(StudioBackground)
+            .border(1.dp, BerryRose.copy(alpha = FALLBACK_BORDER_ALPHA), RoundedCornerShape(FALLBACK_CARD_CORNER_RADIUS)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = FALLBACK_CARD_MAX_WIDTH)
+                .padding(FALLBACK_CARD_PADDING),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(FALLBACK_ICON_CONTAINER_SIZE)
+                    .clip(CircleShape)
+                    .background(BerryRose.copy(alpha = FALLBACK_ICON_BG_ALPHA))
+                    .border(1.dp, BerryRose.copy(alpha = FALLBACK_BORDER_ALPHA), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.WarningAmber,
+                    contentDescription = null,
+                    tint = BerryRose,
+                    modifier = Modifier.size(FALLBACK_ICON_SIZE)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = errorMessage,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val descriptionText = if (isProcessDead) {
+                "The remote plugin process crashed or terminated unexpectedly. Reload the slot to restart the plugin."
+            } else {
+                "The native editor could not be connected. You can retry the UI connection or switch to generic parameter controls."
+            }
+
+            Text(
+                text = descriptionText,
+                fontSize = 12.sp,
+                color = TextSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp
+            )
+
+            if (!errorDetails.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = StudioSurfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, StudioPanelBorder)
+                ) {
+                    Text(
+                        text = errorDetails,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = BlossomCoralSoft,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            if (isProcessDead) {
+                Button(
+                    onClick = onReloadPlugin,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SproutGreen,
+                        contentColor = StudioBackground
+                    ),
+                    shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RestartAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = "Reload Plugin",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = onSwitchToParameters,
+                    shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = TextPrimary
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, StudioPanelBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Text(
+                        text = "Switch to Parameters",
+                        fontSize = 12.sp
+                    )
+                }
+            } else {
+                Button(
+                    onClick = onSwitchToParameters,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SproutGreen,
+                        contentColor = StudioBackground
+                    ),
+                    shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = "Switch to Parameters",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(FALLBACK_ACTION_SPACING)
+                ) {
+                    OutlinedButton(
+                        onClick = onRetry,
+                        shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = TextPrimary
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, StudioPanelBorder),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Text(
+                            text = "Retry UI",
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = onReloadPlugin,
+                        shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = BerryRose
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BerryRose.copy(alpha = FALLBACK_BORDER_ALPHA)),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RestartAlt,
+                            contentDescription = null,
+                            tint = BerryRose,
+                            modifier = Modifier.size(16.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Text(
+                            text = "Reload Slot",
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun NativePluginSurfaceContainer(
     viewModel: HostViewModel,
@@ -2040,18 +2282,19 @@ private fun NativePluginSurfaceContainer(
     val instance = slot.instance
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM && instance != null) {
-        var surfaceHost by remember { mutableStateOf<GuiHelper.NativeEmbeddedSurfaceControlHost?>(null) }
+        var surfaceHost by remember { mutableStateOf<GreenhouseSurfaceControlHost?>(null) }
         var preferredSize by remember { mutableStateOf(GuiHelper.Size(DEFAULT_NATIVE_UI_WIDTH, DEFAULT_NATIVE_UI_HEIGHT)) }
-        var isUiLoading by remember { mutableStateOf(true) }
+        var uiStatus by remember(instance.instanceId) { mutableStateOf<NativeUiStatus>(NativeUiStatus.Loading) }
+        var retryCount by remember(instance.instanceId) { mutableIntStateOf(0) }
 
         val zoomState = viewModel.slotNativeUiZoomStates[slot.index]
         var calculatedFitScale by remember { mutableFloatStateOf(1.0f) }
         var displayedScale by remember { mutableFloatStateOf(1.0f) }
 
-        DisposableEffect(instance.instanceId) {
-            isUiLoading = true
+        DisposableEffect(instance.instanceId, retryCount) {
+            uiStatus = NativeUiStatus.Loading
 
-            val host = GuiHelper.NativeEmbeddedSurfaceControlHost(
+            val host = GreenhouseSurfaceControlHost(
                 context = context,
                 pluginPackageName = plugin.packageName,
                 pluginId = plugin.pluginId ?: "",
@@ -2062,6 +2305,26 @@ private fun NativePluginSurfaceContainer(
                 if (newWidth > 0 && newHeight > 0) {
                     preferredSize = GuiHelper.Size(newWidth, newHeight)
                 }
+            }
+
+            host.onConnected = {
+                uiStatus = NativeUiStatus.Ready
+            }
+
+            host.onDisconnected = { reason ->
+                uiStatus = NativeUiStatus.Error(
+                    message = "Plugin Process Crashed",
+                    details = reason,
+                    isProcessDead = true
+                )
+            }
+
+            host.onError = { error ->
+                uiStatus = NativeUiStatus.Error(
+                    message = "Plugin Process Error",
+                    details = error.localizedMessage ?: error.javaClass.simpleName,
+                    isProcessDead = true
+                )
             }
 
             surfaceHost = host
@@ -2079,10 +2342,15 @@ private fun NativePluginSurfaceContainer(
 
                     delay(NATIVE_UI_STABILIZATION_DELAY_MS)
 
-                    isUiLoading = false
+                    if (uiStatus is NativeUiStatus.Loading) {
+                        uiStatus = NativeUiStatus.Ready
+                    }
                 } catch (e: Throwable) {
-                    isUiLoading = false
-                    viewModel.updateViewMode(StudioRackViewMode.PARAMETERS)
+                    uiStatus = NativeUiStatus.Error(
+                        message = "Failed to Connect Editor",
+                        details = e.localizedMessage ?: e.javaClass.simpleName,
+                        isProcessDead = false
+                    )
                 }
             }
 
@@ -2095,124 +2363,147 @@ private fun NativePluginSurfaceContainer(
             }
         }
 
-        surfaceHost?.let { host ->
-            Column(
+        val currentStatus = uiStatus
+
+        if (currentStatus is NativeUiStatus.Error) {
+            NativeUiErrorFallbackCard(
+                plugin = plugin,
+                errorMessage = currentStatus.message,
+                errorDetails = currentStatus.details,
+                isProcessDead = currentStatus.isProcessDead,
+                onRetry = {
+                    retryCount++
+                },
+                onSwitchToParameters = {
+                    viewModel.updateViewMode(StudioRackViewMode.PARAMETERS)
+                },
+                onReloadPlugin = {
+                    viewModel.loadPluginIntoSlot(slot.index, plugin)
+                },
                 modifier = Modifier.fillMaxSize()
-            ) {
-                // Dedicated Top Toolbar Row above the native surface
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            )
+        } else {
+            surfaceHost?.let { host ->
+                Column(
+                    modifier = Modifier.fillMaxSize()
                 ) {
+                    // Dedicated Top Toolbar Row above the native surface
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        NativeSurfaceZoomToolbar(
-                            isFitMode = zoomState.isFitMode,
-                            displayedScale = displayedScale,
-                            onZoomIn = {
-                                val base = if (zoomState.isFitMode) {
-                                    calculatedFitScale
-                                } else {
-                                    zoomState.currentScale
-                                }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            NativeSurfaceZoomToolbar(
+                                isFitMode = zoomState.isFitMode,
+                                displayedScale = displayedScale,
+                                onZoomIn = {
+                                    val base = if (zoomState.isFitMode) {
+                                        calculatedFitScale
+                                    } else {
+                                        zoomState.currentScale
+                                    }
 
-                                val target = (Math.round((base + NATIVE_UI_ZOOM_STEP) * NATIVE_UI_ZOOM_ROUNDING_SCALE) / NATIVE_UI_ZOOM_ROUNDING_SCALE).toFloat().coerceIn(NATIVE_UI_MIN_SCALE, NATIVE_UI_MAX_SCALE)
+                                    val target = (Math.round((base + NATIVE_UI_ZOOM_STEP) * NATIVE_UI_ZOOM_ROUNDING_SCALE) / NATIVE_UI_ZOOM_ROUNDING_SCALE).toFloat().coerceIn(NATIVE_UI_MIN_SCALE, NATIVE_UI_MAX_SCALE)
 
-                                zoomState.isFitMode = false
-                                zoomState.currentScale = target
-                            },
-                            onZoomOut = {
-                                val base = if (zoomState.isFitMode) {
-                                    calculatedFitScale
-                                } else {
-                                    zoomState.currentScale
-                                }
-
-                                val target = (Math.round((base - NATIVE_UI_ZOOM_STEP) * NATIVE_UI_ZOOM_ROUNDING_SCALE) / NATIVE_UI_ZOOM_ROUNDING_SCALE).toFloat()
-
-                                if (target <= calculatedFitScale + NATIVE_UI_FIT_SNAP_THRESHOLD) {
-                                    zoomState.isFitMode = true
-                                    zoomState.isMoveMode = false
-                                    zoomState.panOffsetX = 0f
-                                    zoomState.panOffsetY = 0f
-                                } else {
                                     zoomState.isFitMode = false
                                     zoomState.currentScale = target
-                                }
-                            },
-                            showFullscreenButton = true,
-                            isFullscreen = isRackFolded,
-                            onToggleFullscreen = onToggleFoldRack
-                        )
-
-                        if (!zoomState.isFitMode) {
-                            NativeSurfaceInteractionToggle(
-                                isMoveMode = zoomState.isMoveMode,
-                                onSelectTweakMode = {
-                                    zoomState.isMoveMode = false
                                 },
-                                onSelectMoveMode = {
-                                    zoomState.isMoveMode = true
-                                }
+                                onZoomOut = {
+                                    val base = if (zoomState.isFitMode) {
+                                        calculatedFitScale
+                                    } else {
+                                        zoomState.currentScale
+                                    }
+
+                                    val target = (Math.round((base - NATIVE_UI_ZOOM_STEP) * NATIVE_UI_ZOOM_ROUNDING_SCALE) / NATIVE_UI_ZOOM_ROUNDING_SCALE).toFloat()
+
+                                    if (target <= calculatedFitScale + NATIVE_UI_FIT_SNAP_THRESHOLD) {
+                                        zoomState.isFitMode = true
+                                        zoomState.isMoveMode = false
+                                        zoomState.panOffsetX = 0f
+                                        zoomState.panOffsetY = 0f
+                                    } else {
+                                        zoomState.isFitMode = false
+                                        zoomState.currentScale = target
+                                    }
+                                },
+                                showFullscreenButton = true,
+                                isFullscreen = isRackFolded,
+                                onToggleFullscreen = onToggleFoldRack
+                            )
+
+                            if (!zoomState.isFitMode) {
+                                NativeSurfaceInteractionToggle(
+                                    isMoveMode = zoomState.isMoveMode,
+                                    onSelectTweakMode = {
+                                        zoomState.isMoveMode = false
+                                    },
+                                    onSelectMoveMode = {
+                                        zoomState.isMoveMode = true
+                                    }
+                                )
+                            }
+                        }
+
+                        if (isRackFolded) {
+                            Text(
+                                text = plugin.displayName,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(start = 8.dp)
                             )
                         }
                     }
 
-                    if (isRackFolded) {
-                        Text(
-                            text = plugin.displayName,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(start = 8.dp)
+                    // Sizable Centered Native Surface View + Smooth Loading Overlay
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        NativePluginSurfaceViewer(
+                            host = host,
+                            preferredSize = preferredSize,
+                            isFitMode = zoomState.isFitMode,
+                            isMoveMode = zoomState.isMoveMode,
+                            currentScale = zoomState.currentScale,
+                            panOffsetX = zoomState.panOffsetX,
+                            panOffsetY = zoomState.panOffsetY,
+                            onFitScaleCalculated = { calculatedFitScale = it },
+                            onEffectiveScaleCalculated = { displayedScale = it },
+                            onPanDelta = { dx, dy ->
+                                zoomState.panOffsetX += dx
+                                zoomState.panOffsetY += dy
+                            },
+                            modifier = Modifier.fillMaxSize()
                         )
-                    }
-                }
 
-                // Sizable Centered Native Surface View + Smooth Loading Overlay
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    NativePluginSurfaceViewer(
-                        host = host,
-                        preferredSize = preferredSize,
-                        isFitMode = zoomState.isFitMode,
-                        isMoveMode = zoomState.isMoveMode,
-                        currentScale = zoomState.currentScale,
-                        panOffsetX = zoomState.panOffsetX,
-                        panOffsetY = zoomState.panOffsetY,
-                        onFitScaleCalculated = { calculatedFitScale = it },
-                        onEffectiveScaleCalculated = { displayedScale = it },
-                        onPanDelta = { dx, dy ->
-                            zoomState.panOffsetX += dx
-                            zoomState.panOffsetY += dy
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
+                        val isUiLoading = currentStatus is NativeUiStatus.Loading
 
-                    val loadingAlpha by animateFloatAsState(
-                        targetValue = if (isUiLoading) 1.0f else 0.0f,
-                        animationSpec = tween(durationMillis = NATIVE_UI_FADE_ANIMATION_MS),
-                        label = "NativeUiLoadingAlpha"
-                    )
-
-                    if (loadingAlpha > 0.0f) {
-                        NativeUiLoadingView(
-                            slot = slot,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer { alpha = loadingAlpha }
+                        val loadingAlpha by animateFloatAsState(
+                            targetValue = if (isUiLoading) 1.0f else 0.0f,
+                            animationSpec = tween(durationMillis = NATIVE_UI_FADE_ANIMATION_MS),
+                            label = "NativeUiLoadingAlpha"
                         )
+
+                        if (loadingAlpha > 0.0f) {
+                            NativeUiLoadingView(
+                                slot = slot,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { alpha = loadingAlpha }
+                            )
+                        }
                     }
                 }
             }
