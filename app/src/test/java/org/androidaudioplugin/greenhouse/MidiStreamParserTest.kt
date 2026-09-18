@@ -1,15 +1,9 @@
 package org.androidaudioplugin.greenhouse
 
-import android.content.Context
 import android.media.midi.MidiDeviceInfo
-import dev.atsushieno.ktmidi.Ump
-import dev.atsushieno.ktmidi.UmpFactory
-import dev.atsushieno.ktmidi.toPlatformNativeBytes
 import org.androidaudioplugin.greenhouse.core.MidiControllerManager
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.lang.reflect.Field
 
 class MidiStreamParserTest {
 
@@ -48,11 +42,12 @@ class MidiStreamParserTest {
 
     private fun createUninitializedManager(listener: MidiControllerManager.MidiEventListener): MidiControllerManager {
         // Allocate without calling Android Context constructor methods
-        val sunReflection = Class.forName("sun.misc.Unsafe")
-        val unsafeField = sunReflection.getDeclaredField("theUnsafe")
+        val unsafeClass = Class.forName("sun.misc.Unsafe")
+        val unsafeField = unsafeClass.getDeclaredField("theUnsafe")
         unsafeField.isAccessible = true
-        val unsafe = unsafeField.get(null) as sun.misc.Unsafe
-        val manager = unsafe.allocateInstance(MidiControllerManager::class.java) as MidiControllerManager
+        val unsafeInstance = unsafeField.get(null)
+        val allocateInstanceMethod = unsafeClass.getMethod("allocateInstance", Class::class.java)
+        val manager = allocateInstanceMethod.invoke(unsafeInstance, MidiControllerManager::class.java) as MidiControllerManager
 
         val listenerField = MidiControllerManager::class.java.getDeclaredField("listener")
         listenerField.isAccessible = true

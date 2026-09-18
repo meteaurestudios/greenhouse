@@ -844,6 +844,8 @@ fun NativePluginSurfaceContainer(
             }
 
             onDispose {
+                viewModel.syncParametersForSlot(slot.index, ignoreCooldown = true)
+
                 try {
                     host.close()
                 } catch (e: Throwable) {

@@ -84,6 +84,9 @@ data class RackSlotData(
 
     val hasCustomUi: Boolean
         get() = pluginInfo?.hasCustomUi == true
+
+    val isLoaded: Boolean
+        get() = instance != null && pluginInfo != null
 }
 
 data class SlotLevel(
@@ -107,6 +110,9 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         const val CPU_MONITOR_INTERVAL_MS = 100L
         const val METER_MONITOR_INTERVAL_MS = 33L
         const val CPU_UPDATE_TICKS = 3
+        const val PARAM_SYNC_EPSILON = 1e-5
+        const val HOST_EDIT_IGNORE_PLUGIN_MS = 350L
+        const val PARAMETER_SYNC_INTERVAL_TICKS = 1
         val AVAILABLE_BURST_MULTIPLIERS = listOf(2, 4, 8, 16, 32)
     }
 
@@ -170,6 +176,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     val slotParameterValues = Array(NUM_RACK_SLOTS) { mutableStateMapOf<Int, Double>() }
+    val lastHostEditTimestamps = Array(NUM_RACK_SLOTS) { mutableMapOf<Int, Long>() }
     val slotNativeUiZoomStates = Array(NUM_RACK_SLOTS) { SlotNativeUiZoomState() }
     val slotParameterGridStates = Array(NUM_RACK_SLOTS) { LazyGridState() }
     val slotPresetGridStates = Array(NUM_RACK_SLOTS) { LazyGridState() }
@@ -476,10 +483,111 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
+                if (tickCount % PARAMETER_SYNC_INTERVAL_TICKS == 0) {
+                    val now = System.currentTimeMillis()
+                    val allParamUpdates = mutableListOf<Triple<Int, Int, Double>>()
+
+                    for (slotIndex in 0 until NUM_RACK_SLOTS) {
+                        val updates = collectSlotParameterUpdates(slotIndex, now)
+
+                        for (update in updates) {
+                            allParamUpdates.add(Triple(slotIndex, update.first, update.second))
+                        }
+                    }
+
+                    if (allParamUpdates.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            for ((slotIndex, paramId, value) in allParamUpdates) {
+                                slotParameterValues[slotIndex][paramId] = value
+                            }
+                        }
+                    }
+                }
+
                 tickCount++
                 delay(METER_MONITOR_INTERVAL_MS)
             }
         }
+    }
+
+    fun syncParametersForSlot(slotIndex: Int, ignoreCooldown: Boolean = false) {
+        if (slotIndex !in 0 until NUM_RACK_SLOTS) {
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.Default) {
+            val now = System.currentTimeMillis()
+            val updates = collectSlotParameterUpdates(slotIndex, now, ignoreCooldown)
+
+            if (updates.isNotEmpty()) {
+                withContext(Dispatchers.Main) {
+                    for ((paramId, value) in updates) {
+                        slotParameterValues[slotIndex][paramId] = value
+                    }
+                }
+            }
+        }
+    }
+
+    private fun collectSlotParameterUpdates(
+        slotIndex: Int,
+        now: Long,
+        ignoreCooldown: Boolean = false
+    ): List<Pair<Int, Double>> {
+        val slot = slots[slotIndex]
+        val inst = slot.instance
+        val plugin = slot.pluginInfo
+
+        if (!slot.isLoaded || inst == null || plugin == null) {
+            return emptyList()
+        }
+
+        val paramCount = try {
+            inst.getParameterCount()
+        } catch (e: Throwable) {
+            0
+        }
+
+        if (paramCount > plugin.parameters.size) {
+            for (i in plugin.parameters.size until paramCount) {
+                try {
+                    plugin.parameters.add(inst.getParameter(i))
+                } catch (e: Throwable) {
+                    Log.w(tag, "Failed to dynamically discover parameter $i", e)
+                }
+            }
+        }
+
+        val cachedValues = slotParameterValues[slotIndex]
+        val lastEdits = lastHostEditTimestamps[slotIndex]
+        val changedParams = mutableListOf<Pair<Int, Double>>()
+        val parametersSnapshot = plugin.parameters.toList()
+
+        for (i in 0 until parametersSnapshot.size) {
+            val param = parametersSnapshot[i]
+
+            if (!ignoreCooldown) {
+                val lastEdit = lastEdits[param.id] ?: 0L
+
+                if (now - lastEdit < HOST_EDIT_IGNORE_PLUGIN_MS) {
+                    continue
+                }
+            }
+
+            val currentVal = try {
+                inst.getParameterValue(i)
+            } catch (e: Throwable) {
+                continue
+            }
+
+            val cachedVal = cachedValues[param.id]
+
+            if (cachedVal == null || Math.abs(cachedVal - currentVal) > PARAM_SYNC_EPSILON) {
+                changedParams.add(Pair(param.id, currentVal))
+            }
+        }
+
+        return changedParams
     }
 
     val activeSlot: RackSlotData
@@ -495,6 +603,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
                 currentViewMode = StudioRackViewMode.PARAMETERS
             } else if (currentViewMode == StudioRackViewMode.NATIVE_SURFACE && !slot.hasCustomUi) {
                 currentViewMode = StudioRackViewMode.PARAMETERS
+            }
+
+            if (currentViewMode == StudioRackViewMode.PARAMETERS) {
+                syncParametersForSlot(slotIndex, ignoreCooldown = true)
             }
         }
     }
@@ -555,6 +667,10 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateViewMode(mode: StudioRackViewMode) {
         currentViewMode = mode
+
+        if (mode == StudioRackViewMode.PARAMETERS) {
+            syncParametersForSlot(activeSlotIndex, ignoreCooldown = true)
+        }
     }
 
     fun selectCategory(category: PluginCategory) {
@@ -620,6 +736,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             loadingPluginName = plugin.displayName
         )
         slotParameterValues[slotIndex].clear()
+        lastHostEditTimestamps[slotIndex].clear()
         slotNativeUiZoomStates[slotIndex].reset()
         slotParameterGridStates[slotIndex] = LazyGridState()
         slotPresetGridStates[slotIndex] = LazyGridState()
@@ -800,6 +917,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             loadingPluginName = null
         )
         slotParameterValues[slotIndex].clear()
+        lastHostEditTimestamps[slotIndex].clear()
         slotNativeUiZoomStates[slotIndex].reset()
         slotParameterGridStates[slotIndex] = LazyGridState()
         slotPresetGridStates[slotIndex] = LazyGridState()
@@ -887,6 +1005,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        lastHostEditTimestamps[slotIndex][parameter.id] = System.currentTimeMillis()
         slotParameterValues[slotIndex][parameter.id] = value
         audioPlayer?.setParameterValue(slotIndex, parameter, value)
     }
@@ -910,36 +1029,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer?.setPresetIndex(slotIndex, targetNativeIndex)
 
         // Resync parameter values from plugin instance in background
-        val inst = slot.instance
-        val plugin = slot.pluginInfo
-
-        if (inst != null && plugin != null) {
-            viewModelScope.launch {
-                val updatedValues = withContext(Dispatchers.IO) {
-                    val values = mutableMapOf<Int, Double>()
-                    val paramCount = inst.getParameterCount()
-
-                    for (i in 0 until paramCount) {
-                        val param = if (i < plugin.parameters.size) {
-                            plugin.parameters[i]
-                        } else {
-                            null
-                        }
-
-                        if (param != null) {
-                            val currentVal = inst.getParameterValue(i)
-                            values[param.id] = currentVal
-                        }
-                    }
-
-                    values
-                }
-
-                updatedValues.forEach { (paramId, value) ->
-                    slotParameterValues[slotIndex][paramId] = value
-                }
-            }
-        }
+        syncParametersForSlot(slotIndex, ignoreCooldown = true)
 
         statusMessage = "${slot.title} Preset: $presetName"
     }
