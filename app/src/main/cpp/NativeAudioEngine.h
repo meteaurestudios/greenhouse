@@ -25,7 +25,7 @@ constexpr double DSP_LOAD_EMA_CURRENT_WEIGHT = 0.15;
 constexpr uint64_t QUIESCENT_EPOCHS_TO_WAIT = 2;
 constexpr useconds_t QUIESCENT_POLL_INTERVAL_US = 500;
 constexpr int32_t MAX_QUIESCENT_WAIT_ATTEMPTS = 50; // 50 * 500us = 25ms maximum watchdog timeout
-constexpr float METER_DECAY_FACTOR = 0.88f;
+constexpr float METER_DECAY_FACTOR = 0.80f;
 constexpr float METER_MIN_THRESHOLD = 0.0001f;
 
 struct RackSlot
