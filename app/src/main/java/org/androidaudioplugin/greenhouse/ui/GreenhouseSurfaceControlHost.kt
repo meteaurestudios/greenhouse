@@ -20,17 +20,24 @@ import android.view.View
 import android.view.ViewGroup.LayoutParams
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
+import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.androidaudioplugin.AudioPluginViewService
 import org.androidaudioplugin.hosting.GuiHelper
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val TAG = "GreenhouseSurfaceHost"
-private const val PREFERRED_SIZE_TIMEOUT_MS = 3000L
+private val PREFERRED_SIZE_TIMEOUT = 3000.milliseconds
+private val SURFACE_ATTACH_TIMEOUT = 3000.milliseconds
+private const val INVALID_SESSION_ID = -1
 private const val RECONNECT_SUPPRESSION_LOG_MSG = "Ignoring subsequent onServiceConnected event on active/dead connection"
 private const val DISCONNECT_SERVICE_MSG = "Remote UI service disconnected unexpectedly"
 private const val DISCONNECT_BINDING_DIED_MSG = "Remote UI IPC binding died"
@@ -44,6 +51,7 @@ private const val DISCONNECT_NULL_BINDING_MSG = "Remote UI returned null binding
  * - Protects coroutine continuations and listeners from duplicate execution if Android auto-restarts a dying service.
  * - Forwards remote disconnection events to the UI layer for smooth fallback handling.
  */
+@RequiresApi(Build.VERSION_CODES.R)
 class GreenhouseSurfaceControlHost(
     private val context: Context,
     private val pluginPackageName: String,
@@ -60,6 +68,7 @@ class GreenhouseSurfaceControlHost(
 
     private var activeConnection: SafeServiceConnection? = null
     private var surfacePackage: SurfaceControlViewHost.SurfacePackage? = null
+    private var connectedGuiSessionId: Int = INVALID_SESSION_ID
     private var isDisposed = false
 
     private val incomingMessenger = Messenger(object : Handler(messageHandlerThread.looper) {
@@ -74,21 +83,47 @@ class GreenhouseSurfaceControlHost(
                     listener(width, height)
                 }
             } else {
-                val receivedPackage = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    msg.data.getParcelable(
-                        AudioPluginViewService.MESSAGE_KEY_SURFACE_PACKAGE,
-                        SurfaceControlViewHost.SurfacePackage::class.java
-                    )
+                val receivedPackage = BundleCompat.getParcelable(
+                    msg.data,
+                    AudioPluginViewService.MESSAGE_KEY_SURFACE_PACKAGE,
+                    SurfaceControlViewHost.SurfacePackage::class.java
+                )
+
+                val receivedSessionId = if (msg.data.containsKey(AudioPluginViewService.MESSAGE_KEY_GUI_SESSION_ID)) {
+                    msg.data.getInt(AudioPluginViewService.MESSAGE_KEY_GUI_SESSION_ID)
+                } else if (msg.data.containsKey(AudioPluginViewService.LEGACY_MESSAGE_KEY_GUI_SESSION_ID)) {
+                    msg.data.getInt(AudioPluginViewService.LEGACY_MESSAGE_KEY_GUI_SESSION_ID)
                 } else {
-                    @Suppress("DEPRECATION")
-                    msg.data.getParcelable(AudioPluginViewService.MESSAGE_KEY_SURFACE_PACKAGE) as? SurfaceControlViewHost.SurfacePackage
+                    INVALID_SESSION_ID
                 }
 
-                if (receivedPackage != null && !isDisposed) {
-                    surfacePackage?.release()
+                if (isDisposed) {
+                    releaseSurfacePackage(receivedPackage)
+
+                    if (receivedSessionId != INVALID_SESSION_ID) {
+                        disconnectRemoteSession(receivedSessionId)
+                    }
+
+                    return
+                }
+
+                connectedGuiSessionId = receivedSessionId
+
+                if (receivedPackage != null) {
+                    releaseSurfacePackage(surfacePackage)
                     surfacePackage = receivedPackage
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Handler(Looper.getMainLooper()).post {
+                        if (isDisposed) {
+                            releaseSurfacePackage(receivedPackage)
+
+                            if (receivedSessionId != INVALID_SESSION_ID) {
+                                disconnectRemoteSession(receivedSessionId)
+                            }
+
+                            return@post
+                        }
+
                         try {
                             surfaceView.setChildSurfacePackage(receivedPackage)
                             onConnected?.invoke()
@@ -106,7 +141,7 @@ class GreenhouseSurfaceControlHost(
         GreenhouseSurfaceView(context, this).apply {
             isFocusable = true
             isFocusableInTouchMode = true
-            setZOrderOnTop(true)
+            setZOrderMediaOverlay(true)
         }
     }
 
@@ -172,12 +207,41 @@ class GreenhouseSurfaceControlHost(
                 return@withContext GuiHelper.Size(fallbackWidth, fallbackHeight)
             }
 
-            val computedSize = withTimeoutOrNull(PREFERRED_SIZE_TIMEOUT_MS) {
+            val computedSize = withTimeoutOrNull(PREFERRED_SIZE_TIMEOUT) {
                 resultDeferred.await()
             } ?: GuiHelper.Size(fallbackWidth, fallbackHeight)
 
             connection.unbind()
             computedSize
+        }
+    }
+
+    private suspend fun awaitSurfaceAttached() {
+        withContext(Dispatchers.Main) {
+            if (surfaceView.isAttachedToWindow && surfaceView.display != null) {
+                return@withContext
+            }
+
+            withTimeout(SURFACE_ATTACH_TIMEOUT) {
+                suspendCancellableCoroutine { cont ->
+                    val listener = object : View.OnAttachStateChangeListener {
+                        override fun onViewAttachedToWindow(v: View) {
+                            v.removeOnAttachStateChangeListener(this)
+
+                            if (cont.isActive) {
+                                cont.resume(Unit)
+                            }
+                        }
+
+                        override fun onViewDetachedFromWindow(v: View) {}
+                    }
+
+                    surfaceView.addOnAttachStateChangeListener(listener)
+                    cont.invokeOnCancellation {
+                        surfaceView.removeOnAttachStateChangeListener(listener)
+                    }
+                }
+            }
         }
     }
 
@@ -190,6 +254,8 @@ class GreenhouseSurfaceControlHost(
             lp.width = width
             lp.height = height
             surfaceView.requestLayout()
+
+            awaitSurfaceAttached()
         }
 
         withContext(Dispatchers.IO) {
@@ -197,10 +263,12 @@ class GreenhouseSurfaceControlHost(
                 context = context,
                 onConnectedAction = { conn ->
                     try {
+                        val hostToken = surfaceView.windowToken
+                        val displayId = surfaceView.display?.displayId ?: 0
                         val data = bundleOf(
                             AudioPluginViewService.MESSAGE_KEY_OPCODE to AudioPluginViewService.OPCODE_CONNECT,
-                            AudioPluginViewService.MESSAGE_KEY_HOST_TOKEN to surfaceView.hostToken,
-                            AudioPluginViewService.MESSAGE_KEY_DISPLAY_ID to (surfaceView.display?.displayId ?: 0),
+                            AudioPluginViewService.MESSAGE_KEY_HOST_TOKEN to hostToken,
+                            AudioPluginViewService.MESSAGE_KEY_DISPLAY_ID to displayId,
                             AudioPluginViewService.MESSAGE_KEY_PLUGIN_ID to pluginId,
                             AudioPluginViewService.MESSAGE_KEY_INSTANCE_ID to instanceId,
                             AudioPluginViewService.MESSAGE_KEY_WIDTH to width,
@@ -253,39 +321,49 @@ class GreenhouseSurfaceControlHost(
         surfaceView.visibility = View.VISIBLE
     }
 
-    fun hide() {
-        surfaceView.visibility = View.GONE
-    }
-
-    @RequiresApi(Build.VERSION_CODES.R)
-    fun resize(width: Int, height: Int) {
+    private fun disconnectRemoteSession(sessionId: Int) {
         val messenger = activeConnection?.outgoingMessenger
 
-        if (messenger != null) {
+        if (messenger != null && sessionId != INVALID_SESSION_ID) {
             try {
                 val msg = Message.obtain().apply {
                     data = bundleOf(
-                        AudioPluginViewService.MESSAGE_KEY_OPCODE to AudioPluginViewService.OPCODE_RESIZE,
+                        AudioPluginViewService.MESSAGE_KEY_OPCODE to AudioPluginViewService.OPCODE_DISCONNECT,
+                        AudioPluginViewService.MESSAGE_KEY_PLUGIN_ID to pluginId,
                         AudioPluginViewService.MESSAGE_KEY_INSTANCE_ID to instanceId,
-                        AudioPluginViewService.MESSAGE_KEY_WIDTH to width,
-                        AudioPluginViewService.MESSAGE_KEY_HEIGHT to height
+                        AudioPluginViewService.MESSAGE_KEY_GUI_SESSION_ID to sessionId,
+                        AudioPluginViewService.LEGACY_MESSAGE_KEY_GUI_SESSION_ID to sessionId
                     )
                 }
                 messenger.send(msg)
-            } catch (e: RemoteException) {
-                Log.w(TAG, "resize send failed", e)
-                handleDisconnection("Resize failed: remote process lost")
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to send disconnect message: ${e.message}")
             }
         }
+    }
+
+    fun disconnect() {
+        val sessionId = connectedGuiSessionId
+
+        if (sessionId != INVALID_SESSION_ID) {
+            disconnectRemoteSession(sessionId)
+            connectedGuiSessionId = INVALID_SESSION_ID
+        }
+    }
+
+    private fun releaseSurfacePackage(pkg: SurfaceControlViewHost.SurfacePackage?) {
+        pkg?.release()
     }
 
     private fun handleDisconnection(reason: String) {
         Log.w(TAG, "Remote UI disconnected: $reason")
 
+        connectedGuiSessionId = INVALID_SESSION_ID
+
         activeConnection?.unbind()
         activeConnection = null
 
-        surfacePackage?.release()
+        releaseSurfacePackage(surfacePackage)
         surfacePackage = null
 
         onDisconnected?.invoke(reason)
@@ -294,10 +372,12 @@ class GreenhouseSurfaceControlHost(
     override fun close() {
         isDisposed = true
 
+        disconnect()
+
         activeConnection?.unbind()
         activeConnection = null
 
-        surfacePackage?.release()
+        releaseSurfacePackage(surfacePackage)
         surfacePackage = null
 
         messageHandlerThread.quitSafely()
@@ -310,8 +390,13 @@ class GreenhouseSurfaceControlHost(
 
         override fun onDetachedFromWindow() {
             super.onDetachedFromWindow()
-            host.surfacePackage?.release()
+            host.disconnect()
+            host.releaseSurfacePackage(host.surfacePackage)
             host.surfacePackage = null
+        }
+
+        override fun performClick(): Boolean {
+            return super.performClick()
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -327,6 +412,10 @@ class GreenhouseSurfaceControlHost(
                 } catch (t: Throwable) {
                     Log.w(TAG, "transferTouchGesture failed: ${t.message}")
                 }
+            }
+
+            if (event.action == MotionEvent.ACTION_UP) {
+                performClick()
             }
 
             return super.onTouchEvent(event)

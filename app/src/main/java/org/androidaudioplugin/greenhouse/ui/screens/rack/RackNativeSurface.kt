@@ -3,6 +3,7 @@ package org.androidaudioplugin.greenhouse.ui.screens.rack
 import android.os.Build
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -95,11 +96,12 @@ import org.androidaudioplugin.greenhouse.ui.theme.TextMuted
 import org.androidaudioplugin.greenhouse.ui.theme.TextPrimary
 import org.androidaudioplugin.greenhouse.ui.theme.TextSecondary
 import org.androidaudioplugin.hosting.GuiHelper
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val DEFAULT_NATIVE_UI_WIDTH = 800
 private const val DEFAULT_NATIVE_UI_HEIGHT = 600
 private const val NATIVE_UI_MIN_DIMENSION_PX = 100f
-private const val NATIVE_UI_STABILIZATION_DELAY_MS = 180L
+private val NATIVE_UI_CONNECT_TIMEOUT = 6000.milliseconds
 private const val NATIVE_UI_FADE_ANIMATION_MS = 350
 private const val NATIVE_UI_ZOOM_STEP = 0.15f
 private const val NATIVE_UI_ZOOM_ROUNDING_SCALE = 20.0
@@ -346,6 +348,7 @@ fun NativeUiLoadingView(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.R)
 @Composable
 fun NativePluginSurfaceViewer(
     host: GreenhouseSurfaceControlHost,
@@ -829,10 +832,14 @@ fun NativePluginSurfaceContainer(
                     host.connect(size.width, size.height)
                     host.show()
 
-                    delay(NATIVE_UI_STABILIZATION_DELAY_MS)
+                    delay(NATIVE_UI_CONNECT_TIMEOUT)
 
                     if (uiStatus is NativeUiStatus.Loading) {
-                        uiStatus = NativeUiStatus.Ready
+                        uiStatus = NativeUiStatus.Error(
+                            message = "Connection Timed Out",
+                            details = "The plugin UI did not respond within ${NATIVE_UI_CONNECT_TIMEOUT.inWholeSeconds}s",
+                            isProcessDead = false
+                        )
                     }
                 } catch (e: Throwable) {
                     uiStatus = NativeUiStatus.Error(
