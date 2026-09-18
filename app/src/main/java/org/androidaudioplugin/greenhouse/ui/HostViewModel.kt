@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.media.midi.MidiDeviceInfo
 import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -14,6 +15,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -101,7 +104,7 @@ private data class PluginInstantiationResult(
     val initialParamValues: Map<Int, Double>
 )
 
-class HostViewModel(application: Application) : AndroidViewModel(application) {
+class HostViewModel(application: Application) : AndroidViewModel(application), DefaultLifecycleObserver {
     companion object {
         const val NUM_RACK_SLOTS = 3
         const val DEFAULT_SAMPLE_RATE = 44100
@@ -158,6 +161,12 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     var isProcessing by mutableStateOf(false)
+        private set
+
+    var wasPlayingBeforeBackground by mutableStateOf(false)
+        private set
+
+    var isBackgrounded by mutableStateOf(false)
         private set
 
     var totalCpuLoad by mutableFloatStateOf(0f)
@@ -964,6 +973,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        wasPlayingBeforeBackground = false
+
         if (isProcessing) {
             player.pause()
             isProcessing = false
@@ -989,6 +1000,69 @@ class HostViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 statusMessage = "Failed to start audio engine."
             }
+        }
+    }
+
+    fun pauseOnAppBackground() {
+        isBackgrounded = true
+
+        if (isProcessing) {
+            wasPlayingBeforeBackground = true
+            Log.i(tag, "App backgrounded: pausing active audio engine")
+            audioPlayer?.pause()
+            isProcessing = false
+
+            for (i in 0 until slotLevels.size) {
+                slotLevels[i] = SlotLevel(0f, 0f)
+            }
+
+            statusMessage = "Audio engine paused (app in background)."
+        } else {
+            wasPlayingBeforeBackground = false
+            Log.i(tag, "App backgrounded: audio engine was already paused")
+        }
+    }
+
+    fun resumeOnAppForeground() {
+        isBackgrounded = false
+
+        if (wasPlayingBeforeBackground) {
+            wasPlayingBeforeBackground = false
+            val player = audioPlayer
+
+            if (player != null && !isProcessing) {
+                Log.i(tag, "App foregrounded: resuming audio engine")
+                player.start()
+                isProcessing = player.isProcessing
+
+                if (isProcessing) {
+                    val burst = player.actualBurstSize
+
+                    if (burst > 0 && framesPerCallback == DEFAULT_BURST_SIZE * DEFAULT_BURST_MULTIPLIER) {
+                        framesPerCallback = burst * DEFAULT_BURST_MULTIPLIER
+                        player.setFramesPerCallback(framesPerCallback)
+                    }
+
+                    statusMessage = "Audio engine ACTIVE (FIFO decoupled render running)."
+                } else {
+                    statusMessage = "Failed to resume audio engine."
+                    Log.e(tag, "Failed to resume audio engine after returning to foreground")
+                }
+            }
+        } else {
+            Log.i(tag, "App foregrounded: engine remains paused (not playing prior to background)")
+        }
+    }
+
+    override fun onStart(owner: LifecycleOwner) {
+        resumeOnAppForeground()
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        val isChangingConfig = (owner as? ComponentActivity)?.isChangingConfigurations ?: false
+
+        if (!isChangingConfig) {
+            pauseOnAppBackground()
         }
     }
 

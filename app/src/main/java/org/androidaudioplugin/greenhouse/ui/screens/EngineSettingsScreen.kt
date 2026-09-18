@@ -217,6 +217,19 @@ fun EngineSettingsScreen(
                 InfoRow(label = "Estimated Buffer Latency", value = String.format(Locale.US, "%.2f ms", estimatedLatencyMs))
                 InfoRow(label = "Audio Processing Active", value = if (viewModel.isProcessing) "YES (Oboe Active)" else "NO (Paused)", valueColor = if (viewModel.isProcessing) SignalGreen else WarningOrange)
 
+                val lifecycleText = when {
+                    viewModel.isBackgrounded && viewModel.wasPlayingBeforeBackground -> "Background (Auto-resume armed)"
+                    viewModel.isBackgrounded -> "Background (Paused)"
+                    viewModel.isProcessing -> "Foreground (Active)"
+                    else -> "Foreground (Idle)"
+                }
+                val lifecycleColor = when {
+                    viewModel.isProcessing -> SignalGreen
+                    viewModel.wasPlayingBeforeBackground -> ElectricBlue
+                    else -> TextSecondary
+                }
+                InfoRow(label = "Lifecycle & Background State", value = lifecycleText, valueColor = lifecycleColor)
+
                 val cpuVal = viewModel.totalCpuLoad
                 val cpuColor = when {
                     !viewModel.isProcessing -> TextMuted

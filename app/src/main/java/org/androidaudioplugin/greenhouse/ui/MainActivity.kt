@@ -3,6 +3,7 @@ package org.androidaudioplugin.greenhouse.ui
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -35,15 +36,20 @@ import org.androidaudioplugin.greenhouse.ui.screens.StudioRackScreen
 import org.androidaudioplugin.greenhouse.ui.theme.*
 
 class MainActivity : ComponentActivity() {
+    private val viewModel: HostViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        lifecycle.addObserver(viewModel)
+
         setContent {
             GreenhouseTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainHostApp()
+                    MainHostApp(viewModel = viewModel)
                 }
             }
         }

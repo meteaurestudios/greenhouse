@@ -25,6 +25,8 @@ class AapAudioPlayer private constructor(
         const val MIDI2_SIGNED_32BIT_MAX = 0x8000_0000L
         const val MIDI2_32BIT_MAX = 0xFFFF_FFFFL
         const val MIDI2_16BIT_MAX = 0xFFFF
+        const val MIDI_CC_ALL_SOUND_OFF = 120
+        const val MIDI_CC_ALL_NOTES_OFF = 123
 
         init {
             try {
@@ -209,11 +211,23 @@ class AapAudioPlayer private constructor(
         }
     }
 
+    fun allNotesOff() {
+        for (slotIndex in 0 until numSlots) {
+
+            if (slotInstances[slotIndex] != null) {
+                sendControlChange(slotIndex, MIDI_CC_ALL_SOUND_OFF, 0.0f)
+                sendControlChange(slotIndex, MIDI_CC_ALL_NOTES_OFF, 0.0f)
+            }
+
+        }
+    }
+
     fun pause() {
         if (!isProcessing) {
             return
         }
 
+        allNotesOff()
         isProcessing = false
 
         if (nativeEngineHandle != 0L) {
