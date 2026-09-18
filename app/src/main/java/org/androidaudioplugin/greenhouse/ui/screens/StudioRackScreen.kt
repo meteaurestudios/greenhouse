@@ -80,14 +80,16 @@ fun StudioRackScreen(
                 }
             )
 
-            Spacer(modifier = Modifier.height(RACK_ELEMENT_SPACING))
+            if (activeSlot.pluginInfo != null && !activeSlot.isLoading) {
+                Spacer(modifier = Modifier.height(RACK_ELEMENT_SPACING))
 
-            // View Mode Selector Bar for Active Slot
-            StatusAndModeSelectorBar(
-                activeSlot = activeSlot,
-                currentMode = viewModel.currentViewMode,
-                onModeSelected = { viewModel.updateViewMode(it) }
-            )
+                // View Mode Selector Bar for Active Slot
+                StatusAndModeSelectorBar(
+                    activeSlot = activeSlot,
+                    currentMode = viewModel.currentViewMode,
+                    onModeSelected = { viewModel.updateViewMode(it) }
+                )
+            }
 
             Spacer(modifier = Modifier.height(RACK_ELEMENT_SPACING))
         }

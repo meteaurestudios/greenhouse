@@ -58,7 +58,7 @@ private val SIGNAL_CONNECTOR_WIDTH = 10.dp
 private val SIGNAL_CONNECTOR_HEIGHT = 104.dp
 private val SLOT_CARD_HEIGHT = 104.dp
 private val SLOT_CARD_CORNER_RADIUS = 12.dp
-private val SLOT_TOP_ACCENT_BAR_HEIGHT = 2.5.dp
+private val SLOT_CARD_PADDING = 9.dp
 
 @Composable
 fun SignalFlowConnector(
@@ -171,29 +171,13 @@ fun SignalRackHeader(
                     }
                 )
             ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    if (isSelected) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(SLOT_TOP_ACCENT_BAR_HEIGHT)
-                                .background(badgeColor)
-                                .align(Alignment.TopCenter)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(
-                                start = 9.dp,
-                                end = 9.dp,
-                                top = if (isSelected) 10.dp else 9.dp,
-                                bottom = 9.dp
-                            ),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(SLOT_CARD_PADDING),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                         Column(
                             modifier = Modifier
                                 .weight(1f)
@@ -388,7 +372,6 @@ fun SignalRackHeader(
                         }
                     }
                 }
-            }
 
             if (index < slots.lastIndex) {
                 val isUpstreamActive = isProcessing && (slots.firstOrNull()?.let { slot0 ->
