@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Spa
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -84,6 +86,7 @@ fun MasterControlBanner(
     totalCpuLoadProvider: () -> Float,
     onToggleProcessing: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSessionDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -104,7 +107,10 @@ fun MasterControlBanner(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Left: Minimalist Botanical Emblem & Brand Title
+                // weight(1f): the right-hand buttons are measured first, this side gets what is left,
+                // so a long session name ellipsizes instead of pushing the buttons off screen
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(BANNER_SPACING)
                 ) {
@@ -124,16 +130,33 @@ fun MasterControlBanner(
                         )
                     }
 
-                    Text(
-                        text = "Greenhouse",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TextPrimary,
-                        letterSpacing = 0.4.sp
-                    )
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                        Text(
+                            text = "Greenhouse",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TextPrimary,
+                            letterSpacing = 0.4.sp
+                        )
+
+                        val activeSessionName = viewModel.currentSessionName
+
+                        if (!activeSessionName.isNullOrBlank()) {
+                            Text(
+                                text = activeSessionName,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SproutGreen,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
 
-                // Right: DSP CPU Meter & Settings Button
+                Spacer(modifier = Modifier.width(BANNER_SPACING))
+
+                // Right: DSP CPU Meter, Session / Presets Button & Settings Button
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -144,6 +167,25 @@ fun MasterControlBanner(
                         onToggleProcessing = onToggleProcessing
                     )
 
+                    // Sessions Button
+                    Box(
+                        modifier = Modifier
+                            .size(BANNER_SETTINGS_BUTTON_SIZE)
+                            .clip(CircleShape)
+                            .background(StudioSurfaceElevated)
+                            .border(1.dp, StudioPanelBorder, CircleShape)
+                            .clickable { onOpenSessionDialog() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = "Sessions",
+                            tint = if (viewModel.savedSessions.isNotEmpty()) SproutGreen else TextSecondary,
+                            modifier = Modifier.size(BANNER_SETTINGS_ICON_SIZE)
+                        )
+                    }
+
+                    // Settings Button
                     Box(
                         modifier = Modifier
                             .size(BANNER_SETTINGS_BUTTON_SIZE)

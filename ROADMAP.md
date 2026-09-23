@@ -18,6 +18,10 @@ This document outlines the architectural milestones, remaining tasks, and future
 - ✅ **Native GUI Lifecycle & Out-of-Process Crash Recovery**: Resilient IPC surface host (`GreenhouseSurfaceControlHost`) catching remote service crashes, robust client disconnect/teardown synchronization, preventing host main-thread termination, and presenting a studio-themed fallback card with one-click slot reload and parameter failover.
 - ✅ **Bidirectional Parameter Synchronization**: Real-time two-way sync between host UI controls and native plugin surfaces with cooldown gating and startup reconciliation to prevent feedback loops.
 - ✅ **Automated Preset Catalog**: Automatic discovery, browsing, and switching of factory presets exposed by AAP plugins via AAPXS extensions.
+- ✅ **Full Session Persistence & Modular Rack Presets (`.ghrack`)**:
+  - Complete plugin binary state chunk serialization via `getState()` / `setState()` encoded as Base64, combined with explicit parameter state maps, bypass states, and extensible custom metadata.
+  - Automatic background autosave and seamless cold-start session restoration.
+  - Dedicated studio session management menu (`RackSessionDialog`) with custom preset naming, 1-tap loading, deletion, SAF document import, and Android share sheet integration.
 - ✅ **Dynamic Multi-Slot Workstation Rack**: Configurable $N$-slot signal chains with active slot focus, parameter modulation, bypass toggles, and safe concurrent teardown/instantiation guards.
 - ✅ **Live Interactive MIDI Keyboard**: Octave shifting, note latch/hold mode, and polyphonic MIDI 2.0 UMP event dispatching.
 - ✅ **Comprehensive Plugin Browser**: Instant developer filtering, category badges, text search, and direct slot routing.
@@ -30,7 +34,6 @@ This document outlines the architectural milestones, remaining tasks, and future
 
 | Feature / Task | Priority | Category | Description |
 | :--- | :--- | :--- | :--- |
-| **Full Session Persistence & Rack Presets (`.ghrack`)** | `High` | State & Presets | Automatically save and restore active rack setups across restarts, and allow exporting/importing complete multi-plugin rack presets as standalone `.ghrack` files. |
 | **MIDI Learn & Hardware CC Mapping** | `High` | MIDI & Control | Intuitive MIDI Learn mode to map physical hardware knobs, sliders, and faders directly to any AAP plugin parameter with customizable range scaling and inversion. |
 | **MIDI File (.MID) Player & Loop Tester** | `High` | MIDI & Auditioning | Integrated standard MIDI file player with loop points, playback controls, and tempo synchronization for hands-free, repeatable patch testing and sound design. |
 | **Built-in Studio Effects Suite (Zero-IPC / Real-Time DSP)** | `High` | Native DSP & Effects | Ship a collection of high-performance, zero-latency native C++ effects running in-process on the host's `SCHED_FIFO` audio thread for maximum performance and instant out-of-the-box playback. |

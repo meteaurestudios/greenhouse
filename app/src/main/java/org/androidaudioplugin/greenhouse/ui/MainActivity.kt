@@ -1,5 +1,6 @@
 package org.androidaudioplugin.greenhouse.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -43,6 +44,8 @@ class MainActivity : ComponentActivity() {
 
         lifecycle.addObserver(viewModel)
 
+        handleIntent(intent)
+
         setContent {
             GreenhouseTheme {
                 Surface(
@@ -52,6 +55,19 @@ class MainActivity : ComponentActivity() {
                     MainHostApp(viewModel = viewModel)
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val uri = intent?.data
+
+        if (uri != null) {
+            viewModel.loadPresetFromUri(uri)
         }
     }
 }

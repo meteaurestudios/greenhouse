@@ -1,6 +1,8 @@
 package org.androidaudioplugin.greenhouse.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -34,6 +36,15 @@ fun StudioRackScreen(
     val activeSlot = viewModel.slots[currentSlotIndex]
     val activePlugin = activeSlot.pluginInfo
     var isRackFolded by remember { mutableStateOf(false) }
+    var showSessionDialog by remember { mutableStateOf(false) }
+
+    val importPresetLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.loadPresetFromUri(uri)
+        }
+    }
 
     BackHandler(enabled = isRackFolded) {
         isRackFolded = false
@@ -53,7 +64,8 @@ fun StudioRackScreen(
                 isProcessing = viewModel.isProcessing,
                 totalCpuLoadProvider = { viewModel.totalCpuLoad },
                 onToggleProcessing = { viewModel.toggleAudioPlayback() },
-                onOpenSettings = onNavigateToSettings
+                onOpenSettings = onNavigateToSettings,
+                onOpenSessionDialog = { showSessionDialog = true }
             )
 
             Spacer(modifier = Modifier.height(RACK_ELEMENT_SPACING))
@@ -164,5 +176,16 @@ fun StudioRackScreen(
 
         // On-screen Live Interactive MIDI Keyboard (Routes to Slot 0: Instrument)
         MidiKeyboardSection(viewModel = viewModel)
+    }
+
+    if (showSessionDialog) {
+        RackSessionDialog(
+            viewModel = viewModel,
+            onDismissRequest = { showSessionDialog = false },
+            onImportRequested = {
+                showSessionDialog = false
+                importPresetLauncher.launch(arrayOf("*/*", "application/json"))
+            }
+        )
     }
 }

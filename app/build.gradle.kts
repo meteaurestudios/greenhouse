@@ -58,6 +58,12 @@ android {
                 )
             }
         }
+
+        testOptions {
+            unitTests {
+                isReturnDefaultValues = true
+            }
+        }
     }
 
     externalNativeBuild {
@@ -152,6 +158,7 @@ dependencies {
 
     debugImplementation(libs.ui.tooling)
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.test.ext.junit)
     androidTestImplementation(libs.test.espresso.core)
 }
