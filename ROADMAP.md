@@ -1,6 +1,6 @@
-# Greenhouse Roadmap: Milestones & Enhancement Opportunities
+# Greenhouse Roadmap: Milestones & Remaining Enhancements
 
-This document outlines the architectural milestones, remaining tasks, and future feature enhancements for **Greenhouse**.
+This document outlines the architectural milestones, remaining tasks, and future feature enhancements for **Greenhouse**, the modern Android Audio Plugin (AAP) host and workstation.
 
 ---
 
@@ -26,35 +26,15 @@ This document outlines the architectural milestones, remaining tasks, and future
 
 ---
 
-## 1. 🎛️ Audio Engine & DSP Improvements
+## 🚀 Active Feature Roadmap
 
-| Feature / Task | Priority | Description |
-| :--- | :--- | :--- |
-| **Pitch & Mod Wheels** | `High` | Add vertical pitch bend and modulation wheel controls alongside the on-screen MIDI keyboard. |
-| **Master Output Gain & Soft Limiter** | `Medium` | Add a master output gain slider and soft-clipper/limiter on the workstation banner to prevent digital clipping when testing high-gain plugins or polyphonic synths. |
-
----
-
-## 2. 💾 Preset Management & State Persistence
-
-| Feature / Task | Priority | Description |
-| :--- | :--- | :--- |
-| **Session State Persistence** | `High` | Automatically save and restore the active rack configuration (loaded plugins, slot states, parameter values) across app restarts. |
-
----
-
-## 3. 🖥️ UI & Workflow Refinements
-
-| Feature / Task | Priority | Description |
-| :--- | :--- | :--- |
-| **Parameter Grouping** | `Medium` | Collapsible group sections in the parameter list for complex plugins with dozens/hundreds of parameters. |
-| **Tablet & Landscape Optimization** | `Low` | Expanded dual-pane workstation view for tablet and landscape screen orientations. |
-| **Drag-and-Drop Slot Reordering** | `Low` | Allow reordering effect slots via intuitive drag-and-drop handles on the rack signal chain. |
-
----
-
-## 4. 🛠️ Stability & Quality Assurance
-
-| Feature / Task | Priority | Description |
-| :--- | :--- | :--- |
-| **Automated UI & Integration Tests** | `Medium` | Compose UI tests and native audio pipeline integration tests validating catalog loading, parameter state changes, and audio rendering. |
+| Feature / Task | Priority | Category | Description |
+| :--- | :--- | :--- | :--- |
+| **Full Session Persistence & Rack Presets (`.ghrack`)** | `High` | State & Presets | Automatically save and restore active rack setups across restarts, and allow exporting/importing complete multi-plugin rack presets as standalone `.ghrack` files. |
+| **MIDI Learn & Hardware CC Mapping** | `High` | MIDI & Control | Intuitive MIDI Learn mode to map physical hardware knobs, sliders, and faders directly to any AAP plugin parameter with customizable range scaling and inversion. |
+| **MIDI File (.MID) Player & Loop Tester** | `High` | MIDI & Auditioning | Integrated standard MIDI file player with loop points, playback controls, and tempo synchronization for hands-free, repeatable patch testing and sound design. |
+| **Built-in Studio Effects Suite (Zero-IPC / Real-Time DSP)** | `High` | Native DSP & Effects | Ship a collection of high-performance, zero-latency native C++ effects running in-process on the host's `SCHED_FIFO` audio thread for maximum performance and instant out-of-the-box playback. |
+| **MIDI-FX Plugin Hosting & Routing Matrix** | `Medium` | MIDI & Routing | Support discovering, loading, and chaining pure AAP MIDI plugins (Sequencers, Arpeggiators, Chord Engines, CC Modulators) upstream of instruments, with routing to internal synths and external USB/BLE MIDI hardware (inspired by AUM). |
+| **Per-Slot Dry/Wet Mix** | `Medium` | Signal Chain & DSP | Independent Dry/Wet blend slider for each effect slot, enabling parallel processing, subtle modulation, and non-destructive FX blending. |
+| **Arpeggiator** | `Medium` | MIDI & Performance | Built-in playable real-time arpeggiator (Up, Down, Up/Down, Random, Euclidean) with tempo sync, gate length, swing, and octave range for the on-screen keyboard. |
+| **Tablet, Foldable & Desktop (DeX) Multi-Pane Layout** | `Low` | UI & Workflow | Dedicated dual-pane split workstation and detachable floating windows tailored for tablets, foldables, and Samsung DeX desktop mode. |
