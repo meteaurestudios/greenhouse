@@ -27,6 +27,9 @@ constexpr useconds_t QUIESCENT_POLL_INTERVAL_US = 500;
 constexpr int32_t MAX_QUIESCENT_WAIT_ATTEMPTS = 50; // 50 * 500us = 25ms maximum watchdog timeout
 constexpr float METER_DECAY_FACTOR = 0.80f;
 constexpr float METER_MIN_THRESHOLD = 0.0001f;
+// ADPF workload units: fixed engine cost (FIFO, mixing) plus one unit per active plugin slot
+constexpr int32_t ADPF_BASE_WORKLOAD = 1;
+constexpr int32_t ADPF_WORKLOAD_PER_ACTIVE_SLOT = 1;
 
 struct RackSlot
 {
@@ -200,6 +203,7 @@ private:
     void pushFifo(const float* data, size_t frames);
     void pullFifo(float* outData, size_t frames);
     void resetFifo();
+    int32_t computeAdpfWorkload() const;
 
     int32_t mSampleRate;
     std::atomic<int32_t> mFramesPerCallback;

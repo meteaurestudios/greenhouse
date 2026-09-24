@@ -333,6 +333,22 @@ void NativeAudioEngine::renderDspBlock(int32_t blockFrames)
     pushFifo(mIntermediateStereoBuffer.data(), static_cast<size_t>(frames));
 }
 
+int32_t NativeAudioEngine::computeAdpfWorkload() const
+{
+    auto workload = ADPF_BASE_WORKLOAD;
+
+    for (int32_t i = 0; i < mNumSlots; i++) {
+        auto inst = mSlots[i]->mInstance.load(std::memory_order_acquire);
+
+        if (inst != nullptr && !mSlots[i]->mIsBypassed.load(std::memory_order_relaxed)
+            && inst->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE) {
+            workload += ADPF_WORKLOAD_PER_ACTIVE_SLOT;
+        }
+    }
+
+    return workload;
+}
+
 void NativeAudioEngine::primeFifo()
 {
     resetFifo();
@@ -390,6 +406,10 @@ bool NativeAudioEngine::start()
     }
 
     if (mStream) {
+        // Oboe's ADPF wrapper: opens a PerformanceHint session on the callback thread and reports
+        // each onAudioReady duration so the system can raise CPU clocks before we under-run.
+        mStream->setPerformanceHintEnabled(true);
+
         auto burst = mStream->getFramesPerBurst();
 
         if (burst > 0) {
@@ -574,6 +594,11 @@ oboe::DataCallbackResult NativeAudioEngine::onAudioReady(oboe::AudioStream *audi
 
     if (audioData == nullptr || numFrames <= 0) {
         return oboe::DataCallbackResult::Continue;
+    }
+
+    // Advance warning for ADPF: a newly loaded / un-bypassed plugin boosts the CPU before rendering
+    if (audioStream->isPerformanceHintEnabled()) {
+        audioStream->reportWorkload(computeAdpfWorkload());
     }
 
     auto outStream = static_cast<float*>(audioData);
