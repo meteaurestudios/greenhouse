@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
         val uri = intent?.data
 
         if (uri != null) {
-            viewModel.loadPresetFromUri(uri)
+            viewModel.sessions.importSessionFromUri(uri)
         }
     }
 }

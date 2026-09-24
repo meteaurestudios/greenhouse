@@ -779,7 +779,7 @@ fun NativePluginSurfaceContainer(
         var uiStatus by remember(instance.instanceId) { mutableStateOf<NativeUiStatus>(NativeUiStatus.Loading) }
         var retryCount by remember(instance.instanceId) { mutableIntStateOf(0) }
 
-        val zoomState = viewModel.slotNativeUiZoomStates[slot.index]
+        val zoomState = viewModel.rack.slotUi[slot.index].nativeUiZoom
         var calculatedFitScale by remember { mutableFloatStateOf(1.0f) }
         var displayedScale by remember { mutableFloatStateOf(1.0f) }
 
@@ -871,7 +871,7 @@ fun NativePluginSurfaceContainer(
                     retryCount++
                 },
                 onSwitchToParameters = {
-                    viewModel.updateViewMode(StudioRackViewMode.PARAMETERS)
+                    viewModel.rack.updateViewMode(StudioRackViewMode.PARAMETERS)
                 },
                 onReloadPlugin = {
                     viewModel.loadPluginIntoSlot(slot.index, plugin)

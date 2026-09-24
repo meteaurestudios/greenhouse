@@ -110,8 +110,8 @@ fun EngineSettingsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                InfoRow(label = "Output Sample Rate", value = "${viewModel.sampleRate} Hz")
-                InfoRow(label = "Hardware Burst Quantum", value = "${viewModel.actualBurstSize} frames")
+                InfoRow(label = "Output Sample Rate", value = "${viewModel.audio.sampleRate} Hz")
+                InfoRow(label = "Hardware Burst Quantum", value = "${viewModel.audio.actualBurstSize} frames")
                 InfoRow(label = "Audio Stream Mode", value = "LowLatency Exclusive", valueColor = NeonCyan)
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -135,13 +135,13 @@ fun EngineSettingsScreen(
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
-                        val activeMultiplier = if (viewModel.actualBurstSize > 0) {
-                            viewModel.framesPerCallback / viewModel.actualBurstSize
+                        val activeMultiplier = if (viewModel.audio.actualBurstSize > 0) {
+                            viewModel.audio.framesPerCallback / viewModel.audio.actualBurstSize
                         } else {
                             4
                         }
                         Text(
-                            text = "${viewModel.framesPerCallback} frames (${activeMultiplier}x Burst)",
+                            text = "${viewModel.audio.framesPerCallback} frames (${activeMultiplier}x Burst)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = ElectricBlue
@@ -154,10 +154,10 @@ fun EngineSettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        for (multiplier in viewModel.availableBurstMultipliers) {
-                            val frames = viewModel.actualBurstSize * multiplier
-                            val isSelected = (viewModel.framesPerCallback == frames)
-                            val latencyMs = (frames.toFloat() / viewModel.sampleRate.toFloat()) * 1000.0f
+                        for (multiplier in viewModel.audio.availableBurstMultipliers) {
+                            val frames = viewModel.audio.actualBurstSize * multiplier
+                            val isSelected = (viewModel.audio.framesPerCallback == frames)
+                            val latencyMs = (frames.toFloat() / viewModel.audio.sampleRate.toFloat()) * 1000.0f
                             val label = "${multiplier}x"
 
                             Box(
@@ -171,7 +171,7 @@ fun EngineSettingsScreen(
                                         RoundedCornerShape(8.dp)
                                     )
                                     .clickable {
-                                        viewModel.setBufferFramesPerCallback(frames)
+                                        viewModel.audio.setBufferFramesPerCallback(frames)
                                     }
                                     .padding(vertical = 8.dp, horizontal = 2.dp),
                                 contentAlignment = Alignment.Center
@@ -197,10 +197,10 @@ fun EngineSettingsScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     val profileDesc = when {
-                        viewModel.framesPerCallback <= viewModel.actualBurstSize * 2 -> "Low latency (recommended for single synth)"
-                        viewModel.framesPerCallback <= viewModel.actualBurstSize * 4 -> "Balanced (recommended default - responsive & glitch-free)"
-                        viewModel.framesPerCallback <= viewModel.actualBurstSize * 8 -> "Safe (great for multi-FX rack chains)"
-                        viewModel.framesPerCallback <= viewModel.actualBurstSize * 16 -> "High Headroom (optimal for heavy DSP & reverbs)"
+                        viewModel.audio.framesPerCallback <= viewModel.audio.actualBurstSize * 2 -> "Low latency (recommended for single synth)"
+                        viewModel.audio.framesPerCallback <= viewModel.audio.actualBurstSize * 4 -> "Balanced (recommended default - responsive & glitch-free)"
+                        viewModel.audio.framesPerCallback <= viewModel.audio.actualBurstSize * 8 -> "Safe (great for multi-FX rack chains)"
+                        viewModel.audio.framesPerCallback <= viewModel.audio.actualBurstSize * 16 -> "High Headroom (optimal for heavy DSP & reverbs)"
                         else -> "Maximum Stability (minimal CPU overhead / budget devices)"
                     }
 
@@ -213,39 +213,39 @@ fun EngineSettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val estimatedLatencyMs = (viewModel.framesPerCallback.toFloat() / viewModel.sampleRate.toFloat()) * 1000.0f
+                val estimatedLatencyMs = (viewModel.audio.framesPerCallback.toFloat() / viewModel.audio.sampleRate.toFloat()) * 1000.0f
                 InfoRow(label = "Estimated Buffer Latency", value = String.format(Locale.US, "%.2f ms", estimatedLatencyMs))
-                InfoRow(label = "Audio Processing Active", value = if (viewModel.isProcessing) "YES (Oboe Active)" else "NO (Paused)", valueColor = if (viewModel.isProcessing) SignalGreen else WarningOrange)
+                InfoRow(label = "Audio Processing Active", value = if (viewModel.audio.isProcessing) "YES (Oboe Active)" else "NO (Paused)", valueColor = if (viewModel.audio.isProcessing) SignalGreen else WarningOrange)
 
                 val lifecycleText = when {
-                    viewModel.isBackgrounded && viewModel.wasPlayingBeforeBackground -> "Background (Auto-resume armed)"
-                    viewModel.isBackgrounded -> "Background (Paused)"
-                    viewModel.isProcessing -> "Foreground (Active)"
+                    viewModel.audio.isBackgrounded && viewModel.audio.wasPlayingBeforeBackground -> "Background (Auto-resume armed)"
+                    viewModel.audio.isBackgrounded -> "Background (Paused)"
+                    viewModel.audio.isProcessing -> "Foreground (Active)"
                     else -> "Foreground (Idle)"
                 }
                 val lifecycleColor = when {
-                    viewModel.isProcessing -> SignalGreen
-                    viewModel.wasPlayingBeforeBackground -> ElectricBlue
+                    viewModel.audio.isProcessing -> SignalGreen
+                    viewModel.audio.wasPlayingBeforeBackground -> ElectricBlue
                     else -> TextSecondary
                 }
                 InfoRow(label = "Lifecycle & Background State", value = lifecycleText, valueColor = lifecycleColor)
 
-                val cpuVal = viewModel.totalCpuLoad
+                val cpuVal = viewModel.meters.totalCpuLoad
                 val cpuColor = when {
-                    !viewModel.isProcessing -> TextMuted
+                    !viewModel.audio.isProcessing -> TextMuted
                     cpuVal > 80f -> DangerRed
                     cpuVal > 50f -> WarningOrange
                     else -> SignalGreen
                 }
                 InfoRow(
                     label = "Total Engine DSP Load",
-                    value = if (viewModel.isProcessing) "${String.format("%.1f", cpuVal)}%" else "0.0% (Engine Paused)",
+                    value = if (viewModel.audio.isProcessing) "${String.format("%.1f", cpuVal)}%" else "0.0% (Engine Paused)",
                     valueColor = cpuColor
                 )
 
-                for (slot in viewModel.slots) {
-                    val slotCpu = viewModel.slotCpuLoads.getOrNull(slot.index) ?: 0f
-                    val slotText = if (!viewModel.isProcessing) {
+                for (slot in viewModel.rack.slots) {
+                    val slotCpu = viewModel.meters.slotCpuLoads.getOrNull(slot.index) ?: 0f
+                    val slotText = if (!viewModel.audio.isProcessing) {
                         "0.0%"
                     } else if (slot.pluginInfo == null) {
                         "Empty Slot"
@@ -292,7 +292,7 @@ fun EngineSettingsScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val activeSlot = viewModel.activeSlot
+                val activeSlot = viewModel.rack.activeSlot
                 val activePlugin = activeSlot.pluginInfo
 
                 if (activePlugin != null) {
@@ -396,7 +396,7 @@ fun EngineSettingsScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .background(
-                                if (viewModel.isMidiDeviceConnected) {
+                                if (viewModel.midi.isDeviceConnected) {
                                     SignalGreen.copy(alpha = 0.15f)
                                 } else {
                                     StudioSurfaceVariant
@@ -404,7 +404,7 @@ fun EngineSettingsScreen(
                             )
                             .border(
                                 1.dp,
-                                if (viewModel.isMidiDeviceConnected) {
+                                if (viewModel.midi.isDeviceConnected) {
                                     SignalGreen.copy(alpha = 0.5f)
                                 } else {
                                     StudioPanelBorder
@@ -414,20 +414,20 @@ fun EngineSettingsScreen(
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = if (viewModel.isMidiDeviceConnected) "CONNECTED" else "STANDBY",
+                            text = if (viewModel.midi.isDeviceConnected) "CONNECTED" else "STANDBY",
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            color = if (viewModel.isMidiDeviceConnected) SignalGreen else TextMuted
+                            color = if (viewModel.midi.isDeviceConnected) SignalGreen else TextMuted
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                val activeDev = viewModel.activeMidiDevice
+                val activeDev = viewModel.midi.activeDevice
 
-                if (activeDev != null && viewModel.isMidiDeviceConnected) {
+                if (activeDev != null && viewModel.midi.isDeviceConnected) {
                     val devName = org.androidaudioplugin.greenhouse.core.MidiControllerManager.getDeviceDisplayName(activeDev)
                     val devManufacturer = org.androidaudioplugin.greenhouse.core.MidiControllerManager.getDeviceManufacturer(activeDev)
 
@@ -439,7 +439,7 @@ fun EngineSettingsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
-                        onClick = { viewModel.disconnectMidiDevice() },
+                        onClick = { viewModel.midi.disconnect() },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = DangerRed.copy(alpha = 0.15f),
                             contentColor = DangerRed
@@ -467,7 +467,7 @@ fun EngineSettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { viewModel.updateShowVirtualMidiDevices(!viewModel.showVirtualMidiDevices) }
+                        .clickable { viewModel.midi.updateShowVirtualDevices(!viewModel.midi.showVirtualDevices) }
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -480,8 +480,8 @@ fun EngineSettingsScreen(
                     )
 
                     Checkbox(
-                        checked = viewModel.showVirtualMidiDevices,
-                        onCheckedChange = { viewModel.updateShowVirtualMidiDevices(it) },
+                        checked = viewModel.midi.showVirtualDevices,
+                        onCheckedChange = { viewModel.midi.updateShowVirtualDevices(it) },
                         colors = CheckboxDefaults.colors(
                             checkedColor = SproutGreen,
                             checkmarkColor = StudioBackground,
@@ -493,7 +493,7 @@ fun EngineSettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "AVAILABLE MIDI INPUT DEVICES (${viewModel.availableMidiDevices.size})",
+                    text = "AVAILABLE MIDI INPUT DEVICES (${viewModel.midi.availableDevices.size})",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = NeonCyan,
@@ -502,7 +502,7 @@ fun EngineSettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (viewModel.availableMidiDevices.isEmpty()) {
+                if (viewModel.midi.availableDevices.isEmpty()) {
                     Text(
                         text = "• No external USB, Bluetooth LE, or virtual MIDI devices detected.\n• Connect a USB MIDI keyboard via OTG/USB-C to play plugins live.",
                         fontSize = 12.sp,
@@ -514,8 +514,8 @@ fun EngineSettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        viewModel.availableMidiDevices.forEach { device ->
-                            val isSelected = (device.id == activeDev?.id) && viewModel.isMidiDeviceConnected
+                        viewModel.midi.availableDevices.forEach { device ->
+                            val isSelected = (device.id == activeDev?.id) && viewModel.midi.isDeviceConnected
                             val name = org.androidaudioplugin.greenhouse.core.MidiControllerManager.getDeviceDisplayName(device)
                             val manufacturer = org.androidaudioplugin.greenhouse.core.MidiControllerManager.getDeviceManufacturer(device)
 
@@ -531,9 +531,9 @@ fun EngineSettingsScreen(
                                     )
                                     .clickable {
                                         if (isSelected) {
-                                            viewModel.disconnectMidiDevice()
+                                            viewModel.midi.disconnect()
                                         } else {
-                                            viewModel.selectMidiDevice(device)
+                                            viewModel.midi.selectDevice(device)
                                         }
                                     }
                                     .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -582,7 +582,7 @@ fun EngineSettingsScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Live MIDI Activity Monitor Strip
-                val lastMidi = viewModel.lastMidiEventText
+                val lastMidi = viewModel.midi.lastEventText
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -616,7 +616,7 @@ fun EngineSettingsScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Button(
-                    onClick = { viewModel.rescanMidiDevices() },
+                    onClick = { viewModel.midi.rescan() },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = StudioSurfaceElevated,
                         contentColor = TextPrimary
@@ -639,7 +639,7 @@ fun EngineSettingsScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Button(
-                onClick = { viewModel.refreshPluginList() },
+                onClick = { viewModel.browser.refresh() },
                 colors = ButtonDefaults.buttonColors(containerColor = SproutGreen, contentColor = StudioBackground),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.weight(1f)

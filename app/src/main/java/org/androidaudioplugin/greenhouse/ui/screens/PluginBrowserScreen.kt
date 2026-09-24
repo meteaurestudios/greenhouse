@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.data.PluginCategory
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
+import org.androidaudioplugin.greenhouse.ui.host.PluginBrowserController
 import org.androidaudioplugin.greenhouse.ui.theme.*
 import androidx.activity.compose.BackHandler
 import java.util.Locale
@@ -46,7 +47,7 @@ fun PluginBrowserScreen(
         onNavigateToRack()
     }
 
-    val targetSlot = viewModel.slots[viewModel.targetBrowserSlotIndex.coerceIn(0, viewModel.slots.lastIndex)]
+    val targetSlot = viewModel.rack.slots[viewModel.browser.targetSlotIndex.coerceIn(0, viewModel.rack.slots.lastIndex)]
     val listState = rememberSaveable(saver = LazyListState.Saver) {
         LazyListState()
     }
@@ -102,7 +103,7 @@ fun PluginBrowserScreen(
                     Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
-                        text = "${targetSlot.slotType} Slot • ${viewModel.filteredPlugins.size} plugin(s) available",
+                        text = "${targetSlot.slotType} Slot • ${viewModel.browser.filteredPlugins.size} plugin(s) available",
                         fontSize = 11.sp,
                         color = TextSecondary,
                         maxLines = 1,
@@ -119,7 +120,7 @@ fun PluginBrowserScreen(
                     .clip(CircleShape)
                     .background(StudioSurfaceElevated)
                     .border(1.dp, StudioPanelBorder, CircleShape)
-                    .clickable { viewModel.refreshPluginList() },
+                    .clickable { viewModel.browser.refresh() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -135,8 +136,8 @@ fun PluginBrowserScreen(
 
         // Search Bar with Frosted Botanical Pill Styling
         OutlinedTextField(
-            value = viewModel.searchQuery,
-            onValueChange = { viewModel.updateSearchQuery(it) },
+            value = viewModel.browser.searchQuery,
+            onValueChange = { viewModel.browser.updateSearchQuery(it) },
             placeholder = { Text("Search plugins by name or vendor...", color = TextMuted, fontSize = 13.sp) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SproutGreen, modifier = Modifier.size(20.dp)) },
             shape = RoundedCornerShape(24.dp),
@@ -160,8 +161,8 @@ fun PluginBrowserScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            items(viewModel.availableDevelopers) { dev ->
-                val isSelected = viewModel.selectedDeveloper == dev
+            items(viewModel.browser.availableDevelopers) { dev ->
+                val isSelected = viewModel.browser.selectedDeveloper == dev
                 Box(
                     modifier = Modifier
                         .border(
@@ -171,11 +172,11 @@ fun PluginBrowserScreen(
                         )
                         .clip(CircleShape)
                         .background(if (isSelected) StudioSurfaceElevated else StudioSurface)
-                        .clickable { viewModel.selectDeveloper(dev) }
+                        .clickable { viewModel.browser.selectDeveloper(dev) }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = if (dev == "ALL") "All Developers" else dev,
+                        text = if (dev == PluginBrowserController.ALL_DEVELOPERS) "All Developers" else dev,
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) TextPrimary else TextSecondary
@@ -187,7 +188,7 @@ fun PluginBrowserScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Available Plugins List
-        if (viewModel.filteredPlugins.isEmpty()) {
+        if (viewModel.browser.filteredPlugins.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -217,14 +218,14 @@ fun PluginBrowserScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                items(viewModel.filteredPlugins, key = { it.pluginId ?: it.displayName }) { plugin ->
-                    val isSlotLoading = targetSlot.isLoading || viewModel.isInstantiating
+                items(viewModel.browser.filteredPlugins, key = { it.pluginId ?: it.displayName }) { plugin ->
+                    val isSlotLoading = targetSlot.isLoading || viewModel.rack.isInstantiating
 
                     PluginCard(
                         plugin = plugin,
                         isEnabled = !isSlotLoading,
                         onLoad = {
-                            viewModel.loadPluginIntoSlot(viewModel.targetBrowserSlotIndex, plugin)
+                            viewModel.loadPluginIntoSlot(viewModel.browser.targetSlotIndex, plugin)
                             onNavigateToRack()
                         }
                     )

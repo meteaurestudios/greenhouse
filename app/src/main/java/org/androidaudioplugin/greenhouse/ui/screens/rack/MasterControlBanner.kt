@@ -139,7 +139,7 @@ fun MasterControlBanner(
                             letterSpacing = 0.4.sp
                         )
 
-                        val activeSessionName = viewModel.currentSessionName
+                        val activeSessionName = viewModel.sessions.currentSessionName
 
                         if (!activeSessionName.isNullOrBlank()) {
                             Text(
@@ -180,7 +180,7 @@ fun MasterControlBanner(
                         Icon(
                             imageVector = Icons.Default.Folder,
                             contentDescription = "Sessions",
-                            tint = if (viewModel.savedSessions.isNotEmpty()) SproutGreen else TextSecondary,
+                            tint = if (viewModel.sessions.savedSessions.isNotEmpty()) SproutGreen else TextSecondary,
                             modifier = Modifier.size(BANNER_SETTINGS_ICON_SIZE)
                         )
                     }
@@ -321,8 +321,8 @@ fun MidiDeviceSelectionDialog(
     viewModel: HostViewModel,
     onDismiss: () -> Unit
 ) {
-    val activeDev = viewModel.activeMidiDevice
-    val isConnected = viewModel.isMidiDeviceConnected
+    val activeDev = viewModel.midi.activeDevice
+    val isConnected = viewModel.midi.isDeviceConnected
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -379,7 +379,7 @@ fun MidiDeviceSelectionDialog(
                                 text = if (isConnected && activeDev != null) {
                                     "1 controller active"
                                 } else {
-                                    "${viewModel.availableMidiDevices.size} device(s) detected"
+                                    "${viewModel.midi.availableDevices.size} device(s) detected"
                                 },
                                 fontSize = 11.sp,
                                 color = TextSecondary
@@ -456,7 +456,7 @@ fun MidiDeviceSelectionDialog(
                             }
 
                             Button(
-                                onClick = { viewModel.disconnectMidiDevice() },
+                                onClick = { viewModel.midi.disconnect() },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = DangerRed.copy(alpha = 0.15f),
                                     contentColor = DangerRed
@@ -484,7 +484,7 @@ fun MidiDeviceSelectionDialog(
                         .clip(RoundedCornerShape(10.dp))
                         .background(StudioSurfaceVariant)
                         .border(1.dp, StudioPanelBorder, RoundedCornerShape(10.dp))
-                        .clickable { viewModel.updateShowVirtualMidiDevices(!viewModel.showVirtualMidiDevices) }
+                        .clickable { viewModel.midi.updateShowVirtualDevices(!viewModel.midi.showVirtualDevices) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -505,8 +505,8 @@ fun MidiDeviceSelectionDialog(
                     }
 
                     Checkbox(
-                        checked = viewModel.showVirtualMidiDevices,
-                        onCheckedChange = { viewModel.updateShowVirtualMidiDevices(it) },
+                        checked = viewModel.midi.showVirtualDevices,
+                        onCheckedChange = { viewModel.midi.updateShowVirtualDevices(it) },
                         colors = CheckboxDefaults.colors(
                             checkedColor = SproutGreen,
                             checkmarkColor = StudioBackground,
@@ -518,7 +518,7 @@ fun MidiDeviceSelectionDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "AVAILABLE MIDI INPUT DEVICES (${viewModel.availableMidiDevices.size})",
+                    text = "AVAILABLE MIDI INPUT DEVICES (${viewModel.midi.availableDevices.size})",
                     fontSize = 10.5.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
@@ -528,7 +528,7 @@ fun MidiDeviceSelectionDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (viewModel.availableMidiDevices.isEmpty()) {
+                if (viewModel.midi.availableDevices.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -551,7 +551,7 @@ fun MidiDeviceSelectionDialog(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        viewModel.availableMidiDevices.forEach { dev ->
+                        viewModel.midi.availableDevices.forEach { dev ->
                             val isThisSelected = (dev.id == activeDev?.id) && isConnected
                             val dName = MidiControllerManager.getDeviceDisplayName(dev)
                             val dMan = MidiControllerManager.getDeviceManufacturer(dev)
@@ -578,9 +578,9 @@ fun MidiDeviceSelectionDialog(
                                     )
                                     .clickable {
                                         if (isThisSelected) {
-                                            viewModel.disconnectMidiDevice()
+                                            viewModel.midi.disconnect()
                                         } else {
-                                            viewModel.selectMidiDevice(dev)
+                                            viewModel.midi.selectDevice(dev)
                                         }
                                     }
                                     .padding(horizontal = 12.dp, vertical = 10.dp)
@@ -640,7 +640,7 @@ fun MidiDeviceSelectionDialog(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
-                        onClick = { viewModel.rescanMidiDevices() },
+                        onClick = { viewModel.midi.rescan() },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = StudioSurfaceElevated,
                             contentColor = TextPrimary

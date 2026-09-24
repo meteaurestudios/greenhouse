@@ -49,9 +49,9 @@ private fun getNoteName(note: Int): String {
 fun MidiKeyboardSection(
     viewModel: HostViewModel
 ) {
-    val noteOnStates = viewModel.keyboardNoteOnStates
-    val octave = viewModel.keyboardOctave
-    val isHoldEnabled = viewModel.isKeyboardHoldActive
+    val noteOnStates = viewModel.keyboard.noteOnStates
+    val octave = viewModel.keyboard.octave
+    val isHoldEnabled = viewModel.keyboard.isHoldActive
     var isKeyboardFolded by remember { mutableStateOf(false) }
     var showMidiMenuDialog by remember { mutableStateOf(false) }
 
@@ -108,7 +108,7 @@ fun MidiKeyboardSection(
                                 shape = RoundedCornerShape(6.dp)
                             )
                             .clickable(enabled = isOctaveDownEnabled) {
-                                viewModel.keyboardOctave = octave - 1
+                                viewModel.keyboard.octave = octave - 1
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -178,7 +178,7 @@ fun MidiKeyboardSection(
                                 shape = RoundedCornerShape(6.dp)
                             )
                             .clickable(enabled = isOctaveUpEnabled) {
-                                viewModel.keyboardOctave = octave + 1
+                                viewModel.keyboard.octave = octave + 1
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -200,8 +200,8 @@ fun MidiKeyboardSection(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val hasMidiDeviceAttached = viewModel.availableMidiDevices.isNotEmpty() || viewModel.isMidiDeviceConnected
-                    val isMidiInUse = viewModel.isMidiDeviceConnected && viewModel.activeMidiDevice != null
+                    val hasMidiDeviceAttached = viewModel.midi.availableDevices.isNotEmpty() || viewModel.midi.isDeviceConnected
+                    val isMidiInUse = viewModel.midi.isDeviceConnected && viewModel.midi.activeDevice != null
 
                     // MIDI Controller Icon Button (Always visible if hardware controller is connected to the device)
                     if (hasMidiDeviceAttached) {
@@ -261,7 +261,7 @@ fun MidiKeyboardSection(
                                 shape = RoundedCornerShape(6.dp)
                             )
                             .clickable {
-                                viewModel.toggleKeyboardHold()
+                                viewModel.keyboard.toggleHold()
                             }
                             .padding(horizontal = 8.dp),
                         contentAlignment = Alignment.Center
@@ -346,10 +346,10 @@ fun MidiKeyboardSection(
                     whiteNoteOnColor = SproutGreen,
                     blackNoteOnColor = SproutGreen,
                     onNoteOn = { note ->
-                        viewModel.onKeyboardNoteOn(note)
+                        viewModel.keyboard.noteOn(note)
                     },
                     onNoteOff = { note ->
-                        viewModel.onKeyboardNoteOff(note)
+                        viewModel.keyboard.noteOff(note)
                     },
                     modifier = Modifier
                         .fillMaxWidth()

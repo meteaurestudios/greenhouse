@@ -228,7 +228,7 @@ fun RackSessionDialog(
             Spacer(modifier = Modifier.height(SECTION_SPACING))
 
             SavedSessionsHeader(
-                count = viewModel.savedSessions.size,
+                count = viewModel.sessions.savedSessions.size,
                 onImport = {
                     focusManager.clearFocus()
                     onImportRequested()
@@ -237,7 +237,7 @@ fun RackSessionDialog(
 
             Spacer(modifier = Modifier.height(HEADER_TO_LIST_SPACING))
 
-            if (viewModel.savedSessions.isEmpty()) {
+            if (viewModel.sessions.savedSessions.isEmpty()) {
                 EmptySessionsHint()
             } else {
                 val listShape = RoundedCornerShape(CARD_CORNER_RADIUS)
@@ -252,7 +252,7 @@ fun RackSessionDialog(
                         .border(1.dp, StudioPanelBorder, listShape)
                 ) {
                     itemsIndexed(
-                        items = viewModel.savedSessions,
+                        items = viewModel.sessions.savedSessions,
                         key = { _, header -> header.file.absolutePath }
                     ) { index, sessionHeader ->
                         Column {
@@ -264,15 +264,15 @@ fun RackSessionDialog(
                                 )
                             }
 
-                            val isActive = sessionHeader.file == viewModel.currentSessionFile ||
-                                sessionHeader.name.equals(viewModel.currentSessionName, ignoreCase = true)
+                            val isActive = sessionHeader.file == viewModel.sessions.currentSessionFile ||
+                                sessionHeader.name.equals(viewModel.sessions.currentSessionName, ignoreCase = true)
 
                             SessionRow(
                                 header = sessionHeader,
                                 isActive = isActive,
                                 onLoad = {
                                     focusManager.clearFocus()
-                                    viewModel.loadSessionFromFile(sessionHeader.file) {
+                                    viewModel.sessions.loadSessionFromFile(sessionHeader.file) {
                                         onDismissRequest()
                                     }
                                 },
@@ -304,7 +304,7 @@ fun RackSessionDialog(
             isTitleDanger = true,
             onDismiss = { sessionToDelete = null },
             onConfirm = {
-                viewModel.deleteSession(target)
+                viewModel.sessions.deleteSession(target)
                 sessionToDelete = null
             }
         )
@@ -320,7 +320,7 @@ fun RackSessionDialog(
             isTitleDanger = false,
             onDismiss = { showNewSessionConfirmation = false },
             onConfirm = {
-                viewModel.clearRack()
+                viewModel.sessions.startNewSession()
                 showNewSessionConfirmation = false
                 onDismissRequest()
             }
@@ -370,9 +370,9 @@ private fun DialogHeader(
 @Composable
 private fun CurrentSessionCard(viewModel: HostViewModel) {
     val focusManager = LocalFocusManager.current
-    val activeSessionName = viewModel.currentSessionName
+    val activeSessionName = viewModel.sessions.currentSessionName
     val hasActiveSession = !activeSessionName.isNullOrBlank()
-    val loadedPluginsCount = viewModel.slots.count { it.isLoaded }
+    val loadedPluginsCount = viewModel.rack.slots.count { it.isLoaded }
     var nameInput by remember { mutableStateOf(TextFieldValue()) }
     var isSaveAsExpanded by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -409,7 +409,7 @@ private fun CurrentSessionCard(viewModel: HostViewModel) {
     val showNameInput = !hasActiveSession || isSaveAsExpanded
     val shape = RoundedCornerShape(CARD_CORNER_RADIUS)
 
-    val isNameTaken = viewModel.isSessionNameTaken(nameInput.text)
+    val isNameTaken = viewModel.sessions.isSessionNameTaken(nameInput.text)
 
     val nameWarning = if (isNameTaken) {
         "There's already one called \"${nameInput.text.trim()}\". Try another name."
@@ -429,7 +429,7 @@ private fun CurrentSessionCard(viewModel: HostViewModel) {
     val submitName = {
         if (nameInput.text.isNotBlank() && !isNameTaken) {
             saveFeedback = SaveFeedback.Saving
-            viewModel.saveCurrentSession(nameInput.text, onSaveFinished)
+            viewModel.sessions.saveSession(nameInput.text, onSaveFinished)
             nameInput = TextFieldValue()
             isSaveAsExpanded = false
             focusManager.clearFocus()
@@ -547,9 +547,9 @@ private fun CurrentSessionCard(viewModel: HostViewModel) {
 
                             // An imported session can share its name with one already saved:
                             // ask for a new name instead of overwriting the other one
-                            if (viewModel.canSaveActiveSessionInPlace()) {
+                            if (viewModel.sessions.canSaveActiveSessionInPlace()) {
                                 saveFeedback = SaveFeedback.Saving
-                                viewModel.saveActiveSession(onSaveFinished)
+                                viewModel.sessions.saveActiveSession(onSaveFinished)
                             } else {
                                 openSaveAs(activeSessionName ?: "")
                             }

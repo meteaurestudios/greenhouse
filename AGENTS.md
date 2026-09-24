@@ -10,7 +10,16 @@ This repository is **`greenhouse`**, a modern Jetpack Compose Android host appli
   - **`greenhouse/core/AapHostEngine.kt`**: Connects to AAP services and instantiates `NativeRemotePluginInstance`.
   - **`greenhouse/core/AapAudioPlayer.kt`**: Low-latency Oboe audio render engine, sample player, and MIDI UMP parameter / note dispatching.
   - **`greenhouse/data/PluginRepository.kt`**: Discovers system & local AAP services via `AudioPluginHostHelper`.
-  - **`greenhouse/ui/HostViewModel.kt`**: ViewModel managing multi-slot rack state (Instrument slot 0, Effect slots 1 & 2), active parameter state maps, and plugin lifecycle.
+  - **`greenhouse/ui/HostViewModel.kt`**: Thin composition root. Wires the controllers below, runs the engine monitor loop, and handles app lifecycle. Screens access controllers directly (`viewModel.rack`, `viewModel.audio`, …).
+  - **`greenhouse/ui/RackModels.kt`**: Rack UI models (`RackSlotData`, `SlotUiState`, `StudioRackViewMode`, …).
+  - **`greenhouse/ui/host/`**: Feature controllers owned by `HostViewModel`:
+    - `RackController`: multi-slot rack (Instrument slot 0, Effect slots 1 & 2), plugin load / unload / restore, bypass, parameters, presets, plugin-side parameter sync.
+    - `PluginSlotLoader`: blocking instance queries (instantiate, dynamic parameter / port discovery, value and preset-name reads). IO thread only.
+    - `AudioEngineController`: `AapAudioPlayer` transport, buffer sizing, background / foreground pause and resume.
+    - `RackMeters`: per-slot levels and CPU load.
+    - `PluginBrowserController`: plugin catalog, slot-target filtering, developer filter, search.
+    - `VirtualKeyboardController` / `MidiDeviceController`: on-screen keyboard state and hardware MIDI input.
+    - `RackSessionController`: saved sessions, autosave, session restore.
   - **`greenhouse/ui/screens/StudioRackScreen.kt`**: Studio rack UI (Signal chain, slot cards, parameter controls, native plugin surfaces).
   - **`greenhouse/ui/screens/PluginBrowserScreen.kt`**: Plugin catalog browser with category filters and search.
   - **`greenhouse/ui/screens/EngineSettingsScreen.kt`**: Audio hardware specs and diagnostic monitor.

@@ -32,8 +32,8 @@ fun StudioRackScreen(
     onNavigateToBrowser: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
-    val currentSlotIndex = viewModel.activeSlotIndex
-    val activeSlot = viewModel.slots[currentSlotIndex]
+    val currentSlotIndex = viewModel.rack.activeSlotIndex
+    val activeSlot = viewModel.rack.slots[currentSlotIndex]
     val activePlugin = activeSlot.pluginInfo
     var isRackFolded by remember { mutableStateOf(false) }
     var showSessionDialog by remember { mutableStateOf(false) }
@@ -42,7 +42,7 @@ fun StudioRackScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            viewModel.loadPresetFromUri(uri)
+            viewModel.sessions.importSessionFromUri(uri)
         }
     }
 
@@ -60,10 +60,10 @@ fun StudioRackScreen(
             // Master Control Banner
             MasterControlBanner(
                 viewModel = viewModel,
-                slots = viewModel.slots,
-                isProcessing = viewModel.isProcessing,
-                totalCpuLoadProvider = { viewModel.totalCpuLoad },
-                onToggleProcessing = { viewModel.toggleAudioPlayback() },
+                slots = viewModel.rack.slots,
+                isProcessing = viewModel.audio.isProcessing,
+                totalCpuLoadProvider = { viewModel.meters.totalCpuLoad },
+                onToggleProcessing = { viewModel.audio.togglePlayback() },
                 onOpenSettings = onNavigateToSettings,
                 onOpenSessionDialog = { showSessionDialog = true }
             )
@@ -72,23 +72,23 @@ fun StudioRackScreen(
 
             // Multi-Slot Audio Signal Chain Rack Header
             SignalRackHeader(
-                slots = viewModel.slots,
+                slots = viewModel.rack.slots,
                 activeSlotIndex = currentSlotIndex,
-                isProcessing = viewModel.isProcessing,
-                slotCpuLoadsProvider = { viewModel.slotCpuLoads },
-                slotLevelsProvider = { viewModel.slotLevels },
+                isProcessing = viewModel.audio.isProcessing,
+                slotCpuLoadsProvider = { viewModel.meters.slotCpuLoads },
+                slotLevelsProvider = { viewModel.meters.slotLevels },
                 onSelectSlot = { slotIdx ->
-                    viewModel.selectActiveSlot(slotIdx)
+                    viewModel.rack.selectActiveSlot(slotIdx)
                 },
                 onAddPlugin = { slotIndex ->
                     viewModel.openBrowserForSlot(slotIndex)
                     onNavigateToBrowser()
                 },
                 onToggleBypass = { slotIdx ->
-                    viewModel.toggleSlotBypass(slotIdx)
+                    viewModel.rack.toggleSlotBypass(slotIdx)
                 },
                 onUnloadSlot = { slotIdx ->
-                    viewModel.unloadSlot(slotIdx)
+                    viewModel.rack.unloadSlot(slotIdx)
                 }
             )
 
@@ -98,8 +98,8 @@ fun StudioRackScreen(
                 // View Mode Selector Bar for Active Slot
                 StatusAndModeSelectorBar(
                     activeSlot = activeSlot,
-                    currentMode = viewModel.currentViewMode,
-                    onModeSelected = { viewModel.updateViewMode(it) }
+                    currentMode = viewModel.rack.currentViewMode,
+                    onModeSelected = { viewModel.rack.updateViewMode(it) }
                 )
             }
 
@@ -126,23 +126,23 @@ fun StudioRackScreen(
                 } else if (activePlugin == null) {
                     NoPluginInSlotView(
                         slot = activeSlot,
-                        isProcessing = viewModel.isProcessing,
+                        isProcessing = viewModel.audio.isProcessing,
                         onOpenBrowser = {
                             viewModel.openBrowserForSlot(activeSlot.index)
                             onNavigateToBrowser()
                         }
                     )
                 } else {
-                    when (viewModel.currentViewMode) {
+                    when (viewModel.rack.currentViewMode) {
                         StudioRackViewMode.PARAMETERS -> {
                             ParameterControlRack(
                                 slotIndex = activeSlot.index,
                                 pluginId = activePlugin.pluginId ?: "",
                                 parameters = activePlugin.parameters,
-                                parameterValues = viewModel.slotParameterValues[activeSlot.index],
-                                gridState = viewModel.slotParameterGridStates[activeSlot.index],
+                                parameterValues = viewModel.rack.slotUi[activeSlot.index].parameterValues,
+                                gridState = viewModel.rack.slotUi[activeSlot.index].parameterGridState,
                                 onValueChange = { param, valDouble ->
-                                    viewModel.setParameterValue(activeSlot.index, param, valDouble)
+                                    viewModel.rack.setParameterValue(activeSlot.index, param, valDouble)
                                 }
                             )
                         }
@@ -160,9 +160,9 @@ fun StudioRackScreen(
                         StudioRackViewMode.PRESETS -> {
                             PluginPresetsView(
                                 slot = activeSlot,
-                                gridState = viewModel.slotPresetGridStates[activeSlot.index],
+                                gridState = viewModel.rack.slotUi[activeSlot.index].presetGridState,
                                 onPresetSelected = { idx ->
-                                    viewModel.setPreset(activeSlot.index, idx)
+                                    viewModel.rack.setPreset(activeSlot.index, idx)
                                 }
                             )
                         }
