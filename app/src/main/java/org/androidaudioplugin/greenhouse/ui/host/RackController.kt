@@ -295,10 +295,10 @@ class RackController(
                 }
 
                 val currentVal = try {
-                    instance.getParameterValue(i)
+                    PluginSlotLoader.queryIfAlive<Double?>(instance, null) { instance.getParameterValue(i) }
                 } catch (e: Throwable) {
-                    continue
-                }
+                    null
+                } ?: continue
 
                 val previousVal = ui.lastPluginValues[param.id]
 
@@ -330,7 +330,7 @@ class RackController(
 
         if (currentInstance != null) {
             try {
-                currentInstance.destroy()
+                PluginSlotLoader.destroy(currentInstance)
             } catch (e: Throwable) {
                 Log.e(TAG, "Error destroying plugin instance in slot $slotIndex", e)
             }

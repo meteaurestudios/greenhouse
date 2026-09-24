@@ -5,6 +5,7 @@ import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.core.AapHostEngine
 import org.androidaudioplugin.greenhouse.ui.PluginPreset
 import org.androidaudioplugin.hosting.AudioPluginClientBase
+import org.androidaudioplugin.hosting.InstanceState
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 
 internal data class LoadedPlugin(
@@ -20,6 +21,33 @@ internal data class LoadedPlugin(
  */
 internal object PluginSlotLoader {
     private const val TAG = "PluginSlotLoader"
+
+    /**
+     * Runs [query] against [instance] unless it has been destroyed, returning [fallback] otherwise.
+     * Serialized with [destroy]: a destroyed instance is gone from the native client, and any
+     * further call on it dereferences null and kills the process (not catchable from Kotlin).
+     */
+    fun <T> queryIfAlive(instance: NativeRemotePluginInstance, fallback: T, query: () -> T): T {
+        synchronized(instance) {
+            if (instance.state == InstanceState.DESTROYED) {
+                return fallback
+            }
+
+            return query()
+        }
+    }
+
+    /** Destroys [instance], waiting for any in-flight [queryIfAlive] call on it to finish. */
+    fun destroy(instance: NativeRemotePluginInstance) {
+        synchronized(instance) {
+            try {
+                instance.destroy()
+            } finally {
+                // destroy() swallows remote errors without marking the instance destroyed.
+                instance.state = InstanceState.DESTROYED
+            }
+        }
+    }
 
     /**
      * Instantiates [plugin] for [slotIndex], fills in parameters / ports the plugin only exposes
@@ -54,12 +82,12 @@ internal object PluginSlotLoader {
      * swallows errors and returns 0.0 for indices it doesn't know.
      */
     fun readParameterValues(plugin: PluginInformation, instance: NativeRemotePluginInstance): Map<Int, Double> {
-        val runtimeCount = instance.getParameterCount()
+        val runtimeCount = queryIfAlive(instance, 0) { instance.getParameterCount() }
         val values = mutableMapOf<Int, Double>()
 
         for ((i, param) in plugin.parameters.withIndex()) {
             values[param.id] = if (i < runtimeCount) {
-                instance.getParameterValue(i)
+                queryIfAlive(instance, param.defaultValue) { instance.getParameterValue(i) }
             } else {
                 param.defaultValue
             }
@@ -72,7 +100,7 @@ internal object PluginSlotLoader {
     fun readPresets(instance: NativeRemotePluginInstance, presetCount: Int): List<PluginPreset> {
         val presets = (0 until presetCount).map { i ->
             val name = try {
-                instance.getPresetName(i)
+                queryIfAlive(instance, "") { instance.getPresetName(i) }
             } catch (e: Throwable) {
                 ""
             }
