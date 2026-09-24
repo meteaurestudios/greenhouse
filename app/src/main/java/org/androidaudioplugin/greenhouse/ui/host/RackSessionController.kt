@@ -275,8 +275,9 @@ class RackSessionController(
                 }
             }
 
-            if (wasAudioActive) {
-                audio.ensureRunning()
+            // A session with plugins in it should be playable right away, including the autosave restored at launch.
+            if (wasAudioActive || !rack.isEmpty) {
+                audio.requestRunning()
             }
 
             autosave()

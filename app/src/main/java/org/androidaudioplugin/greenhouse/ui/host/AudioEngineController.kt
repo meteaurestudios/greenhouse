@@ -99,6 +99,19 @@ class AudioEngineController(
         }
     }
 
+    /**
+     * Like [ensureRunning], but never starts rendering while the app is in the background:
+     * it arms the foreground auto-resume instead.
+     */
+    fun requestRunning() {
+        if (isBackgrounded) {
+            wasPlayingBeforeBackground = true
+            return
+        }
+
+        ensureRunning()
+    }
+
     /** Stops rendering without touching the status line; used around rack teardown / restore. */
     fun pause() {
         player.pause()
