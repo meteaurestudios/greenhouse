@@ -10,6 +10,8 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
@@ -53,6 +55,12 @@ class RackController(
     }
 
     val slotUi = List(NUM_RACK_SLOTS) { SlotUiState() }
+
+    /** Serializes preset changes per slot so they reach the plugin in tap order. */
+    private val presetLocks = List(NUM_RACK_SLOTS) { Mutex() }
+
+    /** Latest preset request per slot; read-backs from superseded requests are dropped. */
+    private val presetRequestIds = IntArray(NUM_RACK_SLOTS)
 
     var activeSlotIndex by mutableIntStateOf(INSTRUMENT_SLOT_INDEX)
         private set
@@ -228,11 +236,45 @@ class RackController(
             return
         }
 
+        val instance = slot.instance
+        val plugin = slot.pluginInfo
+
+        if (instance == null || plugin == null) {
+            return
+        }
+
         val targetPreset = slot.presets.find { it.nativeIndex == nativeIndex } ?: slot.presets.first()
         slots[slotIndex] = slot.copy(selectedPresetIndex = targetPreset.nativeIndex)
-        audio.player.setPresetIndex(slotIndex, targetPreset.nativeIndex)
-        syncParametersFromPlugin(slotIndex)
         postStatus("${slot.title} Preset: ${targetPreset.name}")
+
+        val request = ++presetRequestIds[slotIndex]
+
+        scope.launch {
+            // FIFO lock: rapid preset taps reach the plugin in the order they were made.
+            val values = presetLocks[slotIndex].withLock {
+                withContext(Dispatchers.IO) {
+                    PluginSlotLoader.queryIfAlive(instance, Unit) {
+                        instance.setCurrentPresetIndex(targetPreset.nativeIndex)
+                    }
+                    PluginSlotLoader.readParameterValues(plugin, instance)
+                }
+            }
+
+            // A newer preset was picked, or the slot was reloaded, while this one was applying.
+            if (request != presetRequestIds[slotIndex] || slots[slotIndex].instance != instance) {
+                return@launch
+            }
+
+            // Display only: the preset already set these values in the plugin. Echoing them back
+            // would clobber the preset if it applied after the read-back.
+            val ui = slotUi[slotIndex]
+
+            for (param in plugin.parameters) {
+                val value = values[param.id] ?: continue
+                ui.parameterValues[param.id] = value
+                ui.lastPluginValues[param.id] = value
+            }
+        }
     }
 
     /** Snapshot of every slot for session persistence, including each plugin's opaque state chunk. */
@@ -387,31 +429,6 @@ class RackController(
             // The slot may have been reloaded while names were being fetched.
             if (slots[slotIndex].instance == instance) {
                 slots[slotIndex] = slots[slotIndex].copy(presets = presets, isLoadingPresets = false)
-            }
-        }
-    }
-
-    private fun syncParametersFromPlugin(slotIndex: Int) {
-        val slot = slots[slotIndex]
-        val instance = slot.instance
-        val plugin = slot.pluginInfo
-
-        if (instance == null || plugin == null) {
-            return
-        }
-
-        scope.launch {
-            val values = withContext(Dispatchers.IO) {
-                PluginSlotLoader.readParameterValues(plugin, instance)
-            }
-
-            val ui = slotUi[slotIndex]
-
-            for (param in plugin.parameters) {
-                val value = values[param.id] ?: continue
-                ui.parameterValues[param.id] = value
-                ui.lastPluginValues[param.id] = value
-                audio.player.setParameterValue(slotIndex, param, value)
             }
         }
     }

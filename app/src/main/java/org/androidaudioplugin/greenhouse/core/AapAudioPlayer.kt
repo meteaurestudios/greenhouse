@@ -289,12 +289,6 @@ class AapAudioPlayer private constructor(
         sendUmpToSlot(slotIndex, umps.toByteArray())
     }
 
-    fun setPresetIndex(slotIndex: Int, index: Int) {
-        if (slotIndex in 0 until numSlots) {
-            slotInstances[slotIndex]?.setCurrentPresetIndex(index)
-        }
-    }
-
     private fun sendUmpToSlot(slotIndex: Int, bytes: ByteArray) {
         if (nativeEngineHandle != 0L && slotIndex in 0 until numSlots) {
             nativeSendUmp(nativeEngineHandle, slotIndex, bytes, bytes.size)
