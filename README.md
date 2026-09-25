@@ -34,3 +34,13 @@
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for architectural milestones, remaining tasks, and future feature enhancements.
+
+---
+
+## License
+
+Greenhouse is licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Meteaure Studios.
+
+Third-party components keep their own licenses. See [NOTICE](NOTICE) for attributions.
+
+The "Greenhouse" name and logo are not covered by this license and may not be used to endorse or promote derived products without permission.
