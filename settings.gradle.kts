@@ -20,6 +20,9 @@ dependencyResolutionManagement {
 rootProject.name = "greenhouse"
 
 include(":app")
+include(":greenhouse-engine")
+include(":greenhouse-host")
+include(":greenhouse-ui")
 
 include(":androidaudioplugin")
 project(":androidaudioplugin").projectDir = file("external/aap-core/androidaudioplugin")

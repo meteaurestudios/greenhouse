@@ -6,10 +6,16 @@ This repository is **`greenhouse`**, a modern Jetpack Compose Android host appli
 
 ## 1. Project Architecture & Structure
 
-- **`app/`**: Android application module (`org.androidaudioplugin.greenhouse`).
+The project is split into library modules so that downstream apps can build on the same base. Dependencies flow one way: `:app` → `:greenhouse-ui` → `:greenhouse-host` → `:greenhouse-engine` → aap-core. Kotlin packages are unchanged by the split.
+
+- **`greenhouse-engine/`** (`:greenhouse-engine`): Audio engine, no UI.
+  - **`src/main/cpp/`**: Native Oboe engine (`NativeAudioEngine`), JNI bindings, SIMD helpers.
   - **`greenhouse/core/AapHostEngine.kt`**: Connects to AAP services and instantiates `NativeRemotePluginInstance`.
   - **`greenhouse/core/AapAudioPlayer.kt`**: Low-latency Oboe audio render engine, sample player, and MIDI UMP parameter / note dispatching.
-  - **`greenhouse/data/PluginRepository.kt`**: Discovers system & local AAP services via `AudioPluginHostHelper`.
+  - **`greenhouse/core/MidiControllerManager.kt`**: Hardware MIDI input and MIDI 1.0 → UMP stream parser.
+  - Manifest declares audio permissions and the AAP service `<queries>`; `consumer-rules.pro` carries the JNI / AAP R8 keep rules.
+- **`greenhouse-host/`** (`:greenhouse-host`): Host state and logic, no screens.
+  - **`greenhouse/data/`**: `PluginRepository` (discovers AAP services via `AudioPluginHostHelper`), `.ghrack` session models, serializer, and storage.
   - **`greenhouse/ui/HostViewModel.kt`**: Thin composition root. Wires the controllers below, runs the engine monitor loop, and handles app lifecycle. Screens access controllers directly (`viewModel.rack`, `viewModel.audio`, …).
   - **`greenhouse/ui/RackModels.kt`**: Rack UI models (`RackSlotData`, `SlotUiState`, `StudioRackViewMode`, …).
   - **`greenhouse/ui/host/`**: Feature controllers owned by `HostViewModel`:
@@ -20,9 +26,14 @@ This repository is **`greenhouse`**, a modern Jetpack Compose Android host appli
     - `PluginBrowserController`: plugin catalog, slot-target filtering, developer filter, search.
     - `VirtualKeyboardController` / `MidiDeviceController`: on-screen keyboard state and hardware MIDI input.
     - `RackSessionController`: saved sessions, autosave, session restore.
+  - Manifest declares the session-sharing `FileProvider` (`${applicationId}.fileprovider`).
+- **`greenhouse-ui/`** (`:greenhouse-ui`): Compose UI.
+  - **`greenhouse/ui/MainHostApp.kt`**: Root composable and navigation graph.
   - **`greenhouse/ui/screens/StudioRackScreen.kt`**: Studio rack UI (Signal chain, slot cards, parameter controls, native plugin surfaces).
   - **`greenhouse/ui/screens/PluginBrowserScreen.kt`**: Plugin catalog browser with category filters and search.
   - **`greenhouse/ui/screens/EngineSettingsScreen.kt`**: Audio hardware specs and diagnostic monitor.
+  - **`greenhouse/ui/theme/`**, **`greenhouse/ui/components/`**: Theme and reusable controls.
+- **`app/`** (`:app`): Thin application shell (`org.androidaudioplugin.greenhouse`): `MainActivity`, launcher icons, app name, signing, and release config. Keep app logic out of this module.
 - **`external/aap-core/`**: Submodule containing core AAP runtime (`:androidaudioplugin`) and Compose UI interop (`:androidaudioplugin-ui-compose`).
 
 > **CRITICAL RULE: Submodule Immutability**  

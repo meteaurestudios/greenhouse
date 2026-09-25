@@ -31,7 +31,6 @@ android {
     namespace = "org.androidaudioplugin.greenhouse"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     buildToolsVersion = libs.versions.build.tools.get()
-    ndkVersion = libs.versions.ndk.get()
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -48,28 +47,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
-        }
-
-        externalNativeBuild {
-            cmake {
-                arguments(
-                    "-DANDROID_STL=c++_shared",
-                    "-DANDROID_ARM_NEON=TRUE"
-                )
-            }
-        }
-
-        testOptions {
-            unitTests {
-                isReturnDefaultValues = true
-            }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            version = libs.versions.cmake.get()
-            path("src/main/cpp/CMakeLists.txt")
         }
     }
 
@@ -121,7 +98,6 @@ android {
 
     buildFeatures {
         compose = true
-        prefab = true
     }
 
     packaging {
@@ -136,29 +112,14 @@ android {
 }
 
 dependencies {
-    implementation(project(":androidaudioplugin"))
-    implementation(project(":androidaudioplugin-ui-compose"))
-
-    runtimeOnly(libs.libcxx.provider)
+    implementation(project(":greenhouse-ui"))
 
     implementation(libs.androidx.core.ktx)
-    implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.activity.compose)
 
     implementation(platform(libs.compose.bom))
-    implementation(libs.compose.ui)
-    implementation(libs.ui.tooling.preview)
     implementation(libs.compose.material3)
-    implementation(libs.compose.material.icons.extended)
-    implementation(libs.navigation.compose)
 
-    implementation(libs.compose.audio.controls)
-    implementation(libs.ktmidi)
-    implementation(libs.oboe)
-
-    debugImplementation(libs.ui.tooling)
-    testImplementation(libs.junit)
-    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.test.ext.junit)
     androidTestImplementation(libs.test.espresso.core)
 }
