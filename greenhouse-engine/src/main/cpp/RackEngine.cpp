@@ -180,8 +180,9 @@ void RackEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, int32_t s
     std::lock_guard<std::mutex> lock(mControlMutex);
     auto instance = mSlots[slotIndex].mInstance.load();
 
-    if (instance != nullptr && isActive(instance)) {
-        // aap-core queues the events under its own lock and merges them at the next process()
+    // aap-core queues the events under its own lock and merges them at the next process(). Inactive
+    // instances queue them too, so values set while paused (e.g. a session restore) apply once playing.
+    if (instance != nullptr && (isActive(instance) || isInactive(instance))) {
         instance->addEventUmpInput(const_cast<uint8_t*>(data), size);
     }
 }
