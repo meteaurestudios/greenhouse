@@ -158,6 +158,9 @@ bool OboeEngine::openStreamLocked()
 
     mSampleRate.store(mStream->getSampleRate(), std::memory_order_relaxed);
     mFramesPerBurst.store(mStream->getFramesPerBurst(), std::memory_order_relaxed);
+    mIsLowLatency.store(mStream->getPerformanceMode() == oboe::PerformanceMode::LowLatency, std::memory_order_relaxed);
+    mIsExclusive.store(mStream->getSharingMode() == oboe::SharingMode::Exclusive, std::memory_order_relaxed);
+    mIsMMapUsed.store(oboe::OboeExtensions::isMMapUsed(mStream.get()), std::memory_order_relaxed);
     prepareToPlay(mStream->getSampleRate(), mStream->getFramesPerBurst());
 
     // No callback runs yet, so the minimum is applied right away rather than at the first callback

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.androidaudioplugin.greenhouse.core.OutputStreamMode
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.components.MidiDin5Icon
 import org.androidaudioplugin.greenhouse.ui.theme.*
@@ -112,7 +113,12 @@ fun EngineSettingsScreen(
 
                 InfoRow(label = "Output Sample Rate", value = "${viewModel.audio.sampleRate} Hz")
                 InfoRow(label = "Hardware Burst Quantum", value = "${viewModel.audio.actualBurstSize} frames")
-                InfoRow(label = "Audio Stream Mode", value = "LowLatency Exclusive", valueColor = NeonCyan)
+                val streamMode = viewModel.audio.streamMode
+                InfoRow(
+                    label = "Audio Stream Mode",
+                    value = streamModeLabel(streamMode),
+                    valueColor = if (streamMode.isMMapUsed) NeonCyan else WarningOrange
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -684,6 +690,13 @@ fun EngineSettingsScreen(
             }
         }
     }
+}
+
+private fun streamModeLabel(mode: OutputStreamMode): String {
+    val performance = if (mode.isLowLatency) "LowLatency" else "Default"
+    val sharing = if (mode.isExclusive) "Exclusive" else "Shared"
+    val path = if (mode.isMMapUsed) "MMAP" else "Legacy"
+    return "$performance $sharing ($path)"
 }
 
 @Composable

@@ -10,6 +10,14 @@ import dev.atsushieno.ktmidi.UmpFactory
 import dev.atsushieno.ktmidi.toPlatformNativeBytes
 import java.nio.ByteOrder
 
+/** How the output stream was actually opened, which can be less than the low-latency exclusive MMAP stream requested. */
+data class OutputStreamMode(
+    val isLowLatency: Boolean,
+    val isExclusive: Boolean,
+    /** MMAP is the fastest path; without it the stream goes through the legacy path, with larger bursts. */
+    val isMMapUsed: Boolean
+)
+
 /**
  * Kotlin side of the native `RackEngine` (one per process). Only one instance should be alive at a
  * time: creating one reconfigures the native engine, and closing it releases the audio device.
@@ -64,6 +72,15 @@ class RackEngine(
         private external fun nativeGetBurstFrames(): Int
 
         @JvmStatic
+        private external fun nativeIsLowLatency(): Boolean
+
+        @JvmStatic
+        private external fun nativeIsExclusive(): Boolean
+
+        @JvmStatic
+        private external fun nativeIsMMapUsed(): Boolean
+
+        @JvmStatic
         private external fun nativeSetSlotPlugin(slotIndex: Int, nativeClient: Long, instanceId: Int, sampleRate: Int)
 
         @JvmStatic
@@ -91,6 +108,10 @@ class RackEngine(
 
     val actualBurstSize: Int
         get() = nativeGetBurstFrames().coerceAtLeast(0)
+
+    /** Mode of the last opened output stream. It can change when the stream is reopened after a device change. */
+    val streamMode: OutputStreamMode
+        get() = OutputStreamMode(nativeIsLowLatency(), nativeIsExclusive(), nativeIsMMapUsed())
 
     init {
         nativeConfigure(framesPerCallback, numSlots)

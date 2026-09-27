@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import org.androidaudioplugin.greenhouse.core.OutputStreamMode
 import org.androidaudioplugin.greenhouse.core.RackEngine
 import org.androidaudioplugin.greenhouse.core.MAX_HOST_BUFFER_FRAMES
 import java.util.Locale
@@ -56,6 +57,9 @@ class AudioEngineController(
 
             return DEFAULT_BURST_SIZE
         }
+
+    val streamMode: OutputStreamMode
+        get() = engine.streamMode
 
     val availableBurstMultipliers: List<Int>
         get() {

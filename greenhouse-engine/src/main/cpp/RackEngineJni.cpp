@@ -74,6 +74,27 @@ Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeGetBurstFrames(
     return getEngine().getFramesPerBurst();
 }
 
+JNIEXPORT jboolean JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeIsLowLatency(
+        JNIEnv* env, jclass clazz)
+{
+    return getEngine().isLowLatency() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeIsExclusive(
+        JNIEnv* env, jclass clazz)
+{
+    return getEngine().isExclusive() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeIsMMapUsed(
+        JNIEnv* env, jclass clazz)
+{
+    return getEngine().isMMapUsed() ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT void JNICALL
 Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeSetSlotPlugin(
         JNIEnv* env, jclass clazz, jint slotIndex, jlong nativeClient, jint instanceId, jint sampleRate)

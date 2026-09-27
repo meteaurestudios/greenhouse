@@ -65,6 +65,24 @@ public:
         return mFramesPerBurst.load(std::memory_order_relaxed);
     }
 
+    /** Whether the last opened stream got the low-latency path. Lock-free. */
+    bool isLowLatency() const
+    {
+        return mIsLowLatency.load(std::memory_order_relaxed);
+    }
+
+    /** Whether the last opened stream got exclusive access to the device. Lock-free. */
+    bool isExclusive() const
+    {
+        return mIsExclusive.load(std::memory_order_relaxed);
+    }
+
+    /** Whether the last opened stream uses MMAP, the fastest path, rather than the legacy one. Lock-free. */
+    bool isMMapUsed() const
+    {
+        return mIsMMapUsed.load(std::memory_order_relaxed);
+    }
+
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream* audioStream, void* audioData, int32_t numFrames) final;
     void onErrorAfterClose(oboe::AudioStream* audioStream, oboe::Result error) final;
 
@@ -125,6 +143,10 @@ private:
     std::atomic<bool> mShouldStream{false}; // after an error, the stream is restarted only if it was streaming
     std::atomic<int32_t> mSampleRate{0};
     std::atomic<int32_t> mFramesPerBurst{0};
+    // What the last opened stream actually got, which can be less than what was requested
+    std::atomic<bool> mIsLowLatency{false};
+    std::atomic<bool> mIsExclusive{false};
+    std::atomic<bool> mIsMMapUsed{false};
 
     // Odd while onAudioReady runs (see waitForAudioThreadQuiescence)
     std::atomic<uint64_t> mCallbackSequence{0};
