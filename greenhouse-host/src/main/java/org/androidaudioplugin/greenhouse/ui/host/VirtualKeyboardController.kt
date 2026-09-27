@@ -5,13 +5,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import org.androidaudioplugin.greenhouse.core.AapAudioPlayer
+import org.androidaudioplugin.greenhouse.core.RackEngine
 
 /**
  * On-screen keyboard state. Lives in the ViewModel so held notes and octave survive
  * navigation and slot changes; hardware MIDI input lights the same keys.
  */
-class VirtualKeyboardController(private val player: AapAudioPlayer) {
+class VirtualKeyboardController(private val engine: RackEngine) {
     companion object {
         const val MIDI_NOTE_COUNT = 128
         const val DEFAULT_OCTAVE = 4
@@ -40,7 +40,7 @@ class VirtualKeyboardController(private val player: AapAudioPlayer) {
         for (note in 0 until MIDI_NOTE_COUNT) {
             if (isDown(note)) {
                 noteOnStates[note] = KEY_UP
-                player.sendNoteOff(note)
+                engine.sendNoteOff(note)
             }
         }
     }
@@ -53,10 +53,10 @@ class VirtualKeyboardController(private val player: AapAudioPlayer) {
         // With hold on, each press toggles the key's latch.
         if (isHoldActive && isDown(note)) {
             noteOnStates[note] = KEY_UP
-            player.sendNoteOff(note)
+            engine.sendNoteOff(note)
         } else {
             noteOnStates[note] = KEY_DOWN
-            player.sendNoteOn(note)
+            engine.sendNoteOn(note)
         }
     }
 
@@ -66,7 +66,7 @@ class VirtualKeyboardController(private val player: AapAudioPlayer) {
         }
 
         noteOnStates[note] = KEY_UP
-        player.sendNoteOff(note)
+        engine.sendNoteOff(note)
     }
 
     /** Lights a key for a note that arrived from hardware MIDI; does not send anything. */

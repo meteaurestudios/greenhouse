@@ -8,7 +8,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.androidaudioplugin.greenhouse.core.AapAudioPlayer
+import org.androidaudioplugin.greenhouse.core.RackEngine
 import org.androidaudioplugin.greenhouse.core.MidiControllerManager
 import java.util.Locale
 
@@ -19,7 +19,7 @@ import java.util.Locale
 class MidiDeviceController(
     context: Context,
     private val scope: CoroutineScope,
-    private val player: AapAudioPlayer,
+    private val engine: RackEngine,
     private val keyboard: VirtualKeyboardController,
     private val postStatus: (String) -> Unit
 ) : AutoCloseable {
@@ -72,7 +72,7 @@ class MidiDeviceController(
                 }
             }
 
-            player.sendNoteOn(note, velocity)
+            engine.sendNoteOn(note, velocity)
         }
 
         override fun onNoteOff(note: Int, velocity: Float) {
@@ -82,16 +82,16 @@ class MidiDeviceController(
                 }
             }
 
-            player.sendNoteOff(note, velocity)
+            engine.sendNoteOff(note, velocity)
         }
 
         override fun onPitchBend(value: Float) {
-            player.sendPitchBend(TARGET_SLOT_INDEX, ALL_NOTES, value)
+            engine.sendPitchBend(TARGET_SLOT_INDEX, ALL_NOTES, value)
             showThrottled { "Pitch Bend: ${format(value)}" }
         }
 
         override fun onPressure(note: Int, value: Float) {
-            player.sendPressure(TARGET_SLOT_INDEX, note, value)
+            engine.sendPressure(TARGET_SLOT_INDEX, note, value)
             showThrottled {
                 val target = if (note >= 0) {
                     MidiControllerManager.getNoteName(note)
@@ -104,7 +104,7 @@ class MidiDeviceController(
         }
 
         override fun onControlChange(controller: Int, value: Float) {
-            player.sendControlChange(TARGET_SLOT_INDEX, controller, value)
+            engine.sendControlChange(TARGET_SLOT_INDEX, controller, value)
             showThrottled { "CC #$controller: ${(value * MIDI_7BIT_MAX).toInt()}" }
         }
 

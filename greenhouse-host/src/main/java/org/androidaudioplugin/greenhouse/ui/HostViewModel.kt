@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.core.AapHostEngine
 import org.androidaudioplugin.greenhouse.ui.host.AudioEngineController
@@ -36,6 +37,7 @@ class HostViewModel(application: Application) : AndroidViewModel(application), D
         const val MONITOR_INTERVAL_MS = 33L
         const val CPU_UPDATE_TICKS = 3
         const val PARAM_SYNC_INTERVAL_TICKS = 2
+        const val ENGINE_SYNC_TICKS = 3
     }
 
     var statusMessage by mutableStateOf("Welcome to AAP Studio Host")
@@ -45,12 +47,12 @@ class HostViewModel(application: Application) : AndroidViewModel(application), D
 
     private val hostEngine = AapHostEngine(application, RackController.NUM_RACK_SLOTS)
 
-    val audio = AudioEngineController(application, RackController.NUM_RACK_SLOTS, postStatus)
+    val audio = AudioEngineController(RackController.NUM_RACK_SLOTS, postStatus)
     val meters = RackMeters(RackController.NUM_RACK_SLOTS)
     val rack = RackController(hostEngine, audio, viewModelScope, postStatus)
     val browser = PluginBrowserController(application, viewModelScope, postStatus)
-    val keyboard = VirtualKeyboardController(audio.player)
-    val midi = MidiDeviceController(application, viewModelScope, audio.player, keyboard, postStatus)
+    val keyboard = VirtualKeyboardController(audio.engine)
+    val midi = MidiDeviceController(application, viewModelScope, audio.engine, keyboard, postStatus)
     val sessions = RackSessionController(application, rack, audio, browser, viewModelScope, postStatus)
 
     init {
@@ -91,21 +93,41 @@ class HostViewModel(application: Application) : AndroidViewModel(application), D
         audio.onAppBackground()
     }
 
-    /** Meters every tick, CPU and plugin-side parameter changes at lower rates. */
+    /** Meters every tick; CPU, plugin-side parameter changes and engine state changes at lower rates. */
     private fun startMonitoring() {
         viewModelScope.launch(Dispatchers.Default) {
             var tickCount = 0
 
             while (isActive) {
-                meters.poll(audio.player, audio.isProcessing, updateCpu = tickCount % CPU_UPDATE_TICKS == 0)
+                meters.poll(audio.engine, audio.isProcessing, updateCpu = tickCount % CPU_UPDATE_TICKS == 0)
 
                 if (tickCount % PARAM_SYNC_INTERVAL_TICKS == 0) {
                     rack.pollPluginParameterChanges()
                 }
 
+                if (tickCount % ENGINE_SYNC_TICKS == 0) {
+                    withContext(Dispatchers.Main) {
+                        followEngine()
+                    }
+                }
+
                 tickCount++
                 delay(MONITOR_INTERVAL_MS)
             }
+        }
+    }
+
+    /**
+     * Follows what the engine changed on its own after a device error. AAP plugins cannot be re-prepared,
+     * so after a change to another sample rate every loaded plugin is re-instantiated at the new rate with
+     * its state; until then the engine keeps them silent. Retried at the next check while another rack
+     * operation is in progress.
+     */
+    private fun followEngine() {
+        audio.syncWithEngine()
+
+        if (rack.hasPluginsPreparedAtOtherRate(audio.sampleRate)) {
+            sessions.reloadAtSampleRate(audio.sampleRate)
         }
     }
 

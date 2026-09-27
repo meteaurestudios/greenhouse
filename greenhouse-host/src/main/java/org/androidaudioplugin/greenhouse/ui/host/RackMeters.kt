@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.androidaudioplugin.greenhouse.core.AapAudioPlayer
+import org.androidaudioplugin.greenhouse.core.RackEngine
 import org.androidaudioplugin.greenhouse.ui.SlotLevel
 
 /** Per-slot output levels and CPU load, polled from the native engine. */
@@ -35,7 +35,7 @@ class RackMeters(private val numSlots: Int) {
     private val rawLevels = FloatArray(numSlots * STEREO_CHANNELS)
 
     /** Reads the engine on the calling thread and publishes the results on Main. */
-    suspend fun poll(player: AapAudioPlayer, isProcessing: Boolean, updateCpu: Boolean) {
+    suspend fun poll(engine: RackEngine, isProcessing: Boolean, updateCpu: Boolean) {
         if (!isProcessing) {
             withContext(Dispatchers.Main) {
                 reset()
@@ -44,12 +44,12 @@ class RackMeters(private val numSlots: Int) {
             return
         }
 
-        player.getAllSlotLevels(rawLevels)
+        engine.getAllSlotLevels(rawLevels)
 
         var totalPercent = 0f
         val slotLoads = if (updateCpu) {
-            totalPercent = toPercent(player.totalCpuLoad)
-            FloatArray(numSlots) { i -> toPercent(player.getSlotCpuLoad(i)) }
+            totalPercent = toPercent(engine.totalCpuLoad)
+            FloatArray(numSlots) { i -> toPercent(engine.getSlotCpuLoad(i)) }
         } else {
             null
         }

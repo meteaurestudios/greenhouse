@@ -57,7 +57,7 @@ class SlotPluginHost(val context: Context) : AutoCloseable {
 
 class AapHostEngine(
     val context: Context,
-    val numSlots: Int = AapAudioPlayer.DEFAULT_NUM_RACK_SLOTS
+    val numSlots: Int = RackEngine.DEFAULT_NUM_RACK_SLOTS
 ) : AutoCloseable {
     private val tag = "AapHostEngine"
 

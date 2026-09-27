@@ -56,7 +56,9 @@ data class RackSlotData(
     val presets: List<PluginPreset> = emptyList(),
     val isLoadingPresets: Boolean = false,
     val isLoading: Boolean = false,
-    val loadingPluginName: String? = null
+    val loadingPluginName: String? = null,
+    /** Sample rate [instance] was prepared at. */
+    val preparedSampleRate: Int = 0
 ) {
     val presetNames: List<String>
         get() = presets.map { it.name }

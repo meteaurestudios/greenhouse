@@ -4,13 +4,12 @@ import android.util.Log
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.core.AapHostEngine
 import org.androidaudioplugin.greenhouse.ui.PluginPreset
-import org.androidaudioplugin.hosting.AudioPluginClientBase
 import org.androidaudioplugin.hosting.InstanceState
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 
 internal data class LoadedPlugin(
-    val client: AudioPluginClientBase,
     val instance: NativeRemotePluginInstance,
+    val sampleRate: Int,
     val presetCount: Int,
     /** Parameter values read back from the instance after it was prepared, keyed by parameter ID. */
     val parameterValues: Map<Int, Double>
@@ -61,7 +60,7 @@ internal object PluginSlotLoader {
         framesPerCallback: Int,
         prepare: (NativeRemotePluginInstance) -> Unit = {}
     ): LoadedPlugin {
-        val (client, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
+        val (_, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
 
         discoverDynamicPortsAndParameters(plugin, instance)
         prepare(instance)
@@ -73,7 +72,7 @@ internal object PluginSlotLoader {
             0
         }
 
-        return LoadedPlugin(client, instance, presetCount, readParameterValues(plugin, instance))
+        return LoadedPlugin(instance, sampleRate, presetCount, readParameterValues(plugin, instance))
     }
 
     /**

@@ -130,7 +130,7 @@ fun EngineSettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "FIFO Render Block Size",
+                            text = "Render Block Size",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary

@@ -5,9 +5,9 @@
     native <methods>;
 }
 
-# Preserve AapAudioPlayer and its companion object for JNI interop
--keep class org.androidaudioplugin.greenhouse.core.AapAudioPlayer { *; }
--keep class org.androidaudioplugin.greenhouse.core.AapAudioPlayer$* { *; }
+# Preserve RackEngine and its companion object for JNI interop
+-keep class org.androidaudioplugin.greenhouse.core.RackEngine { *; }
+-keep class org.androidaudioplugin.greenhouse.core.RackEngine$* { *; }
 
 # Preserve AAP Core Hosting and IPC structures
 -keep class org.androidaudioplugin.** { *; }

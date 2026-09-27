@@ -81,6 +81,10 @@ class RackController(
         return slotIndex in 0 until NUM_RACK_SLOTS
     }
 
+    fun hasPluginsPreparedAtOtherRate(sampleRate: Int): Boolean {
+        return slots.any { it.isLoaded && it.preparedSampleRate != sampleRate }
+    }
+
     fun selectActiveSlot(slotIndex: Int) {
         if (!isValidSlot(slotIndex)) {
             return
@@ -168,7 +172,7 @@ class RackController(
                 val param = plugin.parameters.find { it.id == paramId }
 
                 if (param != null) {
-                    audio.player.setParameterValue(slotIndex, param, value)
+                    audio.engine.setParameterValue(slotIndex, param, value)
                 }
             }
 
@@ -203,7 +207,7 @@ class RackController(
 
         val newBypass = !slots[slotIndex].isBypassed
         slots[slotIndex] = slots[slotIndex].copy(isBypassed = newBypass)
-        audio.player.setSlotBypassed(slotIndex, newBypass)
+        audio.engine.setSlotBypassed(slotIndex, newBypass)
 
         val state = if (newBypass) {
             "BYPASSED"
@@ -222,7 +226,7 @@ class RackController(
         val ui = slotUi[slotIndex]
         ui.lastHostEditTimestamps[parameter.id] = System.currentTimeMillis()
         ui.parameterValues[parameter.id] = value
-        audio.player.setParameterValue(slotIndex, parameter, value)
+        audio.engine.setParameterValue(slotIndex, parameter, value)
     }
 
     fun setPreset(slotIndex: Int, nativeIndex: Int) {
@@ -367,8 +371,8 @@ class RackController(
     /** Detaches and destroys whatever is in the slot and resets its UI state. */
     private fun releaseSlot(slotIndex: Int, loadingPluginName: String?) {
         val currentInstance = slots[slotIndex].instance
-        audio.player.setSlotBypassed(slotIndex, false)
-        audio.player.setSlotPlugin(slotIndex, null)
+        audio.engine.setSlotBypassed(slotIndex, false)
+        audio.engine.clearSlot(slotIndex)
 
         if (currentInstance != null) {
             try {
@@ -408,11 +412,12 @@ class RackController(
             presets = emptyList(),
             isLoadingPresets = hasPresetList,
             isLoading = false,
-            loadingPluginName = null
+            loadingPluginName = null,
+            preparedSampleRate = loaded.sampleRate
         )
 
-        audio.player.setSlotPlugin(slotIndex, loaded.instance, loaded.client)
-        audio.player.setSlotBypassed(slotIndex, isBypassed)
+        audio.engine.setSlotPlugin(slotIndex, loaded.instance, loaded.sampleRate)
+        audio.engine.setSlotBypassed(slotIndex, isBypassed)
 
         if (hasPresetList) {
             fetchPresetNames(slotIndex, loaded.instance, loaded.presetCount)

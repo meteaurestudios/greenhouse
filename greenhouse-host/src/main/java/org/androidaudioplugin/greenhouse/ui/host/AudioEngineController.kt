@@ -1,13 +1,11 @@
 package org.androidaudioplugin.greenhouse.ui.host
 
-import android.content.Context
-import android.media.AudioManager
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import org.androidaudioplugin.greenhouse.core.AapAudioPlayer
+import org.androidaudioplugin.greenhouse.core.RackEngine
 import org.androidaudioplugin.greenhouse.core.MAX_HOST_BUFFER_FRAMES
 import java.util.Locale
 
@@ -16,7 +14,6 @@ import java.util.Locale
  * pause-on-background / resume-on-foreground behaviour.
  */
 class AudioEngineController(
-    context: Context,
     numSlots: Int,
     private val postStatus: (String) -> Unit
 ) : AutoCloseable {
@@ -29,19 +26,16 @@ class AudioEngineController(
         const val MIN_FRAMES_PER_CALLBACK = 1
         const val MILLIS_PER_SECOND = 1000f
         val AVAILABLE_BURST_MULTIPLIERS = listOf(2, 4, 8, 16, 32)
-
-        private fun queryOutputSampleRate(context: Context): Int {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            return audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: DEFAULT_SAMPLE_RATE
-        }
     }
-
-    val sampleRate: Int = queryOutputSampleRate(context)
 
     var framesPerCallback by mutableIntStateOf(DEFAULT_FRAMES_PER_CALLBACK)
         private set
 
-    val player: AapAudioPlayer = AapAudioPlayer.create(sampleRate, framesPerCallback, numSlots = numSlots)
+    val engine = RackEngine(framesPerCallback, numSlots)
+
+    /** Rate plugins are prepared at: the output device's native rate, kept current by [syncWithEngine]. */
+    var sampleRate by mutableIntStateOf(engine.sampleRate.takeIf { it > 0 } ?: DEFAULT_SAMPLE_RATE)
+        private set
 
     var isProcessing by mutableStateOf(false)
         private set
@@ -54,7 +48,7 @@ class AudioEngineController(
 
     val actualBurstSize: Int
         get() {
-            val nativeBurst = player.actualBurstSize
+            val nativeBurst = engine.actualBurstSize
 
             if (nativeBurst > 0) {
                 return nativeBurst
@@ -69,6 +63,25 @@ class AudioEngineController(
             return AVAILABLE_BURST_MULTIPLIERS.filter { (it * base) <= MAX_HOST_BUFFER_FRAMES }
         }
 
+    /**
+     * Picks up what the engine changed on its own after a device error: the new device's sample rate,
+     * or audio having stopped because the stream could not be restarted.
+     */
+    fun syncWithEngine() {
+        val engineRate = engine.sampleRate
+
+        if (engineRate > 0 && engineRate != sampleRate) {
+            Log.i(TAG, "Output sample rate changed: $sampleRate Hz -> $engineRate Hz")
+            sampleRate = engineRate
+        }
+
+        if (isProcessing && !engine.isProcessing) {
+            Log.w(TAG, "Audio engine stopped: the output stream could not be restarted")
+            isProcessing = false
+            postStatus("Audio engine stopped: the output device could not be restarted.")
+        }
+    }
+
     fun setBufferFramesPerCallback(newFrames: Int) {
         val clampedFrames = newFrames.coerceIn(MIN_FRAMES_PER_CALLBACK, MAX_HOST_BUFFER_FRAMES)
 
@@ -77,9 +90,9 @@ class AudioEngineController(
         }
 
         framesPerCallback = clampedFrames
-        player.setFramesPerCallback(clampedFrames)
+        engine.setFramesPerCallback(clampedFrames)
         val estimatedLatency = (clampedFrames.toFloat() / sampleRate.toFloat()) * MILLIS_PER_SECOND
-        postStatus("FIFO render block set to $clampedFrames frames (${String.format(Locale.US, "%.2f", estimatedLatency)} ms)")
+        postStatus("Render block set to $clampedFrames frames (${String.format(Locale.US, "%.2f", estimatedLatency)} ms)")
     }
 
     fun togglePlayback() {
@@ -114,7 +127,7 @@ class AudioEngineController(
 
     /** Stops rendering without touching the status line; used around rack teardown / restore. */
     fun pause() {
-        player.pause()
+        engine.pause()
         isProcessing = false
     }
 
@@ -154,8 +167,8 @@ class AudioEngineController(
     }
 
     private fun start(failureMessage: String): Boolean {
-        player.start()
-        isProcessing = player.isProcessing
+        engine.start()
+        isProcessing = engine.isProcessing
 
         if (!isProcessing) {
             postStatus(failureMessage)
@@ -163,21 +176,21 @@ class AudioEngineController(
         }
 
         adoptHardwareBurstSize()
-        postStatus("Audio engine ACTIVE (FIFO decoupled render running).")
+        postStatus("Audio engine ACTIVE.")
         return true
     }
 
     /** Until the user picks a buffer size, keep the default multiplier but scale it to the real hardware burst. */
     private fun adoptHardwareBurstSize() {
-        val burst = player.actualBurstSize
+        val burst = engine.actualBurstSize
 
         if (burst > 0 && framesPerCallback == DEFAULT_FRAMES_PER_CALLBACK) {
             framesPerCallback = burst * DEFAULT_BURST_MULTIPLIER
-            player.setFramesPerCallback(framesPerCallback)
+            engine.setFramesPerCallback(framesPerCallback)
         }
     }
 
     override fun close() {
-        player.close()
+        engine.close()
     }
 }

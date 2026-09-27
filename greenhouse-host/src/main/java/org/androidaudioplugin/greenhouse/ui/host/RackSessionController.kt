@@ -149,7 +149,7 @@ class RackSessionController(
 
                 currentSessionName = preset.name.ifBlank { file.nameWithoutExtension }
                 currentSessionFile = file
-                restore(preset, onComplete)
+                restore(preset, onComplete = onComplete)
             }
         }
     }
@@ -167,7 +167,7 @@ class RackSessionController(
 
                 currentSessionName = preset.name.ifBlank { IMPORTED_SESSION_NAME }
                 currentSessionFile = null
-                restore(preset, onComplete)
+                restore(preset, onComplete = onComplete)
             }
         }
     }
@@ -232,11 +232,24 @@ class RackSessionController(
         }
     }
 
+    /** Re-creates every loaded plugin at [sampleRate] with its current state, e.g. after switching to Bluetooth headphones. */
+    fun reloadAtSampleRate(sampleRate: Int) {
+        // Checked before capturing, which queries every plugin: the caller retries later
+        if (isOperationInProgress || rack.isInstantiating) {
+            return
+        }
+
+        restore(capture(currentSessionName ?: DEFAULT_CAPTURE_NAME), playWhenLoaded = false) {
+            postStatus("Output device changed: plugins reloaded at $sampleRate Hz.")
+        }
+    }
+
     private fun capture(name: String): RackPreset {
         return RackPreset(name = name, slots = rack.captureSlotStates())
     }
 
-    private fun restore(preset: RackPreset, onComplete: ((Boolean) -> Unit)? = null) {
+    /** [playWhenLoaded]: start audio once a non-empty rack is loaded, even if it was paused. */
+    private fun restore(preset: RackPreset, playWhenLoaded: Boolean = true, onComplete: ((Boolean) -> Unit)? = null) {
         if (isOperationInProgress || rack.isInstantiating) {
             return
         }
@@ -276,7 +289,7 @@ class RackSessionController(
             }
 
             // A session with plugins in it should be playable right away, including the autosave restored at launch.
-            if (wasAudioActive || !rack.isEmpty) {
+            if (wasAudioActive || (playWhenLoaded && !rack.isEmpty)) {
                 audio.requestRunning()
             }
 

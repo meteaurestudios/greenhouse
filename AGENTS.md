@@ -9,9 +9,13 @@ This repository is **`greenhouse`**, a modern Jetpack Compose Android host appli
 The project is split into library modules so that downstream apps can build on the same base. Dependencies flow one way: `:app` → `:greenhouse-ui` → `:greenhouse-host` → `:greenhouse-engine` → aap-core. Kotlin packages are unchanged by the split.
 
 - **`greenhouse-engine/`** (`:greenhouse-engine`): Audio engine, no UI.
-  - **`src/main/cpp/`**: Native Oboe engine (`NativeAudioEngine`), JNI bindings, SIMD helpers.
+  - **`src/main/cpp/`**: Native audio engine. Includes are relative to this folder (e.g. `"engine/OboeEngine.h"`).
+    - `engine/OboeEngine`: reusable base that owns the AAudio output stream (open at the device's native rate, start / stop, reopen after errors, latency tuning, ADPF, denormals). Subclasses implement `prepareToPlay` / `streamStarting` / `process` / `flushState`.
+    - `RackEngine`: the AAP plugin rack built on `OboeEngine` (instrument slot 0, then effect slots, rendered in fixed-size blocks; slots prepared at another sample rate stay silent until reloaded).
+    - `RackEngineJni.cpp`: JNI bindings to a single process-wide `RackEngine` (no native handles cross JNI).
+    - `utils/AudioSimd.h`: NEON helpers. `utils/Logging.h`: log macros.
   - **`greenhouse/core/AapHostEngine.kt`**: Connects to AAP services and instantiates `NativeRemotePluginInstance`.
-  - **`greenhouse/core/AapAudioPlayer.kt`**: Low-latency Oboe audio render engine, sample player, and MIDI UMP parameter / note dispatching.
+  - **`greenhouse/core/RackEngine.kt`**: Kotlin side of the native `RackEngine`: transport, slot plugins, meters, and MIDI UMP parameter / note dispatching.
   - **`greenhouse/core/MidiControllerManager.kt`**: Hardware MIDI input and MIDI 1.0 → UMP stream parser.
   - Manifest declares audio permissions and the AAP service `<queries>`; `consumer-rules.pro` carries the JNI / AAP R8 keep rules.
 - **`greenhouse-host/`** (`:greenhouse-host`): Host state and logic, no screens.
@@ -21,7 +25,7 @@ The project is split into library modules so that downstream apps can build on t
   - **`greenhouse/ui/host/`**: Feature controllers owned by `HostViewModel`:
     - `RackController`: multi-slot rack (Instrument slot 0, Effect slots 1 & 2), plugin load / unload / restore, bypass, parameters, presets, plugin-side parameter sync.
     - `PluginSlotLoader`: blocking instance queries (instantiate, dynamic parameter / port discovery, value and preset-name reads). IO thread only.
-    - `AudioEngineController`: `AapAudioPlayer` transport, buffer sizing, background / foreground pause and resume.
+    - `AudioEngineController`: `RackEngine` transport, buffer sizing, background / foreground pause and resume.
     - `RackMeters`: per-slot levels and CPU load.
     - `PluginBrowserController`: plugin catalog, slot-target filtering, developer filter, search.
     - `VirtualKeyboardController` / `MidiDeviceController`: on-screen keyboard state and hardware MIDI input.
