@@ -124,6 +124,20 @@ Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeSetSlotBypassed(
 }
 
 JNIEXPORT void JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeSetSlotGain(
+        JNIEnv* env, jclass clazz, jint slotIndex, jfloat gain)
+{
+    getEngine().setSlotGain(slotIndex, gain);
+}
+
+JNIEXPORT void JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeSetSlotMix(
+        JNIEnv* env, jclass clazz, jint slotIndex, jfloat mix)
+{
+    getEngine().setSlotMix(slotIndex, mix);
+}
+
+JNIEXPORT void JNICALL
 Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeSendUmp(
         JNIEnv* env, jclass clazz, jint slotIndex, jbyteArray data, jint length)
 {

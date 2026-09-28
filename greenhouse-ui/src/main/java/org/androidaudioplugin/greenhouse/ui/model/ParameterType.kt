@@ -11,55 +11,24 @@ private const val MAX_INTEGER_RANGE_SPAN = 256.0
 private const val BOOLEAN_MIN_VALUE = 0.0
 private const val BOOLEAN_MAX_VALUE = 1.0
 
-private fun formatFastDecimal(value: Double, decimals: Int): String {
-    if (decimals == 1) {
-        val rounded = kotlin.math.round(value * 10.0).toLong()
-        val whole = rounded / 10
-        val frac = kotlin.math.abs(rounded % 10)
-        return "$whole.$frac"
-    }
-
-    val rounded = kotlin.math.round(value * 100.0).toLong()
-    val whole = rounded / 100
-    val frac = kotlin.math.abs(rounded % 100)
-
-    if (frac < 10) {
-        return "$whole.0$frac"
-    } else {
-        return "$whole.$frac"
-    }
-}
-
 sealed interface ParameterType {
-    val minText: String
-    val maxText: String
-
     data class FloatType(
         val min: Double,
-        val max: Double,
-        override val minText: String,
-        override val maxText: String
+        val max: Double
     ) : ParameterType
 
     data class IntType(
         val min: Int,
-        val max: Int,
-        override val minText: String,
-        override val maxText: String
+        val max: Int
     ) : ParameterType
 
     data class BoolType(
         val offLabel: String = "Off",
         val onLabel: String = "On"
-    ) : ParameterType {
-        override val minText: String get() = ""
-        override val maxText: String get() = ""
-    }
+    ) : ParameterType
 
     data class EnumType(
-        val options: List<ParameterInformation.EnumerationInformation>,
-        override val minText: String,
-        override val maxText: String
+        val options: List<ParameterInformation.EnumerationInformation>
     ) : ParameterType
 }
 
@@ -142,9 +111,7 @@ private fun ParameterInformation.computeInferredType(): ParameterType {
     // 3. Explicit Enumerations with size >= 2 (non 0..1 bounds or > 2 items) -> Enum Selector / Stepper
     if (enumerations.size >= 2) {
         return ParameterType.EnumType(
-            options = enumerations,
-            minText = "1",
-            maxText = "${enumerations.size}"
+            options = enumerations
         )
     }
 
@@ -160,17 +127,13 @@ private fun ParameterInformation.computeInferredType(): ParameterType {
 
         return ParameterType.IntType(
             min = minInt,
-            max = maxInt,
-            minText = "$minInt",
-            maxText = "$maxInt"
+            max = maxInt
         )
     }
 
     // 5. Default: Continuous Floating-Point Rotary Knob (handles normalized 0.0..1.0 and arbitrary float spans)
     return ParameterType.FloatType(
         min = minimumValue,
-        max = maximumValue,
-        minText = formatFastDecimal(minimumValue, 1),
-        maxText = formatFastDecimal(maximumValue, 1)
+        max = maximumValue
     )
 }

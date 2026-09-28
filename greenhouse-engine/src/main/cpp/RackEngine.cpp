@@ -104,6 +104,10 @@ void RackEngine::clearSlotsLocked()
         slot.mPorts = AudioPorts{};
         slot.mPreparedSampleRate = 0;
         slot.mIsBypassed.store(false, std::memory_order_relaxed);
+        slot.mGain.store(UNITY_GAIN, std::memory_order_relaxed);
+        slot.mMix.store(WET_ONLY_MIX, std::memory_order_relaxed);
+        slot.mCurrentGain = UNITY_GAIN;
+        slot.mCurrentMix = WET_ONLY_MIX;
         slot.mCpuLoad.store(0.0f, std::memory_order_relaxed);
         slot.mPeakL.store(0.0f, std::memory_order_relaxed);
         slot.mPeakR.store(0.0f, std::memory_order_relaxed);
@@ -169,6 +173,20 @@ void RackEngine::setSlotBypassed(int32_t slotIndex, bool bypassed)
 {
     if (isValidSlot(slotIndex)) {
         mSlots[slotIndex].mIsBypassed.store(bypassed, std::memory_order_relaxed);
+    }
+}
+
+void RackEngine::setSlotGain(int32_t slotIndex, float gain)
+{
+    if (isValidSlot(slotIndex)) {
+        mSlots[slotIndex].mGain.store(std::clamp(gain, SILENT_GAIN, MAX_SLOT_GAIN), std::memory_order_relaxed);
+    }
+}
+
+void RackEngine::setSlotMix(int32_t slotIndex, float mix)
+{
+    if (isValidSlot(slotIndex)) {
+        mSlots[slotIndex].mMix.store(std::clamp(mix, DRY_ONLY_MIX, WET_ONLY_MIX), std::memory_order_relaxed);
     }
 }
 
@@ -326,6 +344,12 @@ void RackEngine::renderBlock(int32_t frames)
         auto slotStart = Clock::now();
         auto rendered = renderSlot(slot, i == INSTRUMENT_SLOT_INDEX, frames);
 
+        // Nothing was applied: jump to the host settings so they don't ramp from stale values later
+        if (!rendered) {
+            slot.mCurrentGain = slot.mGain.load(std::memory_order_relaxed);
+            slot.mCurrentMix = slot.mMix.load(std::memory_order_relaxed);
+        }
+
         slot.mSmoothedLoad = smoothLoad(slot.mSmoothedLoad, Clock::now() - slotStart, blockDurationNs);
         slot.mCpuLoad.store(static_cast<float>(slot.mSmoothedLoad), std::memory_order_relaxed);
 
@@ -417,12 +441,24 @@ bool RackEngine::renderSlot(RackSlot& slot, bool isInstrument, int32_t frames)
         return false;
     }
 
-    if (outR == outL) {
+    // mBlockBuffer still holds the slot's input: the dry signal of the host mix
+    auto targetGain = slot.mGain.load(std::memory_order_relaxed);
+    auto targetMix = slot.mMix.load(std::memory_order_relaxed);
+    auto isUnityWet = slot.mCurrentGain == UNITY_GAIN && targetGain == UNITY_GAIN &&
+                      slot.mCurrentMix == WET_ONLY_MIX && targetMix == WET_ONLY_MIX;
+
+    if (isUnityWet && outR == outL) {
         simd::interleaveMonoToStereo(outL, mBlockBuffer.data(), frames);
-    } else {
+    } else if (isUnityWet) {
         simd::interleaveStereo(outL, outR, mBlockBuffer.data(), frames);
+    } else {
+        simd::mixStereo(outL, outR, mBlockBuffer.data(), frames,
+                        (WET_ONLY_MIX - slot.mCurrentMix) * slot.mCurrentGain, (WET_ONLY_MIX - targetMix) * targetGain,
+                        slot.mCurrentMix * slot.mCurrentGain, targetMix * targetGain);
     }
 
+    slot.mCurrentGain = targetGain;
+    slot.mCurrentMix = targetMix;
     return true;
 }
 

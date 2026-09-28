@@ -25,6 +25,12 @@ constexpr float METER_MIN_THRESHOLD = 0.0001f;
 // ADPF workload units: fixed engine cost plus one unit per active plugin slot
 constexpr int32_t ADPF_BASE_WORKLOAD = 1;
 constexpr int32_t ADPF_WORKLOAD_PER_ACTIVE_SLOT = 1;
+// Host level applied to a slot's output (linear gain) and dry / wet mix (0 = dry only, 1 = wet only)
+constexpr float UNITY_GAIN = 1.0f;
+constexpr float SILENT_GAIN = 0.0f;
+constexpr float MAX_SLOT_GAIN = 4.0f; // about +12 dB
+constexpr float DRY_ONLY_MIX = 0.0f;
+constexpr float WET_ONLY_MIX = 1.0f;
 
 /** Indices of the first two audio input / output ports of a plugin. */
 struct AudioPorts
@@ -43,6 +49,9 @@ struct RackSlot
     AudioPorts mPorts;
     int32_t mPreparedSampleRate{0};
     std::atomic<bool> mIsBypassed{false};
+    // Host settings of the slot, set by the host (setSlotPlugin leaves them alone). The audio thread ramps to them over a block.
+    std::atomic<float> mGain{UNITY_GAIN};
+    std::atomic<float> mMix{WET_ONLY_MIX};
 
     // Written by the audio thread, read by the UI
     std::atomic<float> mCpuLoad{0.0f};
@@ -52,6 +61,8 @@ struct RackSlot
 
     // Audio thread only
     double mSmoothedLoad{0.0};
+    float mCurrentGain{UNITY_GAIN};
+    float mCurrentMix{WET_ONLY_MIX};
 };
 
 /**
@@ -79,6 +90,10 @@ public:
      */
     void setSlotPlugin(int32_t slotIndex, aap::PluginClient* client, int32_t instanceId, int32_t sampleRate);
     void setSlotBypassed(int32_t slotIndex, bool bypassed);
+    /** Linear gain applied to the slot's output, clamped to [SILENT_GAIN, MAX_SLOT_GAIN]. */
+    void setSlotGain(int32_t slotIndex, float gain);
+    /** Dry / wet balance of the slot, clamped to [DRY_ONLY_MIX, WET_ONLY_MIX]. */
+    void setSlotMix(int32_t slotIndex, float mix);
     void sendUmpToSlot(int32_t slotIndex, const uint8_t* data, int32_t size);
 
     float getTotalCpuLoad() const;

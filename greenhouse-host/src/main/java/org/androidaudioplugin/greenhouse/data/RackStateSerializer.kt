@@ -24,6 +24,8 @@ object RackStateSerializer {
     private const val KEY_PACKAGE_NAME = "packageName"
     private const val KEY_DISPLAY_NAME = "displayName"
     private const val KEY_IS_BYPASSED = "isBypassed"
+    private const val KEY_LEVEL_DB = "levelDb"
+    private const val KEY_MIX = "mix"
     private const val KEY_SELECTED_PRESET_INDEX = "selectedPresetIndex"
     private const val KEY_STATE_DATA_BASE64 = "stateDataBase64"
     private const val KEY_PARAMETERS = "parameters"
@@ -47,6 +49,8 @@ object RackStateSerializer {
             slotObj.put(KEY_PACKAGE_NAME, slot.packageName ?: JSONObject.NULL)
             slotObj.put(KEY_DISPLAY_NAME, slot.displayName ?: JSONObject.NULL)
             slotObj.put(KEY_IS_BYPASSED, slot.isBypassed)
+            slotObj.put(KEY_LEVEL_DB, slot.levelDb.toDouble())
+            slotObj.put(KEY_MIX, slot.mix.toDouble())
             slotObj.put(KEY_SELECTED_PRESET_INDEX, slot.selectedPresetIndex)
             slotObj.put(KEY_STATE_DATA_BASE64, slot.stateDataBase64 ?: JSONObject.NULL)
 
@@ -120,6 +124,13 @@ object RackStateSerializer {
                         }
 
                         val isBypassed = slotObj.optBoolean(KEY_IS_BYPASSED, false)
+                        // Absent from sessions saved before the host level and mix existed
+                        val levelDb = slotObj.optDouble(KEY_LEVEL_DB, SlotHostSettings.DEFAULT_LEVEL_DB.toDouble())
+                            .toFloat()
+                            .coerceIn(SlotHostSettings.MIN_LEVEL_DB, SlotHostSettings.MAX_LEVEL_DB)
+                        val mix = slotObj.optDouble(KEY_MIX, SlotHostSettings.INITIAL_MIX.toDouble())
+                            .toFloat()
+                            .coerceIn(SlotHostSettings.DRY_ONLY_MIX, SlotHostSettings.WET_ONLY_MIX)
                         val selectedPresetIndex = slotObj.optInt(KEY_SELECTED_PRESET_INDEX, -1)
                         val stateDataBase64 = if (slotObj.has(KEY_STATE_DATA_BASE64) && !slotObj.isNull(KEY_STATE_DATA_BASE64)) {
                             slotObj.optString(KEY_STATE_DATA_BASE64).ifBlank { null }
@@ -163,6 +174,8 @@ object RackStateSerializer {
                                 packageName = packageName,
                                 displayName = displayName,
                                 isBypassed = isBypassed,
+                                levelDb = levelDb,
+                                mix = mix,
                                 selectedPresetIndex = selectedPresetIndex,
                                 stateDataBase64 = stateDataBase64,
                                 parameters = paramsMap,

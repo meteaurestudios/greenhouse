@@ -11,7 +11,7 @@ The project is split into library modules so that downstream apps can build on t
 - **`greenhouse-engine/`** (`:greenhouse-engine`): Audio engine, no UI.
   - **`src/main/cpp/`**: Native audio engine. Includes are relative to this folder (e.g. `"engine/OboeEngine.h"`).
     - `engine/OboeEngine`: reusable base that owns the AAudio output stream (open at the device's native rate, start / stop, reopen after errors, latency tuning, ADPF, denormals). Subclasses implement `prepareToPlay` / `streamStarting` / `process` / `flushState`.
-    - `RackEngine`: the AAP plugin rack built on `OboeEngine` (instrument slot 0, then effect slots, rendered in fixed-size blocks; slots prepared at another sample rate stay silent until reloaded).
+    - `RackEngine`: the AAP plugin rack built on `OboeEngine` (instrument slot 0, then effect slots, rendered in fixed-size blocks; slots prepared at another sample rate stay silent until reloaded). Each slot also has a host level (gain) and dry / wet mix, ramped per block; the host resets them when a new plugin is added and saves them with the session.
     - `RackEngineJni.cpp`: JNI bindings to a single process-wide `RackEngine` (no native handles cross JNI).
     - `utils/AudioSimd.h`: NEON helpers. `utils/Logging.h`: log macros.
   - **`greenhouse/core/AapHostEngine.kt`**: Connects to AAP services and instantiates `NativeRemotePluginInstance`.

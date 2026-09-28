@@ -302,6 +302,7 @@ class RackSessionController(
             }
 
             rack.unloadAll()
+            rack.restoreHostSettings(preset.slots)
 
             var anyError = false
 

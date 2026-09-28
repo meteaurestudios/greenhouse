@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.androidaudioplugin.PluginInformation
+import org.androidaudioplugin.greenhouse.data.SlotHostSettings
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 
 private const val GUI_EXTENSION_URI_PREFIX = "urn://androidaudioplugin.org/extensions/gui"
@@ -51,6 +52,10 @@ data class RackSlotData(
     val pluginInfo: PluginInformation? = null,
     val instance: NativeRemotePluginInstance? = null,
     val isBypassed: Boolean = false,
+    /** Host level applied to the slot's output; back to its default when a new plugin is added. */
+    val levelDb: Float = SlotHostSettings.DEFAULT_LEVEL_DB,
+    /** Host dry / wet mix of the slot; back to fully wet when a new plugin is added. */
+    val mix: Float = SlotHostSettings.INITIAL_MIX,
     val selectedPresetIndex: Int = -1,
     val presetCount: Int = 0,
     val presets: List<PluginPreset> = emptyList(),
@@ -72,12 +77,14 @@ data class RackSlotData(
     val isLoaded: Boolean
         get() = instance != null && pluginInfo != null
 
-    /** The same slot with no plugin in it, optionally showing [loadingPluginName] as being loaded. */
+    /** The same slot with no plugin in it (host level and mix kept, e.g. to reload a crashed plugin), optionally showing [loadingPluginName] as being loaded. */
     fun cleared(loadingPluginName: String? = null): RackSlotData {
         return RackSlotData(
             index = index,
             title = title,
             slotType = slotType,
+            levelDb = levelDb,
+            mix = mix,
             isLoading = loadingPluginName != null,
             loadingPluginName = loadingPluginName
         )

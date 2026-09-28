@@ -23,6 +23,7 @@ This document outlines the architectural milestones, remaining tasks, and future
   - Automatic background autosave and seamless cold-start session restoration.
   - Dedicated studio session management menu (`RackSessionDialog`) with custom preset naming, 1-tap loading, deletion, SAF document import, and Android share sheet integration.
 - ✅ **Dynamic Multi-Slot Workstation Rack**: Configurable $N$-slot signal chains with active slot focus, parameter modulation, bypass toggles, and safe concurrent teardown/instantiation guards.
+- ✅ **Per-Slot Level & Dry/Wet Mix**: Host gain and dry/wet blend for each rack slot, ramped per block in the native engine for click-free changes, reset when a new plugin is loaded, and saved with `.ghrack` sessions.
 - ✅ **Live Interactive MIDI Keyboard**: Octave shifting, note latch/hold mode, and polyphonic MIDI 2.0 UMP event dispatching.
 - ✅ **Comprehensive Plugin Browser**: Instant developer filtering, category badges, text search, and direct slot routing.
 - ✅ **Diagnostic & Engine Settings Screen**: Real-time audio hardware inspection, buffer sizing, burst metrics, and log monitor.
@@ -36,7 +37,5 @@ This document outlines the architectural milestones, remaining tasks, and future
 | :--- | :--- | :--- | :--- |
 | **MIDI Learn & Hardware CC Mapping** | `High` | MIDI & Control | Intuitive MIDI Learn mode to map physical hardware knobs, sliders, and faders directly to any AAP plugin parameter with customizable range scaling and inversion. |
 | **MIDI File (.MID) Player & Loop Tester** | `High` | MIDI & Auditioning | Integrated standard MIDI file player with loop points, playback controls, and tempo synchronization for hands-free, repeatable patch testing and sound design. |
-| **In-Process Slot Processor API** | `Medium` | Native DSP & Embedding | Generic native slot-processor interface in `RackEngine` so in-process C++ DSP can run in a rack slot next to remote AAP plugins, with a public prefab package exposing the engine headers to apps that embed the Greenhouse libraries. |
 | **MIDI-FX Plugin Hosting & Routing Matrix** | `Medium` | MIDI & Routing | Support discovering, loading, and chaining pure AAP MIDI plugins (Sequencers, Arpeggiators, Chord Engines, CC Modulators) upstream of instruments, with routing to external USB/BLE MIDI hardware. |
-| **Per-Slot Dry/Wet Mix** | `Medium` | Signal Chain & DSP | Independent Dry/Wet blend slider for each effect slot, enabling parallel processing, subtle modulation, and non-destructive FX blending. |
 | **Tablet, Foldable & Desktop (DeX) Multi-Pane Layout** | `Low` | UI & Workflow | Dedicated dual-pane split workstation and detachable floating windows tailored for tablets, foldables, and Samsung DeX desktop mode. |

@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -69,6 +67,9 @@ private val STEPPER_ICON_SIZE = 14.dp
 private val LED_INDICATOR_SIZE = 6.dp
 private val TOGGLE_BORDER_WIDTH = 1.dp
 private const val TOGGLE_BUTTON_WIDTH_FRACTION = 0.84f
+private const val DROPDOWN_FIELD_WIDTH_FRACTION = 0.92f
+private val DROPDOWN_ICON_SIZE = 16.dp
+private val DROPDOWN_FIELD_HORIZONTAL_PADDING = 4.dp
 private val ACTIVE_ALPHA = 0.18f
 private val INACTIVE_ALPHA = 0.06f
 private val BORDER_ACTIVE_ALPHA = 0.55f
@@ -192,153 +193,88 @@ fun EnumParameterSelector(
             .height(CONTROL_CONTAINER_HEIGHT),
         contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(DROPDOWN_FIELD_WIDTH_FRACTION)
+                .height(TOGGLE_BUTTON_HEIGHT)
+                .clip(RoundedCornerShape(BUTTON_CORNER_RADIUS))
+                .background(activeColor.copy(alpha = ACTIVE_ALPHA))
+                .border(1.dp, activeColor.copy(alpha = BORDER_ACTIVE_ALPHA), RoundedCornerShape(BUTTON_CORNER_RADIUS))
+                .clickable(enabled = options.isNotEmpty()) {
+                    isMenuExpanded = true
+                }
+                .padding(horizontal = DROPDOWN_FIELD_HORIZONTAL_PADDING),
+            contentAlignment = Alignment.Center
         ) {
-            // Previous Option Button
-            Box(
+            // Equal insets on both sides keep the label centered in the field without running under the arrow.
+            Text(
+                text = currentLabel,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = activeColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
                 modifier = Modifier
-                    .size(STEPPER_BUTTON_SIZE)
-                    .clip(CircleShape)
-                    .background(StudioSurfaceVariant)
-                    .border(1.dp, StudioPanelBorder, CircleShape)
-                    .clickable(enabled = options.isNotEmpty()) {
-                        if (options.isNotEmpty()) {
-                            val prevIndex = if (currentIndex > 0) {
-                                currentIndex - 1
-                            } else {
-                                options.size - 1
-                            }
-                            onSelect(options[prevIndex].value)
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Previous Option",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(STEPPER_ICON_SIZE)
-                )
-            }
+                    .fillMaxWidth()
+                    .padding(horizontal = DROPDOWN_ICON_SIZE)
+            )
 
-            // Center Option Pill (Click to open dropdown menu)
-            Box(
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = "Show Options Menu",
+                tint = activeColor.copy(alpha = 0.7f),
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 4.dp)
-                    .height(STEPPER_BUTTON_SIZE + 4.dp)
-                    .clip(RoundedCornerShape(BUTTON_CORNER_RADIUS))
-                    .background(activeColor.copy(alpha = ACTIVE_ALPHA))
-                    .border(1.dp, activeColor.copy(alpha = BORDER_ACTIVE_ALPHA), RoundedCornerShape(BUTTON_CORNER_RADIUS))
-                    .clickable {
-                        isMenuExpanded = true
-                    }
-                    .padding(horizontal = 4.dp),
-                contentAlignment = Alignment.Center
+                    .align(Alignment.CenterEnd)
+                    .size(DROPDOWN_ICON_SIZE)
+            )
+
+            DropdownMenu(
+                expanded = isMenuExpanded,
+                onDismissRequest = { isMenuExpanded = false },
+                modifier = Modifier
+                    .background(StudioSurface)
+                    .border(1.dp, StudioPanelBorder, RoundedCornerShape(BUTTON_CORNER_RADIUS))
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = currentLabel,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        color = activeColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
+                options.forEachIndexed { index, option ->
+                    val isSelected = index == currentIndex
 
-                    Spacer(modifier = Modifier.width(2.dp))
-
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowDown,
-                        contentDescription = "Show Options Menu",
-                        tint = activeColor.copy(alpha = 0.7f),
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = isMenuExpanded,
-                    onDismissRequest = { isMenuExpanded = false },
-                    modifier = Modifier
-                        .background(StudioSurface)
-                        .border(1.dp, StudioPanelBorder, RoundedCornerShape(BUTTON_CORNER_RADIUS))
-                ) {
-                    options.forEachIndexed { index, option ->
-                        val isSelected = index == currentIndex
-
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = option.name,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) {
-                                        FontWeight.Bold
-                                    } else {
-                                        FontWeight.Normal
-                                    },
-                                    color = if (isSelected) {
-                                        activeColor
-                                    } else {
-                                        TextPrimary
-                                    }
-                                )
-                            },
-                            trailingIcon = {
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = "Selected",
-                                        tint = activeColor,
-                                        modifier = Modifier.size(14.dp)
-                                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option.name,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) {
+                                    FontWeight.Bold
+                                } else {
+                                    FontWeight.Normal
+                                },
+                                color = if (isSelected) {
+                                    activeColor
+                                } else {
+                                    TextPrimary
                                 }
-                            },
-                            onClick = {
-                                isMenuExpanded = false
-                                onSelect(option.value)
-                            },
-                            colors = MenuDefaults.itemColors(
-                                textColor = TextPrimary
                             )
-                        )
-                    }
-                }
-            }
-
-            // Next Option Button
-            Box(
-                modifier = Modifier
-                    .size(STEPPER_BUTTON_SIZE)
-                    .clip(CircleShape)
-                    .background(StudioSurfaceVariant)
-                    .border(1.dp, StudioPanelBorder, CircleShape)
-                    .clickable(enabled = options.isNotEmpty()) {
-                        if (options.isNotEmpty()) {
-                            val nextIndex = if (currentIndex < options.size - 1) {
-                                currentIndex + 1
-                            } else {
-                                0
+                        },
+                        trailingIcon = {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "Selected",
+                                    tint = activeColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
                             }
-                            onSelect(options[nextIndex].value)
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "Next Option",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(STEPPER_ICON_SIZE)
-                )
+                        },
+                        onClick = {
+                            isMenuExpanded = false
+                            onSelect(option.value)
+                        },
+                        colors = MenuDefaults.itemColors(
+                            textColor = TextPrimary
+                        )
+                    )
+                }
             }
         }
     }

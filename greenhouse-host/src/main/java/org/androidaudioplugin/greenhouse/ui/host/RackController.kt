@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.core.AapHostEngine
+import org.androidaudioplugin.greenhouse.data.SlotHostSettings
 import org.androidaudioplugin.greenhouse.data.SlotState
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.SlotUiState
@@ -128,6 +129,8 @@ class RackController(
         isInstantiating = true
         postStatus("Instantiating ${plugin.displayName} in ${slots[slotIndex].title}...")
         releaseSlot(slotIndex, loadingPluginName = plugin.displayName)
+        // A newly added plugin starts from the default level, fully wet
+        applyHostSettings(slotIndex, SlotHostSettings.DEFAULT_LEVEL_DB, SlotHostSettings.INITIAL_MIX)
 
         scope.launch {
             try {
@@ -212,9 +215,20 @@ class RackController(
         postStatus("Cleared ${slots[slotIndex].title}")
     }
 
+    /** Empties every slot and puts its host level and mix back to where a new slot starts. */
     fun unloadAll() {
         for (i in 0 until NUM_RACK_SLOTS) {
             unloadSlot(i)
+            applyHostSettings(i, SlotHostSettings.DEFAULT_LEVEL_DB, SlotHostSettings.INITIAL_MIX)
+        }
+    }
+
+    /** Applies saved host levels and mixes, including to slots saved without a plugin. */
+    fun restoreHostSettings(states: List<SlotState>) {
+        for (state in states) {
+            if (isValidSlot(state.slotIndex)) {
+                applyHostSettings(state.slotIndex, state.levelDb, state.mix)
+            }
         }
     }
 
@@ -273,6 +287,36 @@ class RackController(
         }
 
         postStatus("${slots[slotIndex].title} $state")
+    }
+
+    fun setSlotLevel(slotIndex: Int, levelDb: Float) {
+        if (!isValidSlot(slotIndex)) {
+            return
+        }
+
+        val newLevel = levelDb.coerceIn(SlotHostSettings.MIN_LEVEL_DB, SlotHostSettings.MAX_LEVEL_DB)
+
+        if (newLevel == slots[slotIndex].levelDb) {
+            return
+        }
+
+        applyHostSettings(slotIndex, newLevel, slots[slotIndex].mix)
+        markChanged()
+    }
+
+    fun setSlotMix(slotIndex: Int, mix: Float) {
+        if (!isValidSlot(slotIndex)) {
+            return
+        }
+
+        val newMix = mix.coerceIn(SlotHostSettings.DRY_ONLY_MIX, SlotHostSettings.WET_ONLY_MIX)
+
+        if (newMix == slots[slotIndex].mix) {
+            return
+        }
+
+        applyHostSettings(slotIndex, slots[slotIndex].levelDb, newMix)
+        markChanged()
     }
 
     fun setParameterValue(slotIndex: Int, parameter: ParameterInformation, value: Double) {
@@ -355,6 +399,8 @@ class RackController(
             packageName = null,
             displayName = null,
             isBypassed = slot.isBypassed,
+            levelDb = slot.levelDb,
+            mix = slot.mix,
             selectedPresetIndex = NO_PRESET_SELECTED,
             stateDataBase64 = null,
             parameters = emptyMap()
@@ -367,6 +413,8 @@ class RackController(
             packageName = plugin.packageName,
             displayName = plugin.displayName,
             isBypassed = slot.isBypassed,
+            levelDb = slot.levelDb,
+            mix = slot.mix,
             selectedPresetIndex = slot.selectedPresetIndex,
             stateDataBase64 = instance?.let { captureStateChunk(slot.index, it) },
             parameters = slotUi[slot.index].parameterValues.toMap()
@@ -509,6 +557,12 @@ class RackController(
         if (hasPresetList) {
             fetchPresetNames(slotIndex, loaded.instance, loaded.presetCount)
         }
+    }
+
+    private fun applyHostSettings(slotIndex: Int, levelDb: Float, mix: Float) {
+        slots[slotIndex] = slots[slotIndex].copy(levelDb = levelDb, mix = mix)
+        audio.engine.setSlotGain(slotIndex, SlotHostSettings.levelDbToGain(levelDb))
+        audio.engine.setSlotMix(slotIndex, mix)
     }
 
     /** Preset names can be slow to enumerate, so they fill in after the plugin is already playing. */

@@ -93,6 +93,12 @@ class RackEngine(
         private external fun nativeSetSlotBypassed(slotIndex: Int, bypassed: Boolean)
 
         @JvmStatic
+        private external fun nativeSetSlotGain(slotIndex: Int, gain: Float)
+
+        @JvmStatic
+        private external fun nativeSetSlotMix(slotIndex: Int, mix: Float)
+
+        @JvmStatic
         private external fun nativeSendUmp(slotIndex: Int, data: ByteArray, length: Int)
 
         @JvmStatic
@@ -186,6 +192,20 @@ class RackEngine(
     fun setSlotBypassed(slotIndex: Int, bypassed: Boolean) {
         if (slotIndex in 0 until numSlots) {
             nativeSetSlotBypassed(slotIndex, bypassed)
+        }
+    }
+
+    /** Linear gain the host applies to the slot's output. [setSlotPlugin] leaves it unchanged. */
+    fun setSlotGain(slotIndex: Int, gain: Float) {
+        if (slotIndex in 0 until numSlots) {
+            nativeSetSlotGain(slotIndex, gain)
+        }
+    }
+
+    /** Dry / wet balance the host applies to the slot (0: input only, 1: plugin output only). [setSlotPlugin] leaves it unchanged. */
+    fun setSlotMix(slotIndex: Int, mix: Float) {
+        if (slotIndex in 0 until numSlots) {
+            nativeSetSlotMix(slotIndex, mix)
         }
     }
 

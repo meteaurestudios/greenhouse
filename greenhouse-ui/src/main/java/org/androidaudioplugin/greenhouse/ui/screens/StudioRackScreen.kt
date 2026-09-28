@@ -147,6 +147,18 @@ fun StudioRackScreen(
                                 gridState = viewModel.rack.slotUi[activeSlot.index].parameterGridState,
                                 onValueChange = { param, valDouble ->
                                     viewModel.rack.setParameterValue(activeSlot.index, param, valDouble)
+                                },
+                                hostControl = { isCompact ->
+                                    HostControl(
+                                        slot = activeSlot,
+                                        onLevelChange = { levelDb ->
+                                            viewModel.rack.setSlotLevel(activeSlot.index, levelDb)
+                                        },
+                                        onMixChange = { mix ->
+                                            viewModel.rack.setSlotMix(activeSlot.index, mix)
+                                        },
+                                        isCompact = isCompact
+                                    )
                                 }
                             )
                         }

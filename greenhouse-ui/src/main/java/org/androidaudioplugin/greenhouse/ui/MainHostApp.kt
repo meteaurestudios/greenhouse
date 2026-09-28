@@ -3,7 +3,9 @@ package org.androidaudioplugin.greenhouse.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -47,6 +49,17 @@ fun MainHostApp(
     viewModel: HostViewModel = viewModel()
 ) {
     val navController = rememberNavController()
+    val view = LocalView.current
+    val isProcessing = viewModel.audio.isProcessing
+
+    // Keep the screen awake while the engine runs, so playing a plugin does not dim or lock
+    DisposableEffect(view, isProcessing) {
+        view.keepScreenOn = isProcessing
+
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets.systemBars
