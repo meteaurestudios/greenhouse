@@ -6,6 +6,9 @@ import org.androidaudioplugin.greenhouse.core.AapHostEngine
 import org.androidaudioplugin.greenhouse.ui.PluginPreset
 import org.androidaudioplugin.hosting.InstanceState
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 internal data class LoadedPlugin(
     val instance: NativeRemotePluginInstance,
@@ -16,10 +19,18 @@ internal data class LoadedPlugin(
 )
 
 /**
- * Blocking plugin-instance queries (binder IPC). Everything here must run off the main thread.
+ * Blocking plugin-instance queries (binder IPC). Everything here must run off the main thread, except [queryUnlessDied].
  */
 internal object PluginSlotLoader {
     private const val TAG = "PluginSlotLoader"
+
+    /** Completed when an instance's plugin process dies (see [abandon]). */
+    private val deathSignals = ConcurrentHashMap<NativeRemotePluginInstance, CompletableFuture<Unit>>()
+
+    /** Runs [queryUnlessDied] requests. A thread whose plugin died mid-request stays blocked for good. */
+    private val queryExecutor = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "PluginQuery").apply { isDaemon = true }
+    }
 
     /**
      * Runs [query] against [instance] unless it has been destroyed, returning [fallback] otherwise.
@@ -36,8 +47,28 @@ internal object PluginSlotLoader {
         }
     }
 
+    /**
+     * Like [queryIfAlive], but returns [fallback] as soon as the plugin's process dies instead of
+     * waiting forever: aap-core waits for plugin replies without a timeout. Blocks the caller while
+     * the query runs, so it can be used where the query must not overlap other work (e.g. the main thread).
+     */
+    fun <T> queryUnlessDied(instance: NativeRemotePluginInstance, fallback: T, query: () -> T): T {
+        val died = deathSignal(instance)
+        val result = CompletableFuture.supplyAsync({ queryIfAlive(instance, fallback, query) }, queryExecutor)
+        CompletableFuture.anyOf(result, died).join()
+
+        if (!result.isDone) {
+            Log.w(TAG, "Plugin died while a query was in flight: its reply will never arrive")
+            return fallback
+        }
+
+        return result.join()
+    }
+
     /** Destroys [instance], waiting for any in-flight [queryIfAlive] call on it to finish. */
     fun destroy(instance: NativeRemotePluginInstance) {
+        deathSignals.remove(instance)
+
         synchronized(instance) {
             try {
                 instance.destroy()
@@ -46,6 +77,20 @@ internal object PluginSlotLoader {
                 instance.state = InstanceState.DESTROYED
             }
         }
+    }
+
+    /**
+     * Marks [instance], whose plugin process died, as destroyed without calling into it, so no new
+     * [queryIfAlive] call reaches it; disposing its client frees it. Does not take the lock: a call
+     * already in flight may never return (aap-core waits for plugin replies without a timeout).
+     */
+    fun abandon(instance: NativeRemotePluginInstance) {
+        instance.state = InstanceState.DESTROYED
+        deathSignals.remove(instance)?.complete(Unit)
+    }
+
+    private fun deathSignal(instance: NativeRemotePluginInstance): CompletableFuture<Unit> {
+        return deathSignals.computeIfAbsent(instance) { CompletableFuture() }
     }
 
     /**

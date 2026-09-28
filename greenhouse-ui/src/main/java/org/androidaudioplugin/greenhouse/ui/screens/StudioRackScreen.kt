@@ -89,6 +89,9 @@ fun StudioRackScreen(
                 },
                 onUnloadSlot = { slotIdx ->
                     viewModel.rack.unloadSlot(slotIdx)
+                },
+                onReloadSlot = { slotIdx ->
+                    viewModel.rack.reloadCrashedSlot(slotIdx)
                 }
             )
 

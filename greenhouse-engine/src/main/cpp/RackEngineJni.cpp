@@ -47,6 +47,20 @@ Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativePause(
 }
 
 JNIEXPORT jboolean JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeOpenStream(
+        JNIEnv* env, jclass clazz)
+{
+    return getEngine().openStream() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeCloseStream(
+        JNIEnv* env, jclass clazz)
+{
+    getEngine().closeStream();
+}
+
+JNIEXPORT jboolean JNICALL
 Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeIsStreaming(
         JNIEnv* env, jclass clazz)
 {

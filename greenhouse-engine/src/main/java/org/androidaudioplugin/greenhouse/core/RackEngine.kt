@@ -60,6 +60,12 @@ class RackEngine(
         private external fun nativePause()
 
         @JvmStatic
+        private external fun nativeOpenStream(): Boolean
+
+        @JvmStatic
+        private external fun nativeCloseStream()
+
+        @JvmStatic
         private external fun nativeIsStreaming(): Boolean
 
         @JvmStatic
@@ -181,6 +187,24 @@ class RackEngine(
         } else {
             Log.e(TAG, "Failed to start rack engine")
         }
+    }
+
+    /** Opens the output stream without starting it, so [sampleRate] is current. Returns false if the device could not be opened. */
+    fun openStream(): Boolean {
+        return nativeOpenStream()
+    }
+
+    /**
+     * Stops audio and releases the audio device, keeping the slots. [start] opens a new stream.
+     * Restarting a fresh stream avoids resuming one that AAudio put in standby, which can crash in AAudio.
+     */
+    fun closeStream() {
+        if (isProcessing) {
+            allNotesOff()
+        }
+
+        nativeCloseStream()
+        Log.d(TAG, "Output stream closed")
     }
 
     fun allNotesOff() {

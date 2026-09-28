@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -121,6 +122,7 @@ fun SignalRackHeader(
     onAddPlugin: (Int) -> Unit,
     onToggleBypass: (Int) -> Unit,
     onUnloadSlot: (Int) -> Unit,
+    onReloadSlot: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val slotCpuLoads = slotCpuLoadsProvider()
@@ -144,6 +146,7 @@ fun SignalRackHeader(
             }
 
             val borderColor = when {
+                slot.isCrashed -> DangerRed
                 isSelected -> badgeColor
                 isLoaded -> SproutGreen.copy(alpha = 0.5f)
                 else -> StudioPanelBorder
@@ -311,21 +314,49 @@ fun SignalRackHeader(
 
                                 Spacer(modifier = Modifier.height(2.dp))
 
-                                val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
-                                val statusText = when {
-                                    slot.isBypassed -> "BYPASSED"
-                                    isProcessing -> "DSP ${slotCpu.toInt()}%"
-                                    else -> "ACTIVE"
-                                }
+                                if (slot.isCrashed) {
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(DangerRed.copy(alpha = 0.15f))
+                                            .clickable { onReloadSlot(slot.index) }
+                                            .padding(horizontal = 4.dp, vertical = 1.5.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "Reload Plugin",
+                                            tint = DangerRed,
+                                            modifier = Modifier.size(10.dp)
+                                        )
 
-                                Text(
-                                    text = statusText,
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace,
-                                    letterSpacing = 0.5.sp,
-                                    color = if (slot.isBypassed) DangerRed else TextMuted
-                                )
+                                        Text(
+                                            text = "CRASHED",
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                            letterSpacing = 0.5.sp,
+                                            color = DangerRed
+                                        )
+                                    }
+                                } else {
+                                    val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
+                                    val statusText = when {
+                                        slot.isBypassed -> "BYPASSED"
+                                        isProcessing -> "DSP ${slotCpu.toInt()}%"
+                                        else -> "ACTIVE"
+                                    }
+
+                                    Text(
+                                        text = statusText,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        letterSpacing = 0.5.sp,
+                                        color = if (slot.isBypassed) DangerRed else TextMuted
+                                    )
+                                }
                             } else {
                                 Text(
                                     text = "Empty Slot",

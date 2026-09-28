@@ -77,6 +77,18 @@ class RackController(
     val isEmpty: Boolean
         get() = slots.all { it.pluginInfo == null }
 
+    init {
+        hostEngine.onSlotPluginDied = { slotIndex, instance ->
+            // Right away: the main thread may be about to query the dead instance (e.g. an autosave),
+            // and aap-core waits for plugin replies without a timeout
+            PluginSlotLoader.abandon(instance)
+
+            scope.launch(Dispatchers.Main) {
+                onPluginProcessDied(slotIndex, instance)
+            }
+        }
+    }
+
     fun isValidSlot(slotIndex: Int): Boolean {
         return slotIndex in 0 until NUM_RACK_SLOTS
     }
@@ -200,6 +212,44 @@ class RackController(
         }
     }
 
+    /**
+     * Re-creates a crashed slot's plugin with the parameter values it had. Its opaque state died with
+     * its process. Returns false if the slot is not crashed or the rack is busy.
+     */
+    fun reloadCrashedSlot(slotIndex: Int): Boolean {
+        if (!isValidSlot(slotIndex) || isInstantiating) {
+            return false
+        }
+
+        val slot = slots[slotIndex]
+        val plugin = slot.pluginInfo
+
+        if (!slot.isCrashed || plugin == null) {
+            return false
+        }
+
+        // Captured before releaseSlot() resets the slot's UI state
+        val state = captureSlotState(slot)
+        isInstantiating = true
+        postStatus("Reloading ${plugin.displayName}...")
+        releaseSlot(slotIndex, loadingPluginName = plugin.displayName)
+
+        scope.launch {
+            try {
+                if (restoreSlot(state, plugin)) {
+                    audio.ensureRunning()
+                    postStatus("Reloaded ${plugin.displayName} into ${slots[slotIndex].title}")
+                } else {
+                    postStatus("Could not reload ${plugin.displayName}")
+                }
+            } finally {
+                isInstantiating = false
+            }
+        }
+
+        return true
+    }
+
     fun toggleSlotBypass(slotIndex: Int) {
         if (!isValidSlot(slotIndex) || slots[slotIndex].pluginInfo == null) {
             return
@@ -283,36 +333,62 @@ class RackController(
 
     /** Snapshot of every slot for session persistence, including each plugin's opaque state chunk. */
     fun captureSlotStates(): List<SlotState> {
-        return slots.map { slot ->
-            val instance = slot.instance
-            val plugin = slot.pluginInfo
+        return slots.map { captureSlotState(it) }
+    }
 
-            if (instance != null && plugin != null) {
-                SlotState(
-                    slotIndex = slot.index,
-                    slotType = slot.slotType,
-                    pluginId = plugin.pluginId,
-                    packageName = plugin.packageName,
-                    displayName = plugin.displayName,
-                    isBypassed = slot.isBypassed,
-                    selectedPresetIndex = slot.selectedPresetIndex,
-                    stateDataBase64 = captureStateChunk(slot.index, instance),
-                    parameters = slotUi[slot.index].parameterValues.toMap()
-                )
-            } else {
-                SlotState(
-                    slotIndex = slot.index,
-                    slotType = slot.slotType,
-                    pluginId = null,
-                    packageName = null,
-                    displayName = null,
-                    isBypassed = slot.isBypassed,
-                    selectedPresetIndex = NO_PRESET_SELECTED,
-                    stateDataBase64 = null,
-                    parameters = emptyMap()
-                )
-            }
+    /** A crashed slot keeps its plugin and parameter values, without a state chunk. */
+    private fun captureSlotState(slot: RackSlotData): SlotState {
+        val instance = slot.instance
+        val plugin = slot.pluginInfo ?: return SlotState(
+            slotIndex = slot.index,
+            slotType = slot.slotType,
+            pluginId = null,
+            packageName = null,
+            displayName = null,
+            isBypassed = slot.isBypassed,
+            selectedPresetIndex = NO_PRESET_SELECTED,
+            stateDataBase64 = null,
+            parameters = emptyMap()
+        )
+
+        return SlotState(
+            slotIndex = slot.index,
+            slotType = slot.slotType,
+            pluginId = plugin.pluginId,
+            packageName = plugin.packageName,
+            displayName = plugin.displayName,
+            isBypassed = slot.isBypassed,
+            selectedPresetIndex = slot.selectedPresetIndex,
+            stateDataBase64 = instance?.let { captureStateChunk(slot.index, it) },
+            parameters = slotUi[slot.index].parameterValues.toMap()
+        )
+    }
+
+    /**
+     * The process of [instance], loaded in the slot, died. The slot goes silent and keeps its plugin
+     * and parameter values, so the user can reload it.
+     */
+    private fun onPluginProcessDied(slotIndex: Int, instance: NativeRemotePluginInstance) {
+        val slot = slots[slotIndex]
+
+        // Already unloaded or replaced while the notification was on its way
+        if (slot.instance !== instance) {
+            return
         }
+
+        Log.w(TAG, "Plugin process died for ${slot.pluginInfo?.displayName} in slot $slotIndex")
+        audio.engine.clearSlot(slotIndex)
+        hostEngine.unloadSlot(slotIndex)
+
+        slots[slotIndex] = slot.copy(
+            instance = null,
+            presetCount = 0,
+            presets = emptyList(),
+            isLoadingPresets = false,
+            isCrashed = true
+        )
+        coerceViewModeToActiveSlot()
+        postStatus("${slot.pluginInfo?.displayName} crashed. Tap CRASHED on its slot to reload it.")
     }
 
     /**
@@ -413,7 +489,8 @@ class RackController(
             isLoadingPresets = hasPresetList,
             isLoading = false,
             loadingPluginName = null,
-            preparedSampleRate = loaded.sampleRate
+            preparedSampleRate = loaded.sampleRate,
+            isCrashed = false
         )
 
         audio.engine.setSlotPlugin(slotIndex, loaded.instance, loaded.sampleRate)
@@ -465,14 +542,16 @@ class RackController(
 
     private fun captureStateChunk(slotIndex: Int, instance: NativeRemotePluginInstance): String? {
         return try {
-            val stateSize = instance.getStateSize()
+            PluginSlotLoader.queryUnlessDied<String?>(instance, null) {
+                val stateSize = instance.getStateSize()
 
-            if (stateSize > 0) {
-                val stateBuffer = ByteArray(stateSize)
-                instance.getState(stateBuffer)
-                Base64.encodeToString(stateBuffer, Base64.NO_WRAP)
-            } else {
-                null
+                if (stateSize > 0) {
+                    val stateBuffer = ByteArray(stateSize)
+                    instance.getState(stateBuffer)
+                    Base64.encodeToString(stateBuffer, Base64.NO_WRAP)
+                } else {
+                    null
+                }
             }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to capture getState for slot $slotIndex", e)

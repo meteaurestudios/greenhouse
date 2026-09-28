@@ -11,9 +11,14 @@ import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 private const val DEFAULT_CONTROL_BUFFER_SIZE = 0x10000
 const val MAX_HOST_BUFFER_FRAMES = 4096
 
-class SlotPluginHost(val context: Context) : AutoCloseable {
+class SlotPluginHost(
+    val context: Context,
+    /** Called on a binder or the main thread when the plugin's process dies while its instance is loaded. */
+    private val onPluginDied: (NativeRemotePluginInstance) -> Unit
+) : AutoCloseable {
     private val tag = "SlotPluginHost"
 
+    @Volatile
     private var currentClient: AudioPluginClientBase? = null
 
     val client: AudioPluginClientBase?
@@ -34,6 +39,14 @@ class SlotPluginHost(val context: Context) : AutoCloseable {
 
         Log.d(tag, "Instantiating native plugin: ${pluginInfo.pluginId}")
         val instance = newClient.instantiateNativePlugin(pluginInfo)
+
+        // Also fired when the client is disposed on purpose: only a disconnection while it is still current is a death
+        newClient.onDisconnectingListeners.add {
+            if (currentClient === newClient) {
+                Log.w(tag, "Plugin service died: ${pluginInfo.packageName}")
+                onPluginDied(instance)
+            }
+        }
 
         Log.d(tag, "Preparing plugin instance (SR: $sampleRate, Frames: $MAX_HOST_BUFFER_FRAMES)")
         instance.prepare(MAX_HOST_BUFFER_FRAMES, sampleRate, DEFAULT_CONTROL_BUFFER_SIZE)
@@ -61,7 +74,14 @@ class AapHostEngine(
 ) : AutoCloseable {
     private val tag = "AapHostEngine"
 
-    private val slotHosts = Array(numSlots) { SlotPluginHost(context) }
+    /** Called on a binder or the main thread when the process of the plugin loaded in a slot dies. */
+    var onSlotPluginDied: ((slotIndex: Int, instance: NativeRemotePluginInstance) -> Unit)? = null
+
+    private val slotHosts = Array(numSlots) { slotIndex ->
+        SlotPluginHost(context) { instance ->
+            onSlotPluginDied?.invoke(slotIndex, instance)
+        }
+    }
 
     suspend fun instantiatePluginForSlot(
         slotIndex: Int,

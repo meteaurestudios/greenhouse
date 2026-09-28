@@ -147,10 +147,18 @@ class AudioEngineController(
             wasPlayingBeforeBackground = false
             Log.i(TAG, "App backgrounded: audio engine was already paused")
         }
+
+        // Released rather than kept stopped: resuming a stream AAudio put in standby can crash inside AAudio
+        engine.closeStream()
     }
 
     fun onAppForeground() {
         isBackgrounded = false
+
+        // Reopened even if audio stays paused, so a device change while away is picked up by syncWithEngine()
+        if (!engine.openStream()) {
+            Log.w(TAG, "App foregrounded: the output stream could not be opened")
+        }
 
         if (!wasPlayingBeforeBackground) {
             Log.i(TAG, "App foregrounded: engine remains paused (not playing prior to background)")

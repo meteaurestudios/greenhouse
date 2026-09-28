@@ -58,13 +58,16 @@ data class RackSlotData(
     val isLoading: Boolean = false,
     val loadingPluginName: String? = null,
     /** Sample rate [instance] was prepared at. */
-    val preparedSampleRate: Int = 0
+    val preparedSampleRate: Int = 0,
+    /** The plugin's process died: [pluginInfo] and the parameter values are kept so it can be reloaded. */
+    val isCrashed: Boolean = false
 ) {
     val presetNames: List<String>
         get() = presets.map { it.name }
 
+    /** A crashed plugin has no instance to show its UI. */
     val hasCustomUi: Boolean
-        get() = pluginInfo?.hasCustomUi == true
+        get() = pluginInfo?.hasCustomUi == true && !isCrashed
 
     val isLoaded: Boolean
         get() = instance != null && pluginInfo != null

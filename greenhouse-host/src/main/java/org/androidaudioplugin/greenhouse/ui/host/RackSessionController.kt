@@ -201,6 +201,11 @@ class RackSessionController(
     }
 
     fun autosave() {
+        // A rack that is still loading is partly empty: keep the last autosave instead
+        if (isOperationInProgress || rack.isInstantiating) {
+            return
+        }
+
         try {
             sessionManager.saveAutosession(capture(currentSessionName ?: AUTOSAVE_SESSION_NAME))
         } catch (e: Throwable) {
@@ -293,8 +298,8 @@ class RackSessionController(
                 audio.requestRunning()
             }
 
-            autosave()
             isOperationInProgress = false
+            autosave()
 
             val status = if (anyError) {
                 "Loaded '${preset.name}' with warnings (some plugins may be missing)."
