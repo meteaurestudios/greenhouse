@@ -164,6 +164,7 @@ fun MasterControlBanner(
                     DspCpuMeter(
                         cpuPercentProvider = totalCpuLoadProvider,
                         isProcessing = isProcessing,
+                        isLegacyPath = !viewModel.audio.streamMode.isMMapUsed,
                         onToggleProcessing = onToggleProcessing
                     )
 
@@ -212,6 +213,8 @@ fun MasterControlBanner(
 fun DspCpuMeter(
     cpuPercentProvider: () -> Float,
     isProcessing: Boolean,
+    /** The output stream runs on the legacy path instead of MMAP (higher latency). */
+    isLegacyPath: Boolean,
     onToggleProcessing: () -> Unit
 ) {
     val cpuPercent = cpuPercentProvider()
@@ -235,10 +238,10 @@ fun DspCpuMeter(
         DangerRed.copy(alpha = 0.4f)
     }
 
-    val ledColor = if (isProcessing) {
-        SproutGreen
-    } else {
-        DangerRed
+    val ledColor = when {
+        !isProcessing -> DangerRed
+        isLegacyPath -> WarningOrange
+        else -> SproutGreen
     }
 
     val labelColor = if (isProcessing) {
