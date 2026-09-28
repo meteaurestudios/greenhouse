@@ -71,6 +71,10 @@ class RackController(
     var isInstantiating by mutableStateOf(false)
         private set
 
+    /** Bumped by every edit to the rack's content, so the session can tell whether it has unsaved changes. */
+    var revision by mutableIntStateOf(0)
+        private set
+
     val activeSlot: RackSlotData
         get() = slots[activeSlotIndex]
 
@@ -142,6 +146,7 @@ class RackController(
 
                 activeSlotIndex = slotIndex
                 coerceViewModeToActiveSlot()
+                markChanged()
                 audio.ensureRunning()
                 postStatus("Loaded ${plugin.displayName} into ${slots[slotIndex].title} (${slots[slotIndex].slotType})")
             } catch (e: Throwable) {
@@ -203,6 +208,7 @@ class RackController(
 
         releaseSlot(slotIndex, loadingPluginName = null)
         coerceViewModeToActiveSlot()
+        markChanged()
         postStatus("Cleared ${slots[slotIndex].title}")
     }
 
@@ -258,6 +264,7 @@ class RackController(
         val newBypass = !slots[slotIndex].isBypassed
         slots[slotIndex] = slots[slotIndex].copy(isBypassed = newBypass)
         audio.engine.setSlotBypassed(slotIndex, newBypass)
+        markChanged()
 
         val state = if (newBypass) {
             "BYPASSED"
@@ -277,6 +284,7 @@ class RackController(
         ui.lastHostEditTimestamps[parameter.id] = System.currentTimeMillis()
         ui.parameterValues[parameter.id] = value
         audio.engine.setParameterValue(slotIndex, parameter, value)
+        markChanged()
     }
 
     fun setPreset(slotIndex: Int, nativeIndex: Int) {
@@ -299,6 +307,7 @@ class RackController(
 
         val targetPreset = slot.presets.find { it.nativeIndex == nativeIndex } ?: slot.presets.first()
         slots[slotIndex] = slot.copy(selectedPresetIndex = targetPreset.nativeIndex)
+        markChanged()
         postStatus("${slot.title} Preset: ${targetPreset.name}")
 
         val request = ++presetRequestIds[slotIndex]
@@ -438,6 +447,7 @@ class RackController(
         }
 
         withContext(Dispatchers.Main) {
+            // Not counted as an edit: plugins also change values on their own (e.g. after a session load)
             for ((slotIndex, paramId, value) in updates) {
                 slotUi[slotIndex].parameterValues[paramId] = value
             }
@@ -557,6 +567,10 @@ class RackController(
             Log.w(TAG, "Failed to capture getState for slot $slotIndex", e)
             null
         }
+    }
+
+    private fun markChanged() {
+        revision++
     }
 
     private fun coerceViewModeToActiveSlot() {

@@ -77,6 +77,9 @@ private val BANNER_SETTINGS_BUTTON_SIZE = 30.dp
 private val BANNER_SETTINGS_ICON_SIZE = 16.dp
 private val BANNER_CORNER_RADIUS = 20.dp
 private val BANNER_SPACING = 10.dp
+// Tight line heights keep the session name close under the title
+private val BANNER_TITLE_LINE_HEIGHT = 16.sp
+private val BANNER_SESSION_LINE_HEIGHT = 12.sp
 
 @Composable
 fun MasterControlBanner(
@@ -130,10 +133,15 @@ fun MasterControlBanner(
                         )
                     }
 
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .clickable(onClick = onOpenSessionDialog)
+                    ) {
                         Text(
                             text = "Greenhouse",
                             fontSize = 15.sp,
+                            lineHeight = BANNER_TITLE_LINE_HEIGHT,
                             fontWeight = FontWeight.ExtraBold,
                             color = TextPrimary,
                             letterSpacing = 0.4.sp
@@ -142,14 +150,29 @@ fun MasterControlBanner(
                         val activeSessionName = viewModel.sessions.currentSessionName
 
                         if (!activeSessionName.isNullOrBlank()) {
-                            Text(
-                                text = activeSessionName,
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = SproutGreen,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = activeSessionName,
+                                    fontSize = 10.5.sp,
+                                    lineHeight = BANNER_SESSION_LINE_HEIGHT,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SproutGreen,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+
+                                if (viewModel.sessions.isModified) {
+                                    Text(
+                                        text = " • unsaved",
+                                        fontSize = 10.5.sp,
+                                        lineHeight = BANNER_SESSION_LINE_HEIGHT,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextSecondary,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
                         }
                     }
                 }

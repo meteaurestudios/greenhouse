@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,10 @@ class RackSessionController(
         const val AUTOSAVE_SESSION_NAME = "Autosave Session"
         const val DEFAULT_CAPTURE_NAME = "Current Session"
         const val IMPORTED_SESSION_NAME = "Imported Session"
+        /** Matches no rack revision: the session has unsaved changes. */
+        private const val UNSAVED_REVISION = -1
+        /** Autosave property: the autosaved rack differs from its saved session, so it is still unsaved after a relaunch. */
+        private const val HAS_UNSAVED_CHANGES_PROPERTY = "hasUnsavedChanges"
     }
 
     private val sessionManager = RackSessionManager(context)
@@ -44,6 +49,13 @@ class RackSessionController(
 
     var isOperationInProgress by mutableStateOf(false)
         private set
+
+    /** [RackController.revision] when the session was last saved or loaded. */
+    private var savedRevision by mutableIntStateOf(0)
+
+    /** The rack changed since the session was last saved or loaded. */
+    val isModified: Boolean
+        get() = rack.revision != savedRevision
 
     fun refreshSavedSessions() {
         scope.launch(Dispatchers.IO) {
@@ -106,6 +118,8 @@ class RackSessionController(
             return
         }
 
+        val revision = rack.revision
+
         scope.launch(Dispatchers.IO) {
             val file = sessionManager.savePreset(trimmed, capture(trimmed))
 
@@ -115,6 +129,7 @@ class RackSessionController(
                 if (file != null) {
                     currentSessionName = trimmed
                     currentSessionFile = file
+                    savedRevision = revision
                     postStatus("Saved '$trimmed'.")
                     onComplete?.invoke(true)
                 } else {
@@ -196,6 +211,7 @@ class RackSessionController(
         rack.unloadAll()
         currentSessionName = null
         currentSessionFile = null
+        savedRevision = rack.revision
         sessionManager.clearAutosession()
         postStatus("New session started.")
     }
@@ -207,7 +223,14 @@ class RackSessionController(
         }
 
         try {
-            sessionManager.saveAutosession(capture(currentSessionName ?: AUTOSAVE_SESSION_NAME))
+            val preset = capture(currentSessionName ?: AUTOSAVE_SESSION_NAME)
+            val properties = if (isModified) {
+                mapOf(HAS_UNSAVED_CHANGES_PROPERTY to true.toString())
+            } else {
+                emptyMap()
+            }
+
+            sessionManager.saveAutosession(preset.copy(customProperties = properties))
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to autosave session", e)
         }
@@ -232,7 +255,7 @@ class RackSessionController(
                     currentSessionFile = sessionManager.findPresetFile(preset.name)
                 }
 
-                restore(preset)
+                restore(preset, modifiedWhenLoaded = preset.customProperties[HAS_UNSAVED_CHANGES_PROPERTY].toBoolean())
             }
         }
     }
@@ -244,7 +267,8 @@ class RackSessionController(
             return
         }
 
-        restore(capture(currentSessionName ?: DEFAULT_CAPTURE_NAME), playWhenLoaded = false) {
+        // The rack is reloaded as it is, not from its saved session: unsaved changes stay unsaved
+        restore(capture(currentSessionName ?: DEFAULT_CAPTURE_NAME), playWhenLoaded = false, modifiedWhenLoaded = isModified) {
             postStatus("Output device changed: plugins reloaded at $sampleRate Hz.")
         }
     }
@@ -253,8 +277,16 @@ class RackSessionController(
         return RackPreset(name = name, slots = rack.captureSlotStates())
     }
 
-    /** [playWhenLoaded]: start audio once a non-empty rack is loaded, even if it was paused. */
-    private fun restore(preset: RackPreset, playWhenLoaded: Boolean = true, onComplete: ((Boolean) -> Unit)? = null) {
+    /**
+     * [playWhenLoaded]: start audio once a non-empty rack is loaded, even if it was paused.
+     * [modifiedWhenLoaded]: [preset] differs from the session saved on disk, so the session starts with unsaved changes.
+     */
+    private fun restore(
+        preset: RackPreset,
+        playWhenLoaded: Boolean = true,
+        modifiedWhenLoaded: Boolean = false,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
         if (isOperationInProgress || rack.isInstantiating) {
             return
         }
@@ -296,6 +328,12 @@ class RackSessionController(
             // A session with plugins in it should be playable right away, including the autosave restored at launch.
             if (wasAudioActive || (playWhenLoaded && !rack.isEmpty)) {
                 audio.requestRunning()
+            }
+
+            savedRevision = if (modifiedWhenLoaded) {
+                UNSAVED_REVISION
+            } else {
+                rack.revision
             }
 
             isOperationInProgress = false
