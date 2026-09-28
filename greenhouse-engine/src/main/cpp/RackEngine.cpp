@@ -107,6 +107,7 @@ void RackEngine::clearSlotsLocked()
         slot.mCpuLoad.store(0.0f, std::memory_order_relaxed);
         slot.mPeakL.store(0.0f, std::memory_order_relaxed);
         slot.mPeakR.store(0.0f, std::memory_order_relaxed);
+        slot.mInvalidBlocks.store(0, std::memory_order_relaxed);
     }
 }
 
@@ -142,6 +143,7 @@ void RackEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* client, int
     slot.mInstance.store(nullptr);
     waitForAudioThreadQuiescence();
     slot.mIsBypassed.store(false, std::memory_order_relaxed);
+    slot.mInvalidBlocks.store(0, std::memory_order_relaxed);
 
     if (instance == nullptr) {
         slot.mPorts = AudioPorts{};
@@ -199,6 +201,15 @@ float RackEngine::getSlotCpuLoad(int32_t slotIndex) const
     }
 
     return mSlots[slotIndex].mCpuLoad.load(std::memory_order_relaxed);
+}
+
+int32_t RackEngine::getSlotInvalidBlocks(int32_t slotIndex) const
+{
+    if (!isValidSlot(slotIndex)) {
+        return 0;
+    }
+
+    return mSlots[slotIndex].mInvalidBlocks.load(std::memory_order_relaxed);
 }
 
 void RackEngine::getAllSlotLevels(float* outLevels, int32_t maxSlots) const
@@ -338,7 +349,8 @@ void RackEngine::renderBlock(int32_t frames)
 
 /**
  * Runs one slot over mBlockBuffer in place. Returns true if the plugin output replaced the buffer;
- * false leaves it untouched (empty, bypassed or failed slots pass the signal through).
+ * false leaves it untouched (empty, bypassed or failed slots, and blocks with NaN or infinite
+ * samples, pass the signal through).
  */
 bool RackEngine::renderSlot(RackSlot& slot, bool isInstrument, int32_t frames)
 {
@@ -387,24 +399,31 @@ bool RackEngine::renderSlot(RackSlot& slot, bool isInstrument, int32_t frames)
         return false;
     }
 
-    if (ports.mOutCount == STEREO_CHANNEL_COUNT) {
-        auto outL = static_cast<const float*>(buffer->get_buffer(buffer, ports.mOut[0]));
-        auto outR = static_cast<const float*>(buffer->get_buffer(buffer, ports.mOut[1]));
-
-        if (outL != nullptr && outR != nullptr) {
-            simd::interleaveStereo(outL, outR, mBlockBuffer.data(), frames);
-            return true;
-        }
-    } else if (ports.mOutCount == 1) {
-        auto outMono = static_cast<const float*>(buffer->get_buffer(buffer, ports.mOut[0]));
-
-        if (outMono != nullptr) {
-            simd::interleaveMonoToStereo(outMono, mBlockBuffer.data(), frames);
-            return true;
-        }
+    if (ports.mOutCount == 0) {
+        return false;
     }
 
-    return false;
+    auto outL = static_cast<const float*>(buffer->get_buffer(buffer, ports.mOut[0]));
+    auto outR = ports.mOutCount == STEREO_CHANNEL_COUNT ? static_cast<const float*>(buffer->get_buffer(buffer, ports.mOut[1])) : outL;
+
+    if (outL == nullptr || outR == nullptr) {
+        return false;
+    }
+
+    // A plugin can output NaN or infinite samples (e.g. Odin2's first block after a session reload).
+    // Passed on, they click, and a NaN can get stuck in the next slots' filters and delay lines for good.
+    if (!simd::allFinite(outL, frames) || !simd::allFinite(outR, frames)) {
+        slot.mInvalidBlocks.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+
+    if (outR == outL) {
+        simd::interleaveMonoToStereo(outL, mBlockBuffer.data(), frames);
+    } else {
+        simd::interleaveStereo(outL, outR, mBlockBuffer.data(), frames);
+    }
+
+    return true;
 }
 
 } // namespace aaphost

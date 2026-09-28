@@ -161,6 +161,13 @@ Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeGetSlotCpuLoad(
     return getEngine().getSlotCpuLoad(slotIndex);
 }
 
+JNIEXPORT jint JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeGetSlotInvalidBlocks(
+        JNIEnv* env, jclass clazz, jint slotIndex)
+{
+    return getEngine().getSlotInvalidBlocks(slotIndex);
+}
+
 JNIEXPORT void JNICALL
 Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeGetAllSlotLevels(
         JNIEnv* env, jclass clazz, jfloatArray outLevels)

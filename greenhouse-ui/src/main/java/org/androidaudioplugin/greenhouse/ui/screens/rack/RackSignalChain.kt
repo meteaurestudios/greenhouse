@@ -54,6 +54,7 @@ import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceVariant
 import org.androidaudioplugin.greenhouse.ui.theme.TextMuted
 import org.androidaudioplugin.greenhouse.ui.theme.TextPrimary
 import org.androidaudioplugin.greenhouse.ui.theme.TextSecondary
+import org.androidaudioplugin.greenhouse.ui.theme.WarningOrange
 
 private val SIGNAL_CONNECTOR_WIDTH = 10.dp
 private val SIGNAL_CONNECTOR_HEIGHT = 104.dp
@@ -117,6 +118,7 @@ fun SignalRackHeader(
     activeSlotIndex: Int,
     isProcessing: Boolean,
     slotCpuLoadsProvider: () -> List<Float>,
+    slotInvalidOutputProvider: () -> List<Boolean>,
     slotLevelsProvider: () -> List<SlotLevel>,
     onSelectSlot: (Int) -> Unit,
     onAddPlugin: (Int) -> Unit,
@@ -126,6 +128,7 @@ fun SignalRackHeader(
     modifier: Modifier = Modifier
 ) {
     val slotCpuLoads = slotCpuLoadsProvider()
+    val slotInvalidOutput = slotInvalidOutputProvider()
     val slotLevels = slotLevelsProvider()
 
     Row(
@@ -342,8 +345,10 @@ fun SignalRackHeader(
                                     }
                                 } else {
                                     val slotCpu = slotCpuLoads.getOrNull(slot.index) ?: 0f
+                                    val hasInvalidOutput = slotInvalidOutput.getOrNull(slot.index) == true
                                     val statusText = when {
                                         slot.isBypassed -> "BYPASSED"
+                                        hasInvalidOutput -> "NaN/INF"
                                         isProcessing -> "DSP ${slotCpu.toInt()}%"
                                         else -> "ACTIVE"
                                     }
@@ -354,7 +359,11 @@ fun SignalRackHeader(
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace,
                                         letterSpacing = 0.5.sp,
-                                        color = if (slot.isBypassed) DangerRed else TextMuted
+                                        color = when {
+                                            slot.isBypassed -> DangerRed
+                                            hasInvalidOutput -> WarningOrange
+                                            else -> TextMuted
+                                        }
                                     )
                                 }
                             } else {

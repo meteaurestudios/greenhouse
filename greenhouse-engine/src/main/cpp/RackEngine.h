@@ -48,6 +48,7 @@ struct RackSlot
     std::atomic<float> mCpuLoad{0.0f};
     std::atomic<float> mPeakL{0.0f};
     std::atomic<float> mPeakR{0.0f};
+    std::atomic<int32_t> mInvalidBlocks{0}; // output blocks dropped for NaN or infinite samples since the plugin was set
 
     // Audio thread only
     double mSmoothedLoad{0.0};
@@ -82,6 +83,7 @@ public:
 
     float getTotalCpuLoad() const;
     float getSlotCpuLoad(int32_t slotIndex) const;
+    int32_t getSlotInvalidBlocks(int32_t slotIndex) const;
     void getAllSlotLevels(float* outLevels, int32_t maxSlots) const;
 
 protected:

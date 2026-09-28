@@ -102,6 +102,9 @@ class RackEngine(
         private external fun nativeGetSlotCpuLoad(slotIndex: Int): Float
 
         @JvmStatic
+        private external fun nativeGetSlotInvalidBlocks(slotIndex: Int): Int
+
+        @JvmStatic
         private external fun nativeGetAllSlotLevels(outLevels: FloatArray)
     }
 
@@ -143,6 +146,15 @@ class RackEngine(
         }
 
         return 0f
+    }
+
+    /** Output blocks the engine dropped because they held NaN or infinite samples, since the slot's plugin was set. */
+    fun getSlotInvalidBlocks(slotIndex: Int): Int {
+        if (slotIndex in 0 until numSlots) {
+            return nativeGetSlotInvalidBlocks(slotIndex)
+        }
+
+        return 0
     }
 
     fun getAllSlotLevels(outLevels: FloatArray) {

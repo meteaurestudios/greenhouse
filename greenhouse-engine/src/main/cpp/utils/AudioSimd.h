@@ -108,6 +108,18 @@ inline void deinterleaveStereoToMono(const float* inInterleaved, float* outMono,
 #endif
 }
 
+/** False if any of the samples is NaN or infinite. */
+inline bool allFinite(const float* samples, int32_t numSamples)
+{
+    for (int32_t i = 0; i < numSamples; i++) {
+        if (!std::isfinite(samples[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 inline void measureStereoPeak(const float* interleavedStereo, int32_t numFrames, float& outPeakL, float& outPeakR)
 {
     float maxL = 0.0f;

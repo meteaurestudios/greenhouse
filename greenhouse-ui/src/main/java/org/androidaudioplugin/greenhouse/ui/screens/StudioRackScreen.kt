@@ -76,6 +76,7 @@ fun StudioRackScreen(
                 activeSlotIndex = currentSlotIndex,
                 isProcessing = viewModel.audio.isProcessing,
                 slotCpuLoadsProvider = { viewModel.meters.slotCpuLoads },
+                slotInvalidOutputProvider = { viewModel.meters.slotHasInvalidOutput },
                 slotLevelsProvider = { viewModel.meters.slotLevels },
                 onSelectSlot = { slotIdx ->
                     viewModel.rack.selectActiveSlot(slotIdx)

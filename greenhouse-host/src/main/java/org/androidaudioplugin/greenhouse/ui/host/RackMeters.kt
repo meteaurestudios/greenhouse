@@ -1,5 +1,6 @@
 package org.androidaudioplugin.greenhouse.ui.host
 
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -9,12 +10,14 @@ import kotlinx.coroutines.withContext
 import org.androidaudioplugin.greenhouse.core.RackEngine
 import org.androidaudioplugin.greenhouse.ui.SlotLevel
 
-/** Per-slot output levels and CPU load, polled from the native engine. */
+/** Per-slot output levels, CPU load and invalid output, polled from the native engine. */
 class RackMeters(private val numSlots: Int) {
     companion object {
         const val STEREO_CHANNELS = 2
         const val PERCENT_SCALE = 100f
         const val MAX_PERCENT = 100f
+        /** How long a slot shows invalid output after the engine last dropped one of its blocks. */
+        const val INVALID_OUTPUT_DISPLAY_MS = 2000L
     }
 
     val slotLevels = mutableStateListOf<SlotLevel>().apply {
@@ -29,10 +32,21 @@ class RackMeters(private val numSlots: Int) {
         }
     }
 
+    /** Whether the slot's plugin produced NaN or infinite samples (dropped by the engine) in the last [INVALID_OUTPUT_DISPLAY_MS]. */
+    val slotHasInvalidOutput = mutableStateListOf<Boolean>().apply {
+        repeat(numSlots) {
+            add(false)
+        }
+    }
+
     var totalCpuLoad by mutableFloatStateOf(0f)
         private set
 
     private val rawLevels = FloatArray(numSlots * STEREO_CHANNELS)
+
+    // Polling thread only
+    private val lastInvalidBlocks = IntArray(numSlots)
+    private val lastInvalidOutputMs = LongArray(numSlots) { -INVALID_OUTPUT_DISPLAY_MS }
 
     /** Reads the engine on the calling thread and publishes the results on Main. */
     suspend fun poll(engine: RackEngine, isProcessing: Boolean, updateCpu: Boolean) {
@@ -53,6 +67,23 @@ class RackMeters(private val numSlots: Int) {
         } else {
             null
         }
+        val invalidOutput = if (updateCpu) {
+            val now = SystemClock.uptimeMillis()
+
+            BooleanArray(numSlots) { i ->
+                val count = engine.getSlotInvalidBlocks(i)
+
+                if (count > lastInvalidBlocks[i]) {
+                    lastInvalidOutputMs[i] = now
+                }
+
+                // The count restarts from 0 when a new plugin is set in the slot
+                lastInvalidBlocks[i] = count
+                now - lastInvalidOutputMs[i] < INVALID_OUTPUT_DISPLAY_MS
+            }
+        } else {
+            null
+        }
 
         withContext(Dispatchers.Main) {
             for (i in 0 until numSlots) {
@@ -64,6 +95,12 @@ class RackMeters(private val numSlots: Int) {
 
                 for (i in 0 until numSlots) {
                     slotCpuLoads[i] = slotLoads[i]
+                }
+            }
+
+            if (invalidOutput != null) {
+                for (i in 0 until numSlots) {
+                    slotHasInvalidOutput[i] = invalidOutput[i]
                 }
             }
         }
