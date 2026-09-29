@@ -278,7 +278,7 @@ fun RackSessionDialog(
                                 },
                                 onShare = {
                                     focusManager.clearFocus()
-                                    shareSessionFile(context, sessionHeader.file, sessionHeader.name)
+                                    shareSessionFile(context, sessionHeader.file)
                                 },
                                 onDelete = {
                                     focusManager.clearFocus()
@@ -1138,7 +1138,7 @@ private fun ConfirmationDialog(
     }
 }
 
-private fun shareSessionFile(context: Context, file: File, sessionName: String) {
+private fun shareSessionFile(context: Context, file: File) {
     try {
         val uri = FileProvider.getUriForFile(
             context,
@@ -1149,7 +1149,7 @@ private fun shareSessionFile(context: Context, file: File, sessionName: String) 
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = RackPreset.MIME_TYPE
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "Greenhouse: $sessionName")
+            putExtra(Intent.EXTRA_SUBJECT, file.name)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
@@ -1158,7 +1158,7 @@ private fun shareSessionFile(context: Context, file: File, sessionName: String) 
         val fallbackIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, file.readText())
-            putExtra(Intent.EXTRA_SUBJECT, "Greenhouse: $sessionName")
+            putExtra(Intent.EXTRA_SUBJECT, file.name)
         }
         context.startActivity(Intent.createChooser(fallbackIntent, "Share"))
     }
