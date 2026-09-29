@@ -6,10 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,7 +16,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -27,6 +24,7 @@ import org.androidaudioplugin.greenhouse.core.TransportState
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.host.SequencerController
 import org.androidaudioplugin.greenhouse.ui.components.MidiDin5Icon
+import org.androidaudioplugin.greenhouse.ui.components.StepperControl
 import org.androidaudioplugin.greenhouse.ui.components.StudioKeyboard
 import org.androidaudioplugin.greenhouse.ui.theme.*
 
@@ -40,8 +38,6 @@ private val LOOP_PROGRESS_HEIGHT = 2.5.dp
 // Clear of the button's rounded corners
 private val LOOP_PROGRESS_INSET = 6.dp
 private val LOOP_PROGRESS_BOTTOM_MARGIN = 3.dp
-// Tap feedback of the octave steps: a circle around the icon, clear of the octave label
-private val OCTAVE_STEP_RIPPLE_RADIUS = 10.dp
 private const val NOTES_PER_OCTAVE = 12
 private const val MIN_OCTAVE = 0
 private const val MAX_OCTAVE = 9
@@ -84,42 +80,9 @@ fun MidiKeyboardSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Octave Stepper, then SEQUENCE
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Octave Stepper (- / lowest octave / +): the keys label their octaves, the lowest is enough here
-                    Row(
-                        modifier = Modifier
-                            .height(KEYBOARD_CONTROL_BUTTON_SIZE)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(StudioSurfaceElevated)
-                            .border(1.dp, StudioPanelBorder, RoundedCornerShape(6.dp)),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OctaveStepButton(Icons.Default.Remove, "Octave Down", isEnabled = octave > MIN_OCTAVE) {
-                            viewModel.keyboard.octave = octave - 1
-                        }
-
-                        Text(
-                            text = startNoteName,
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            letterSpacing = 0.5.sp
-                        )
-
-                        OctaveStepButton(Icons.Default.Add, "Octave Up", isEnabled = octave < MAX_OCTAVE) {
-                            viewModel.keyboard.octave = octave + 1
-                        }
-                    }
-
-                    // SEQUENCE Button: shows / hides the sequencer strip
-                    SequenceToggleButton(sequencer = viewModel.sequencer, isOn = isSequencerVisible) {
-                        isSequencerVisible = !isSequencerVisible
-                    }
+                // Left: SEQUENCE Button, shows / hides the sequencer strip
+                SequenceToggleButton(sequencer = viewModel.sequencer, isOn = isSequencerVisible) {
+                    isSequencerVisible = !isSequencerVisible
                 }
 
                 // Center / Right Controls
@@ -170,6 +133,17 @@ fun MidiKeyboardSection(
                     KeyboardToggleButton(label = "HOLD", isOn = isHoldEnabled) {
                         viewModel.keyboard.toggleHold()
                     }
+
+                    // Octave Stepper (- / lowest octave / +): the keys label their octaves, the lowest is enough here
+                    StepperControl(
+                        label = startNoteName,
+                        canDecrement = octave > MIN_OCTAVE,
+                        canIncrement = octave < MAX_OCTAVE,
+                        decrementDescription = "Octave Down",
+                        incrementDescription = "Octave Up",
+                        onDecrement = { viewModel.keyboard.octave = octave - 1 },
+                        onIncrement = { viewModel.keyboard.octave = octave + 1 }
+                    )
 
                     // Hide / Fold Toggle Button
                     Box(
@@ -329,37 +303,6 @@ private fun KeyboardToggleButton(
 }
 
 /** An octave step at one end of the octave stepper. */
-@Composable
-private fun OctaveStepButton(
-    icon: ImageVector,
-    contentDescription: String,
-    isEnabled: Boolean,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(KEYBOARD_CONTROL_BUTTON_SIZE)
-            .clickable(
-                interactionSource = null,
-                indication = ripple(bounded = false, radius = OCTAVE_STEP_RIPPLE_RADIUS),
-                enabled = isEnabled,
-                onClick = onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = if (isEnabled) {
-                SproutGreen
-            } else {
-                TextMuted
-            },
-            modifier = Modifier.size(KEYBOARD_CONTROL_ICON_SIZE)
-        )
-    }
-}
-
 /** Position in the loop, drawn as a rounded line near the bottom. The position is read while drawing, so it moves without recomposing. */
 private fun Modifier.loopProgress(positionProvider: () -> Long, lengthTicks: Long): Modifier {
     return drawBehind {

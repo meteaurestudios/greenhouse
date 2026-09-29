@@ -28,13 +28,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
@@ -80,12 +78,11 @@ import org.androidaudioplugin.greenhouse.ui.GreenhouseSurfaceControlHost
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
+import org.androidaudioplugin.greenhouse.ui.components.StepperControl
 import org.androidaudioplugin.greenhouse.ui.theme.AccentCyan
-import org.androidaudioplugin.greenhouse.ui.theme.AccentGold
 import org.androidaudioplugin.greenhouse.ui.theme.AccentViolet
 import org.androidaudioplugin.greenhouse.ui.theme.BerryRose
 import org.androidaudioplugin.greenhouse.ui.theme.BlossomCoralSoft
-import org.androidaudioplugin.greenhouse.ui.theme.NeonCyan
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
 import org.androidaudioplugin.greenhouse.ui.theme.StudioBackground
 import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
@@ -108,6 +105,7 @@ private const val NATIVE_UI_ZOOM_ROUNDING_SCALE = 20.0
 private const val NATIVE_UI_MIN_SCALE = 0.05f
 private const val NATIVE_UI_MAX_SCALE = 3.0f
 private const val NATIVE_UI_FIT_SNAP_THRESHOLD = 0.02f
+private const val PERCENT_SCALE = 100f
 
 private val FALLBACK_CARD_MAX_WIDTH = 460.dp
 private val FALLBACK_CARD_CORNER_RADIUS = 20.dp
@@ -153,64 +151,16 @@ fun NativeSurfaceZoomToolbar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Zoom Out (-) Button (Disabled when in FIT mode)
-        val canZoomOut = !isFitMode
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (canZoomOut) StudioSurfaceElevated else StudioSurface)
-                .clickable(
-                    enabled = canZoomOut,
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onZoomOut() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Remove,
-                contentDescription = "Zoom Out",
-                tint = if (canZoomOut) TextPrimary else TextMuted.copy(alpha = 0.35f),
-                modifier = Modifier.size(14.dp)
-            )
-        }
-
-        // Zoom Percentage readout
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (isFitMode) StudioSurfaceElevated else Color.Transparent)
-                .padding(horizontal = 6.dp, vertical = 3.dp)
-        ) {
-            val zoomPercent = "${(displayedScale * 100).toInt()}%"
-            Text(
-                text = zoomPercent,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = if (isFitMode) NeonCyan else AccentGold
-            )
-        }
-
-        // Zoom In (+) Button
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(StudioSurfaceElevated)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onZoomIn() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Zoom In",
-                tint = TextPrimary,
-                modifier = Modifier.size(14.dp)
-            )
-        }
+        // Zoom stepper: zooming out is disabled in FIT mode
+        StepperControl(
+            label = "${(displayedScale * PERCENT_SCALE).toInt()}%",
+            canDecrement = !isFitMode,
+            canIncrement = true,
+            decrementDescription = "Zoom Out",
+            incrementDescription = "Zoom In",
+            onDecrement = onZoomOut,
+            onIncrement = onZoomIn
+        )
 
         if (showFullscreenButton) {
             Spacer(modifier = Modifier.width(2.dp))

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
@@ -36,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,8 +79,17 @@ private val BANNER_SETTINGS_BUTTON_SIZE = 30.dp
 private val BANNER_SETTINGS_ICON_SIZE = 16.dp
 private val BANNER_CORNER_RADIUS = 20.dp
 private val BANNER_SPACING = 10.dp
+private val BANNER_PADDING_HORIZONTAL = 10.dp
+private val BANNER_PADDING_VERTICAL = 10.dp
 // Tight line heights keep the session name close under the title
 private val BANNER_TITLE_LINE_HEIGHT = 16.sp
+private val BANNER_TITLE_FONT_SIZE = 15.sp
+private val BANNER_TITLE_MIN_FONT_SIZE = 11.sp
+// Narrower screens (e.g. 360dp phones) get a smaller emblem, and a smaller title if needed, so the title fits
+private const val BANNER_COMPACT_SCREEN_WIDTH_DP = 380
+private val COMPACT_BANNER_LOGO_SIZE = 24.dp
+private val COMPACT_BANNER_LOGO_ICON_SIZE = 14.dp
+private val COMPACT_BANNER_TITLE_MIN_FONT_SIZE = 10.sp
 private val BANNER_SESSION_LINE_HEIGHT = 12.sp
 
 @Composable
@@ -92,6 +103,8 @@ fun MasterControlBanner(
     onOpenSessionDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isCompact = LocalConfiguration.current.screenWidthDp < BANNER_COMPACT_SCREEN_WIDTH_DP
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -102,7 +115,7 @@ fun MasterControlBanner(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(horizontal = BANNER_PADDING_HORIZONTAL, vertical = BANNER_PADDING_VERTICAL)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -119,7 +132,13 @@ fun MasterControlBanner(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(BANNER_LOGO_SIZE)
+                            .size(
+                                if (isCompact) {
+                                    COMPACT_BANNER_LOGO_SIZE
+                                } else {
+                                    BANNER_LOGO_SIZE
+                                }
+                            )
                             .clip(CircleShape)
                             .background(StudioSurfaceElevated)
                             .border(1.dp, SproutGreen.copy(alpha = 0.45f), CircleShape),
@@ -129,7 +148,13 @@ fun MasterControlBanner(
                             imageVector = Icons.Default.Spa,
                             contentDescription = "Greenhouse Emblem",
                             tint = SproutGreen,
-                            modifier = Modifier.size(BANNER_LOGO_ICON_SIZE)
+                            modifier = Modifier.size(
+                                if (isCompact) {
+                                    COMPACT_BANNER_LOGO_ICON_SIZE
+                                } else {
+                                    BANNER_LOGO_ICON_SIZE
+                                }
+                            )
                         )
                     }
 
@@ -138,13 +163,23 @@ fun MasterControlBanner(
                             .weight(1f, fill = false)
                             .clickable(onClick = onOpenSessionDialog)
                     ) {
+                        // One line: narrow screens shrink it to fit the space the buttons leave
                         Text(
                             text = "Greenhouse",
-                            fontSize = 15.sp,
                             lineHeight = BANNER_TITLE_LINE_HEIGHT,
                             fontWeight = FontWeight.ExtraBold,
                             color = TextPrimary,
-                            letterSpacing = 0.4.sp
+                            letterSpacing = 0.4.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            autoSize = TextAutoSize.StepBased(
+                                minFontSize = if (isCompact) {
+                                    COMPACT_BANNER_TITLE_MIN_FONT_SIZE
+                                } else {
+                                    BANNER_TITLE_MIN_FONT_SIZE
+                                },
+                                maxFontSize = BANNER_TITLE_FONT_SIZE
+                            )
                         )
 
                         val activeSessionName = viewModel.sessions.currentSessionName

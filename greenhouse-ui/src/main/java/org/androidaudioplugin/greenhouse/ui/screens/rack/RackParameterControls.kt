@@ -70,11 +70,11 @@ import org.androidaudioplugin.greenhouse.ui.theme.TextPrimary
 import org.androidaudioplugin.greenhouse.ui.theme.TextSecondary
 
 private const val PARAMETER_SEARCH_THRESHOLD = 12
-private const val GRID_COLUMN_COUNT = 3
+private const val GRID_COLUMN_COUNT = 4
 private const val PARAMETER_BOOLEAN_ACTIVE_THRESHOLD = 0.5
 private const val PARAMETER_INT_DISCRETE_STEP = 1.0
 private val PARAMETER_CARD_HEIGHT = 112.dp
-private val PARAMETER_KNOB_SIZE = 54.dp
+private val PARAMETER_KNOB_SIZE = 44.dp
 private val PARAMETER_CARD_CORNER_RADIUS = 12.dp
 // Shared by the host control, the filter button and the search field on the panel's first line
 internal val PARAMETER_TOOLBAR_HEIGHT = 34.dp
@@ -83,8 +83,10 @@ internal val PARAMETER_TOOLBAR_CORNER_RADIUS = 8.dp
 private val GRID_END_PADDING = 8.dp
 private val GRID_SPACING = 8.dp
 // The host control spans this many parameter cards, or one while the search field shares its line
-private const val HOST_CONTROL_CARD_SPAN = 2
+private const val HOST_CONTROL_CARD_SPAN = 3
 private const val COMPACT_HOST_CONTROL_CARD_SPAN = 1
+// The filter button lines up with the parameter cards below, like the host control
+private const val FILTER_BUTTON_CARD_SPAN = 1
 
 private fun formatFastDecimal(value: Double, decimals: Int): String {
     if (decimals == 1) {
@@ -302,6 +304,7 @@ fun ParameterControlRack(
 
                         Box(
                             modifier = Modifier
+                                .width(gridSpanWidth(gridWidth, FILTER_BUTTON_CARD_SPAN))
                                 .height(PARAMETER_TOOLBAR_HEIGHT)
                                 .clip(toolbarShape)
                                 .background(StudioSurface)

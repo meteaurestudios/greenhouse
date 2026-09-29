@@ -44,7 +44,7 @@ private val LEVEL_VALUE_WIDTH = 54.dp
 private val MIX_VALUE_WIDTH = 30.dp
 
 /**
- * The slot's host control (the instrument's output LEVEL, an effect's dry / wet MIX), spanning two
+ * The slot's host control (the instrument's output LEVEL, an effect's dry / wet MIX), spanning three
  * parameter cards and styled like the filter button beside it. Its slider and green value set it
  * apart from the plugin's own parameters (knobs). [isCompact] shows the slider alone, one card
  * wide, while the search field shares the line.
