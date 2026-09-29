@@ -17,6 +17,7 @@
 - **Native Plugin GUIs**: Full touch interaction with native plugin interfaces, including zoom, pan, and fullscreen mode.
 - **Parameter Controls & Presets**: Tweak sound parameters with dedicated knobs and sliders, or browse factory presets.
 - **Hardware & On-Screen MIDI**: Connect USB or Bluetooth LE MIDI controllers, or play using the built-in multitouch keyboard.
+- **MIDI Sequence Recorder**: Record what you play into a loop, layer takes, and play it back with a metronome, tap tempo, and quantize. Import and export `.mid` files.
 - **Low Latency & Real-Time Meters**: Fast Oboe-powered audio engine with responsive VU level meters.
 - **Plugin Browser**: Discover, search, and filter installed AAP plugins on your device.
 

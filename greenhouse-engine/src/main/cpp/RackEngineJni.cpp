@@ -1,20 +1,17 @@
 #include <jni.h>
 #include <algorithm>
-#include "RackEngine.h"
-
-namespace
-{
+#include "RackEngineJni.h"
 
 // One engine per process. It is intentionally never destroyed: tearing it down during static
 // destruction could touch plugin instances aap-core has already freed. The stream and plugin
 // references are released explicitly through nativeShutdown().
-aaphost::RackEngine& getEngine()
+aaphost::RackEngine& aaphost::getEngine()
 {
     static auto engine = new aaphost::RackEngine();
     return *engine;
 }
 
-} // namespace
+using aaphost::getEngine;
 
 extern "C" {
 

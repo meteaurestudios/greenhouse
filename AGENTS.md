@@ -12,10 +12,12 @@ The project is split into library modules so that downstream apps can build on t
   - **`src/main/cpp/`**: Native audio engine. Includes are relative to this folder (e.g. `"engine/OboeEngine.h"`).
     - `engine/OboeEngine`: reusable base that owns the AAudio output stream (open at the device's native rate, start / stop, reopen after errors, latency tuning, ADPF, denormals). Subclasses implement `prepareToPlay` / `streamStarting` / `process` / `flushState`.
     - `RackEngine`: the AAP plugin rack built on `OboeEngine` (instrument slot 0, then effect slots, rendered in fixed-size blocks; slots prepared at another sample rate stay silent until reloaded). Each slot also has a host level (gain) and dry / wet mix, ramped per block; the host resets them when a new plugin is added and saves them with the session.
-    - `RackEngineJni.cpp`: JNI bindings to a single process-wide `RackEngine` (no native handles cross JNI).
+    - `sequencer/MidiSequencer`: MIDI sequencer owned by `RackEngine`. Records the notes played on the slots and plays them back in a loop (PPQ 960 ticks, 4/4 bars), writing sample-accurate JR-timestamped UMP straight into each slot's MIDI2 input port before `process()`; aap-core merges the queued live input into it. The audio thread reads an immutable `PlaybackBuffer` swapped through an atomic pointer (old buffers freed once `OboeEngine::hasAudioThreadPassed()`), and takes transport commands from a lock-free queue. Also the metronome (`sequencer/Metronome`) and `.mid` import / export (`sequencer/StandardMidiFile`).
+    - `RackEngineJni.cpp` / `MidiSequencerJni.cpp`: JNI bindings to a single process-wide `RackEngine` (no native handles cross JNI).
     - `utils/AudioSimd.h`: NEON helpers. `utils/Logging.h`: log macros.
   - **`greenhouse/core/AapHostEngine.kt`**: Connects to AAP services and instantiates `NativeRemotePluginInstance`.
-  - **`greenhouse/core/RackEngine.kt`**: Kotlin side of the native `RackEngine`: transport, slot plugins, meters, and MIDI UMP parameter / note dispatching.
+  - **`greenhouse/core/RackEngine.kt`**: Kotlin side of the native `RackEngine`: transport, slot plugins, meters, and MIDI UMP parameter / note dispatching. The sequencer records only the notes sent to the slots.
+  - **`greenhouse/core/MidiSequencer.kt`**: Kotlin side of the native sequencer (`RackEngine.sequencer`): settings, transport, status, packed events.
   - **`greenhouse/core/MidiControllerManager.kt`**: Hardware MIDI input and MIDI 1.0 → UMP stream parser.
   - Manifest declares audio permissions and the AAP service `<queries>`; `consumer-rules.pro` carries the JNI / AAP R8 keep rules.
 - **`greenhouse-host/`** (`:greenhouse-host`): Host state and logic, no screens.
@@ -29,11 +31,13 @@ The project is split into library modules so that downstream apps can build on t
     - `RackMeters`: per-slot levels and CPU load.
     - `PluginBrowserController`: plugin catalog, slot-target filtering, developer filter, search.
     - `VirtualKeyboardController` / `MidiDeviceController`: on-screen keyboard state and hardware MIDI input.
-    - `RackSessionController`: saved sessions, autosave, session restore.
+    - `RackSessionController`: saved sessions, autosave, session restore (including the sequence).
+    - `SequencerController`: sequencer transport, settings, note lane, tap tempo, `.mid` import / export, sequence capture / restore.
   - Manifest declares the session-sharing `FileProvider` (`${applicationId}.fileprovider`).
 - **`greenhouse-ui/`** (`:greenhouse-ui`): Compose UI.
   - **`greenhouse/ui/MainHostApp.kt`**: Root composable and navigation graph.
   - **`greenhouse/ui/screens/StudioRackScreen.kt`**: Studio rack UI (Signal chain, slot cards, parameter controls, native plugin surfaces).
+  - **`greenhouse/ui/screens/rack/RackSequencer.kt`**: Sequencer strip in the keyboard card (record, play / stop, read-only lane, tempo / length chip) and its settings sheet.
   - **`greenhouse/ui/screens/PluginBrowserScreen.kt`**: Plugin catalog browser with category filters and search.
   - **`greenhouse/ui/screens/EngineSettingsScreen.kt`**: Audio hardware specs and diagnostic monitor.
   - **`greenhouse/ui/theme/`**, **`greenhouse/ui/components/`**: Theme and reusable controls.
@@ -51,6 +55,12 @@ Always specify `JAVA_HOME` using Android Studio's bundled JDK when invoking Grad
 
 ```bash
 JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleDebug
+```
+
+The native MIDI sequencer has desktop tests (no Android needed), with stubs for the Oboe engine and logging:
+
+```bash
+cmake -S greenhouse-engine/src/test/cpp -B build/sequencer-test && cmake --build build/sequencer-test && build/sequencer-test/MidiSequencerTest
 ```
 
 > **Note**: Gradle requires network loopback socket permissions for its daemon process. When running Gradle in sandbox environments, run with unsandboxed execution (`BypassSandbox: true`).

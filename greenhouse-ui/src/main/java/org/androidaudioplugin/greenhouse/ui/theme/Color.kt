@@ -16,6 +16,7 @@ val BlossomCoral = Color(0xFFFF8A80)         // Warm Blossom Pink / Headphone Co
 val BlossomCoralSoft = Color(0xFFFFAAA6)     // Rosy Cheek Peach
 val PeriwinkleBlue = Color(0xFFA6BCFF)       // Soft Cozy Lavender-Blue (Icon Backdrop Accent)
 val WarmSunbeam = Color(0xFFFBBF24)          // Sunny Amber Gold
+val TangerineGlow = Color(0xFFFFB066)        // Warm Tangerine (Sequencer Undo Take)
 val BerryRose = Color(0xFFF43F5E)            // Warm Berry Rose (Bypass / Warnings / Clips)
 
 // Backward-compatible Theme Aliases

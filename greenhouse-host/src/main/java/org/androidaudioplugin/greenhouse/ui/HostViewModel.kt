@@ -23,6 +23,7 @@ import org.androidaudioplugin.greenhouse.ui.host.PluginBrowserController
 import org.androidaudioplugin.greenhouse.ui.host.RackController
 import org.androidaudioplugin.greenhouse.ui.host.RackMeters
 import org.androidaudioplugin.greenhouse.ui.host.RackSessionController
+import org.androidaudioplugin.greenhouse.ui.host.SequencerController
 import org.androidaudioplugin.greenhouse.ui.host.VirtualKeyboardController
 
 /**
@@ -53,7 +54,8 @@ class HostViewModel(application: Application) : AndroidViewModel(application), D
     val browser = PluginBrowserController(application, viewModelScope, postStatus)
     val keyboard = VirtualKeyboardController(audio.engine)
     val midi = MidiDeviceController(application, viewModelScope, audio.engine, keyboard, postStatus)
-    val sessions = RackSessionController(application, rack, audio, browser, viewModelScope, postStatus)
+    val sequencer = SequencerController(application, audio, viewModelScope, postStatus)
+    val sessions = RackSessionController(application, rack, audio, browser, sequencer, viewModelScope, postStatus)
 
     init {
         sessions.refreshSavedSessions()
@@ -93,13 +95,14 @@ class HostViewModel(application: Application) : AndroidViewModel(application), D
         audio.onAppBackground()
     }
 
-    /** Meters every tick; CPU, plugin-side parameter changes and engine state changes at lower rates. */
+    /** Meters and the sequencer every tick; CPU, plugin-side parameter changes and engine state changes at lower rates. */
     private fun startMonitoring() {
         viewModelScope.launch(Dispatchers.Default) {
             var tickCount = 0
 
             while (isActive) {
                 meters.poll(audio.engine, audio.isProcessing, updateCpu = tickCount % CPU_UPDATE_TICKS == 0)
+                sequencer.poll()
 
                 if (tickCount % PARAM_SYNC_INTERVAL_TICKS == 0) {
                     rack.pollPluginParameterChanges()

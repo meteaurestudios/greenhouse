@@ -132,6 +132,9 @@ class RackEngine(
         nativeConfigure(framesPerCallback, numSlots)
     }
 
+    /** Records the MIDI sent to the slots and plays it back. Its transport runs while the engine does. */
+    val sequencer = MidiSequencer()
+
     /** Frames each plugin renders per block, independent of the device burst size. */
     fun setFramesPerCallback(frames: Int) {
         nativeSetFramesPerCallback(frames)

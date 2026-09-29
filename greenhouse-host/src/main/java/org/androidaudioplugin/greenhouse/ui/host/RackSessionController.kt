@@ -22,6 +22,7 @@ class RackSessionController(
     private val rack: RackController,
     private val audio: AudioEngineController,
     private val browser: PluginBrowserController,
+    private val sequencer: SequencerController,
     private val scope: CoroutineScope,
     private val postStatus: (String) -> Unit
 ) {
@@ -50,12 +51,12 @@ class RackSessionController(
     var isOperationInProgress by mutableStateOf(false)
         private set
 
-    /** [RackController.revision] when the session was last saved or loaded. */
-    private var savedRevision by mutableIntStateOf(0)
+    /** [currentRevision] when the session was last saved or loaded. */
+    private var savedRevision by mutableIntStateOf(currentRevision())
 
-    /** The rack changed since the session was last saved or loaded. */
+    /** The rack or the sequence changed since the session was last saved or loaded. */
     val isModified: Boolean
-        get() = rack.revision != savedRevision
+        get() = rack.revision + sequencer.status.revision != savedRevision
 
     fun refreshSavedSessions() {
         scope.launch(Dispatchers.IO) {
@@ -118,7 +119,7 @@ class RackSessionController(
             return
         }
 
-        val revision = rack.revision
+        val revision = currentRevision()
 
         scope.launch(Dispatchers.IO) {
             val file = sessionManager.savePreset(trimmed, capture(trimmed))
@@ -206,12 +207,13 @@ class RackSessionController(
         }
     }
 
-    /** Empties the rack and detaches from any saved session. */
+    /** Empties the rack and the sequence, and detaches from any saved session. */
     fun startNewSession() {
         rack.unloadAll()
         currentSessionName = null
         currentSessionFile = null
-        savedRevision = rack.revision
+        sequencer.restore(null)
+        savedRevision = currentRevision()
         sessionManager.clearAutosession()
         postStatus("New session started.")
     }
@@ -274,7 +276,12 @@ class RackSessionController(
     }
 
     private fun capture(name: String): RackPreset {
-        return RackPreset(name = name, slots = rack.captureSlotStates())
+        return RackPreset(name = name, slots = rack.captureSlotStates(), sequence = sequencer.captureState())
+    }
+
+    /** Changes whenever the rack or the sequence changes: both revisions only grow. Reads the sequencer's current one. */
+    private fun currentRevision(): Int {
+        return rack.revision + sequencer.currentRevision()
     }
 
     /**
@@ -303,6 +310,8 @@ class RackSessionController(
 
             rack.unloadAll()
             rack.restoreHostSettings(preset.slots)
+
+            sequencer.restore(preset.sequence)
 
             var anyError = false
 
@@ -334,7 +343,7 @@ class RackSessionController(
             savedRevision = if (modifiedWhenLoaded) {
                 UNSAVED_REVISION
             } else {
-                rack.revision
+                currentRevision()
             }
 
             isOperationInProgress = false

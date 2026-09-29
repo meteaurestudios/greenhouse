@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -16,12 +15,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.androidaudioplugin.greenhouse.core.TransportState
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
+import org.androidaudioplugin.greenhouse.ui.host.SequencerController
 import org.androidaudioplugin.greenhouse.ui.components.MidiDin5Icon
 import org.androidaudioplugin.greenhouse.ui.components.StudioKeyboard
 import org.androidaudioplugin.greenhouse.ui.theme.*
@@ -32,9 +36,13 @@ private const val KEYBOARD_NUM_WHITE_KEYS = 14
 private val KEYBOARD_PANEL_CORNER_RADIUS = 12.dp
 private val KEYBOARD_CONTROL_BUTTON_SIZE = 26.dp
 private val KEYBOARD_CONTROL_ICON_SIZE = 14.dp
+private val LOOP_PROGRESS_HEIGHT = 2.5.dp
+// Clear of the button's rounded corners
+private val LOOP_PROGRESS_INSET = 6.dp
+private val LOOP_PROGRESS_BOTTOM_MARGIN = 3.dp
+// Tap feedback of the octave steps: a circle around the icon, clear of the octave label
+private val OCTAVE_STEP_RIPPLE_RADIUS = 10.dp
 private const val NOTES_PER_OCTAVE = 12
-private const val MIDI_MAX_NOTE = 127
-private const val OCTAVE_SPAN = 2
 private const val MIN_OCTAVE = 0
 private const val MAX_OCTAVE = 9
 
@@ -53,13 +61,11 @@ fun MidiKeyboardSection(
     val octave = viewModel.keyboard.octave
     val isHoldEnabled = viewModel.keyboard.isHoldActive
     var isKeyboardFolded by remember { mutableStateOf(false) }
+    var isSequencerVisible by remember { mutableStateOf(false) }
     var showMidiMenuDialog by remember { mutableStateOf(false) }
 
-    // Start & End notes covering full MIDI range 0..127 across octaves 0..9
-    val startNote = octave * NOTES_PER_OCTAVE
-    val endNote = minOf(MIDI_MAX_NOTE, (octave + OCTAVE_SPAN) * NOTES_PER_OCTAVE - 1)
-    val startNoteName = getNoteName(startNote)
-    val endNoteName = getNoteName(endNote)
+    // Lowest note of the keys, covering octaves 0..9
+    val startNoteName = getNoteName(octave * NOTES_PER_OCTAVE)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -78,120 +84,41 @@ fun MidiKeyboardSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Octave Stepper (- / OCT RANGE / +)
+                // Left: Octave Stepper, then SEQUENCE
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val isOctaveDownEnabled = octave > MIN_OCTAVE
-                    val isOctaveUpEnabled = octave < MAX_OCTAVE
-
-                    // Octave Down (-)
-                    Box(
-                        modifier = Modifier
-                            .size(KEYBOARD_CONTROL_BUTTON_SIZE)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                if (isOctaveDownEnabled) {
-                                    StudioSurfaceElevated
-                                } else {
-                                    StudioSurfaceElevated.copy(alpha = 0.4f)
-                                }
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = if (isOctaveDownEnabled) {
-                                    StudioPanelBorder
-                                } else {
-                                    Color.Transparent
-                                },
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .clickable(enabled = isOctaveDownEnabled) {
-                                viewModel.keyboard.octave = octave - 1
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Remove,
-                            contentDescription = "Octave Down",
-                            tint = if (isOctaveDownEnabled) {
-                                SproutGreen
-                            } else {
-                                TextMuted
-                            },
-                            modifier = Modifier.size(KEYBOARD_CONTROL_ICON_SIZE)
-                        )
-                    }
-
-                    // Note Range Display Badge (e.g. C3 – B4)
-                    Box(
+                    // Octave Stepper (- / lowest octave / +): the keys label their octaves, the lowest is enough here
+                    Row(
                         modifier = Modifier
                             .height(KEYBOARD_CONTROL_BUTTON_SIZE)
                             .clip(RoundedCornerShape(6.dp))
                             .background(StudioSurfaceElevated)
                             .border(1.dp, StudioPanelBorder, RoundedCornerShape(6.dp)),
-                        contentAlignment = Alignment.Center
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .clip(CircleShape)
-                                    .background(SproutGreen)
-                            )
+                        OctaveStepButton(Icons.Default.Remove, "Octave Down", isEnabled = octave > MIN_OCTAVE) {
+                            viewModel.keyboard.octave = octave - 1
+                        }
 
-                            Text(
-                                text = "$startNoteName – $endNoteName",
-                                fontSize = 10.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary,
-                                letterSpacing = 0.5.sp
-                            )
+                        Text(
+                            text = startNoteName,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            letterSpacing = 0.5.sp
+                        )
+
+                        OctaveStepButton(Icons.Default.Add, "Octave Up", isEnabled = octave < MAX_OCTAVE) {
+                            viewModel.keyboard.octave = octave + 1
                         }
                     }
 
-                    // Octave Up (+)
-                    Box(
-                        modifier = Modifier
-                            .size(KEYBOARD_CONTROL_BUTTON_SIZE)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                if (isOctaveUpEnabled) {
-                                    StudioSurfaceElevated
-                                } else {
-                                    StudioSurfaceElevated.copy(alpha = 0.4f)
-                                }
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = if (isOctaveUpEnabled) {
-                                    StudioPanelBorder
-                                } else {
-                                    Color.Transparent
-                                },
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .clickable(enabled = isOctaveUpEnabled) {
-                                viewModel.keyboard.octave = octave + 1
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Octave Up",
-                            tint = if (isOctaveUpEnabled) {
-                                SproutGreen
-                            } else {
-                                TextMuted
-                            },
-                            modifier = Modifier.size(KEYBOARD_CONTROL_ICON_SIZE)
-                        )
+                    // SEQUENCE Button: shows / hides the sequencer strip
+                    SequenceToggleButton(sequencer = viewModel.sequencer, isOn = isSequencerVisible) {
+                        isSequencerVisible = !isSequencerVisible
                     }
                 }
 
@@ -240,62 +167,8 @@ fun MidiKeyboardSection(
                     }
 
                     // HOLD Button
-                    Box(
-                        modifier = Modifier
-                            .height(KEYBOARD_CONTROL_BUTTON_SIZE)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                if (isHoldEnabled) {
-                                    SproutGreen.copy(alpha = 0.15f)
-                                } else {
-                                    StudioSurfaceElevated
-                                }
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = if (isHoldEnabled) {
-                                    SproutGreen
-                                } else {
-                                    StudioPanelBorder
-                                },
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .clickable {
-                                viewModel.keyboard.toggleHold()
-                            }
-                            .padding(horizontal = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(5.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isHoldEnabled) {
-                                            SproutGreen
-                                        } else {
-                                            TextMuted
-                                        }
-                                    )
-                            )
-
-                            Text(
-                                text = "HOLD",
-                                fontSize = 9.5.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isHoldEnabled) {
-                                    SproutGreen
-                                } else {
-                                    TextSecondary
-                                },
-                                letterSpacing = 0.5.sp
-                            )
-                        }
+                    KeyboardToggleButton(label = "HOLD", isOn = isHoldEnabled) {
+                        viewModel.keyboard.toggleHold()
                     }
 
                     // Hide / Fold Toggle Button
@@ -326,6 +199,16 @@ fun MidiKeyboardSection(
                         )
                     }
                 }
+            }
+
+            // Sequencer transport and lane: stays visible when the keys are folded
+            if (isSequencerVisible) {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = StudioPanelBorder
+                )
+
+                SequencerStrip(viewModel = viewModel)
             }
 
             // Attached Keyboard Surface
@@ -364,5 +247,128 @@ fun MidiKeyboardSection(
             viewModel = viewModel,
             onDismiss = { showMidiMenuDialog = false }
         )
+    }
+}
+
+/**
+ * Shows / hides the sequencer strip. Hiding it ends recording, which it could no longer show. While
+ * playing, a bar along its bottom shows the position in the loop. It reads the sequencer on its own,
+ * so the rest of the keyboard does not recompose with it.
+ */
+@Composable
+private fun SequenceToggleButton(
+    sequencer: SequencerController,
+    isOn: Boolean,
+    onToggle: () -> Unit
+) {
+    val status = sequencer.status
+
+    KeyboardToggleButton(
+        label = "SEQUENCE",
+        isOn = isOn,
+        modifier = if (status.state == TransportState.PLAYING) {
+            Modifier.loopProgress(positionProvider = { sequencer.positionTick }, lengthTicks = status.lengthTicks)
+        } else {
+            Modifier
+        }
+    ) {
+        onToggle()
+
+        if (isOn && status.isRecording) {
+            sequencer.toggleRecording()
+        }
+    }
+}
+
+/** A text toggle of the keyboard header, highlighted when it is on. */
+@Composable
+private fun KeyboardToggleButton(
+    label: String,
+    isOn: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .height(KEYBOARD_CONTROL_BUTTON_SIZE)
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+                if (isOn) {
+                    SproutGreen.copy(alpha = 0.15f)
+                } else {
+                    StudioSurfaceElevated
+                }
+            )
+            .border(
+                width = 1.dp,
+                color = if (isOn) {
+                    SproutGreen
+                } else {
+                    StudioPanelBorder
+                },
+                shape = RoundedCornerShape(6.dp)
+            )
+            .then(modifier)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 9.5.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            color = if (isOn) {
+                SproutGreen
+            } else {
+                TextSecondary
+            },
+            letterSpacing = 0.5.sp
+        )
+    }
+}
+
+/** An octave step at one end of the octave stepper. */
+@Composable
+private fun OctaveStepButton(
+    icon: ImageVector,
+    contentDescription: String,
+    isEnabled: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(KEYBOARD_CONTROL_BUTTON_SIZE)
+            .clickable(
+                interactionSource = null,
+                indication = ripple(bounded = false, radius = OCTAVE_STEP_RIPPLE_RADIUS),
+                enabled = isEnabled,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (isEnabled) {
+                SproutGreen
+            } else {
+                TextMuted
+            },
+            modifier = Modifier.size(KEYBOARD_CONTROL_ICON_SIZE)
+        )
+    }
+}
+
+/** Position in the loop, drawn as a rounded line near the bottom. The position is read while drawing, so it moves without recomposing. */
+private fun Modifier.loopProgress(positionProvider: () -> Long, lengthTicks: Long): Modifier {
+    return drawBehind {
+        val thickness = LOOP_PROGRESS_HEIGHT.toPx()
+        val y = size.height - LOOP_PROGRESS_BOTTOM_MARGIN.toPx() - thickness / 2
+        val start = LOOP_PROGRESS_INSET.toPx()
+        val end = size.width - start
+        val played = start + (end - start) * positionProvider().coerceIn(0L, lengthTicks) / lengthTicks
+        drawLine(StudioPanelBorder, Offset(start, y), Offset(end, y), thickness, StrokeCap.Round)
+        drawLine(SproutGreen, Offset(start, y), Offset(played, y), thickness, StrokeCap.Round)
     }
 }

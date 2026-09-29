@@ -1,6 +1,10 @@
 package org.androidaudioplugin.greenhouse.data
 
+import org.androidaudioplugin.greenhouse.core.SequencerSettings
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.Base64
 import kotlin.math.pow
 
 /** Level and dry / wet mix the host applies to a slot on top of its plugin. Saved with the session; reset when a new plugin is added. */
@@ -51,12 +55,49 @@ data class SlotState(
         get() = !pluginId.isNullOrBlank()
 }
 
+/** The MIDI sequence of a session and its sequencer settings. */
+data class SequenceState(
+    val settings: SequencerSettings = SequencerSettings(),
+    /** Events packed like `MidiSequencer.getEvents()`, as little-endian 32-bit ints in Base64; null when empty. */
+    val eventsBase64: String? = null,
+    /** Loop length the first take set while the length setting is AUTO; 0 if none. */
+    val autoLengthBars: Int = 0
+) {
+    companion object {
+        fun encodeEvents(packed: IntArray): String? {
+            if (packed.isEmpty()) {
+                return null
+            }
+
+            val buffer = ByteBuffer.allocate(packed.size * Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+            buffer.asIntBuffer().put(packed)
+            return Base64.getEncoder().encodeToString(buffer.array())
+        }
+
+        fun decodeEvents(base64: String?): IntArray {
+            if (base64.isNullOrBlank()) {
+                return IntArray(0)
+            }
+
+            return try {
+                val bytes = Base64.getDecoder().decode(base64)
+                val ints = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+                IntArray(ints.remaining()).also { ints.get(it) }
+            } catch (e: IllegalArgumentException) {
+                IntArray(0)
+            }
+        }
+    }
+}
+
 data class RackPreset(
     val name: String,
     val version: Int = CURRENT_SCHEMA_VERSION,
     val createdAt: Long = System.currentTimeMillis(),
     val modifiedAt: Long = System.currentTimeMillis(),
     val slots: List<SlotState> = emptyList(),
+    /** Absent from sessions saved before the sequencer existed. */
+    val sequence: SequenceState? = null,
     val customProperties: Map<String, String> = emptyMap()
 ) {
     companion object {

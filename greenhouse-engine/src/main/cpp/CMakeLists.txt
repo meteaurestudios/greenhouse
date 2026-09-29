@@ -11,8 +11,12 @@ find_package(androidaudioplugin REQUIRED CONFIG)
 add_library(aaphostnative
     SHARED
     engine/OboeEngine.cpp
+    sequencer/Metronome.cpp
+    sequencer/MidiSequencer.cpp
+    sequencer/StandardMidiFile.cpp
     RackEngine.cpp
     RackEngineJni.cpp
+    MidiSequencerJni.cpp
 )
 
 target_include_directories(aaphostnative PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

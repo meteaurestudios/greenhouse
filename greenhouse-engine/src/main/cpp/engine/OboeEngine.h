@@ -83,6 +83,22 @@ public:
         return mIsMMapUsed.load(std::memory_order_relaxed);
     }
 
+    /**
+     * Non-blocking alternative to waitForAudioThreadQuiescence(): take a marker right after
+     * unpublishing a pointer that process() reads, then free what it pointed to once
+     * hasAudioThreadPassed(marker) is true. Lock-free.
+     */
+    uint64_t getAudioThreadMarker() const
+    {
+        return mCallbackSequence.load();
+    }
+
+    bool hasAudioThreadPassed(uint64_t marker) const
+    {
+        // Even: no callback was running when the marker was taken
+        return (marker & 1) == 0 || mCallbackSequence.load(std::memory_order_acquire) != marker;
+    }
+
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream* audioStream, void* audioData, int32_t numFrames) final;
     void onErrorAfterClose(oboe::AudioStream* audioStream, oboe::Result error) final;
 

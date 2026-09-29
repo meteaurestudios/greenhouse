@@ -1,6 +1,7 @@
 #include "RackEngine.h"
 #include "utils/AudioSimd.h"
 #include "utils/Logging.h"
+#include <aap/ext/midi.h>
 #include <algorithm>
 #include <cstring>
 
@@ -30,7 +31,19 @@ AudioPorts findAudioPorts(aap::PluginInstance* instance)
     for (int32_t i = 0; i < numPorts; i++) {
         auto port = instance->getPort(i);
 
-        if (port == nullptr || port->getContentType() != AAP_CONTENT_TYPE_AUDIO) {
+        if (port == nullptr) {
+            continue;
+        }
+
+        if (port->getContentType() == AAP_CONTENT_TYPE_MIDI2) {
+            if (port->getPortDirection() == AAP_PORT_DIRECTION_INPUT && ports.mMidiIn < 0) {
+                ports.mMidiIn = i;
+            }
+
+            continue;
+        }
+
+        if (port->getContentType() != AAP_CONTENT_TYPE_AUDIO) {
             continue;
         }
 
@@ -80,6 +93,8 @@ void RackEngine::configure(int32_t framesPerCallback, int32_t numSlots)
         }
 
         mNumSlots.store(std::clamp(numSlots, 1, MAX_RACK_SLOTS));
+        // The engine lives as long as the process: a new configuration starts from an empty sequence
+        mSequencer.reset();
         mFramesPerCallback.store(std::clamp(framesPerCallback, MIN_DSP_BLOCK_FRAMES, MAX_DSP_BLOCK_FRAMES));
     }
 
@@ -108,6 +123,7 @@ void RackEngine::clearSlotsLocked()
         slot.mMix.store(WET_ONLY_MIX, std::memory_order_relaxed);
         slot.mCurrentGain = UNITY_GAIN;
         slot.mCurrentMix = WET_ONLY_MIX;
+        slot.mWasBypassed = false;
         slot.mCpuLoad.store(0.0f, std::memory_order_relaxed);
         slot.mPeakL.store(0.0f, std::memory_order_relaxed);
         slot.mPeakR.store(0.0f, std::memory_order_relaxed);
@@ -152,12 +168,14 @@ void RackEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* client, int
     if (instance == nullptr) {
         slot.mPorts = AudioPorts{};
         slot.mPreparedSampleRate = 0;
+        mSequencer.setSlotEventCapacity(slotIndex, MAX_SLOT_EVENT_WORDS);
         LOGI("Slot %d cleared", slotIndex);
         return;
     }
 
     slot.mPorts = findAudioPorts(instance);
     slot.mPreparedSampleRate = sampleRate;
+    setSequencerCapacityLocked(slotIndex, instance);
 
     if (isStreaming() && isInactive(instance)) {
         instance->activate();
@@ -202,9 +220,14 @@ void RackEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, int32_t s
 
     // aap-core queues the events under its own lock and merges them at the next process(). Inactive
     // instances queue them too, so values set while paused (e.g. a session restore) apply once playing.
-    if (instance != nullptr && (isActive(instance) || isInactive(instance))) {
-        instance->addEventUmpInput(const_cast<uint8_t*>(data), size);
+    if (instance == nullptr || !(isActive(instance) || isInactive(instance))) {
+        return;
     }
+
+    instance->addEventUmpInput(const_cast<uint8_t*>(data), size);
+
+    // Recorded where the plugin receives it: at the start of the next block
+    mSequencer.recordInput(slotIndex, data, size);
 }
 
 float RackEngine::getTotalCpuLoad() const
@@ -289,6 +312,7 @@ void RackEngine::flushState()
     }
 
     mTotalCpuLoad.store(0.0f, std::memory_order_relaxed);
+    mSequencer.onStreamStopped();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -336,13 +360,15 @@ void RackEngine::renderBlock(int32_t frames)
     auto blockStart = Clock::now();
     auto numSlots = mNumSlots.load(std::memory_order_relaxed);
 
+    mSequencer.beginBlock(frames, mRenderSampleRate);
+
     // The instrument slot starts from silence; each following slot processes the previous output in place
     std::fill_n(mBlockBuffer.data(), frames * STEREO_CHANNEL_COUNT, 0.0f);
 
     for (int32_t i = 0; i < numSlots; i++) {
         auto& slot = mSlots[i];
         auto slotStart = Clock::now();
-        auto rendered = renderSlot(slot, i == INSTRUMENT_SLOT_INDEX, frames);
+        auto rendered = renderSlot(i, frames);
 
         // Nothing was applied: jump to the host settings so they don't ramp from stale values later
         if (!rendered) {
@@ -364,6 +390,9 @@ void RackEngine::renderBlock(int32_t frames)
         slot.mPeakR.store(nextPeak(slot.mPeakR.load(std::memory_order_relaxed), peakR), std::memory_order_relaxed);
     }
 
+    // After the slots, so effects do not process the clicks
+    mSequencer.renderMetronome(mBlockBuffer.data(), frames);
+
     mSmoothedTotalLoad = smoothLoad(mSmoothedTotalLoad, Clock::now() - blockStart, blockDurationNs);
     mTotalCpuLoad.store(static_cast<float>(mSmoothedTotalLoad), std::memory_order_relaxed);
 
@@ -376,11 +405,21 @@ void RackEngine::renderBlock(int32_t frames)
  * false leaves it untouched (empty, bypassed or failed slots, and blocks with NaN or infinite
  * samples, pass the signal through).
  */
-bool RackEngine::renderSlot(RackSlot& slot, bool isInstrument, int32_t frames)
+bool RackEngine::renderSlot(int32_t slotIndex, int32_t frames)
 {
+    auto& slot = mSlots[slotIndex];
+    auto isInstrument = slotIndex == INSTRUMENT_SLOT_INDEX;
     auto instance = slot.mInstance.load();
+    auto isBypassed = slot.mIsBypassed.load(std::memory_order_relaxed);
 
-    if (instance == nullptr || slot.mIsBypassed.load(std::memory_order_relaxed) || !isActive(instance)) {
+    if (!isBypassed) {
+        slot.mWasBypassed = false;
+    }
+
+    // The first bypassed block the plugin can run still runs it, to end the notes the sequencer plays on it
+    auto isBypassStarting = isBypassed && !slot.mWasBypassed;
+
+    if (instance == nullptr || (isBypassed && !isBypassStarting) || !isActive(instance)) {
         return false;
     }
 
@@ -417,9 +456,16 @@ bool RackEngine::renderSlot(RackSlot& slot, bool isInstrument, int32_t frames)
         }
     }
 
+    if (isBypassStarting) {
+        mSequencer.releaseSlotNotes(slotIndex);
+        slot.mWasBypassed = true;
+    }
+
+    writeSequencerEvents(slotIndex, ports, buffer);
     instance->process(frames, PLUGIN_PROCESS_TIMEOUT_NS);
 
-    if (!isActive(instance)) {
+    // Once bypassed, its output is not used
+    if (isBypassStarting || !isActive(instance)) {
         return false;
     }
 
@@ -460,6 +506,48 @@ bool RackEngine::renderSlot(RackSlot& slot, bool isInstrument, int32_t frames)
     slot.mCurrentGain = targetGain;
     slot.mCurrentMix = targetMix;
     return true;
+}
+
+/** Lets the sequencer fit its events of a block into the MIDI2 input of the slot's new plugin. */
+void RackEngine::setSequencerCapacityLocked(int32_t slotIndex, aap::PluginInstance* instance)
+{
+    auto buffer = instance->getAudioPluginBuffer();
+    auto midiIn = mSlots[slotIndex].mPorts.mMidiIn;
+    auto wordCount = 0;
+
+    if (buffer != nullptr && midiIn >= 0) {
+        auto bytes = buffer->get_buffer_size(buffer, midiIn) - static_cast<int32_t>(sizeof(AAPMidiBufferHeader));
+        wordCount = std::max(0, bytes / static_cast<int32_t>(sizeof(uint32_t)));
+    }
+
+    mSequencer.setSlotEventCapacity(slotIndex, wordCount);
+}
+
+/**
+ * Writes the sequencer's events for this block into the slot's MIDI2 input. The plugin clears the
+ * port after each process(); within process(), aap-core merges the queued live input into it,
+ * ordered by the JR timestamps.
+ */
+void RackEngine::writeSequencerEvents(int32_t slotIndex, const AudioPorts& ports, aap_buffer_t* buffer)
+{
+    int32_t wordCount = 0;
+    auto words = mSequencer.getSlotEvents(slotIndex, wordCount);
+
+    if (wordCount == 0 || ports.mMidiIn < 0) {
+        return;
+    }
+
+    auto header = static_cast<AAPMidiBufferHeader*>(buffer->get_buffer(buffer, ports.mMidiIn));
+    auto byteCount = wordCount * static_cast<int32_t>(sizeof(uint32_t));
+    auto capacity = buffer->get_buffer_size(buffer, ports.mMidiIn) - static_cast<int32_t>(sizeof(AAPMidiBufferHeader));
+
+    if (header == nullptr || byteCount > capacity) {
+        return;
+    }
+
+    header->time_options = 0;
+    header->length = static_cast<uint32_t>(byteCount);
+    std::memcpy(header + 1, words, static_cast<size_t>(byteCount));
 }
 
 } // namespace aaphost

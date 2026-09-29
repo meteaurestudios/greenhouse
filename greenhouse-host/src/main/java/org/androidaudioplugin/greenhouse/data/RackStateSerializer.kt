@@ -1,6 +1,7 @@
 package org.androidaudioplugin.greenhouse.data
 
 import android.util.Log
+import org.androidaudioplugin.greenhouse.core.SequencerSettings
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -29,6 +30,14 @@ object RackStateSerializer {
     private const val KEY_SELECTED_PRESET_INDEX = "selectedPresetIndex"
     private const val KEY_STATE_DATA_BASE64 = "stateDataBase64"
     private const val KEY_PARAMETERS = "parameters"
+
+    private const val KEY_SEQUENCE = "sequence"
+    private const val KEY_BPM = "bpm"
+    private const val KEY_LENGTH_BARS = "lengthBars"
+    private const val KEY_IS_QUANTIZING = "isQuantizing"
+    private const val KEY_QUANTIZE_TICKS = "quantizeTicks"
+    private const val KEY_EVENTS_BASE64 = "eventsBase64"
+    private const val KEY_AUTO_LENGTH_BARS = "autoLengthBars"
 
     fun serializeToJson(preset: RackPreset): String {
         val root = JSONObject()
@@ -74,6 +83,12 @@ object RackStateSerializer {
         }
 
         root.put(KEY_SLOTS, slotsArray)
+
+        val sequence = preset.sequence
+
+        if (sequence != null) {
+            root.put(KEY_SEQUENCE, serializeSequence(sequence))
+        }
 
         val customPropsObj = JSONObject()
 
@@ -204,11 +219,42 @@ object RackStateSerializer {
                 createdAt = createdAt,
                 modifiedAt = modifiedAt,
                 slots = slotsList,
+                sequence = root.optJSONObject(KEY_SEQUENCE)?.let { deserializeSequence(it) },
                 customProperties = customPropsMap
             )
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to deserialize RackPreset from JSON", e)
             null
         }
+    }
+
+    private fun serializeSequence(sequence: SequenceState): JSONObject {
+        val settings = sequence.settings
+        val sequenceObj = JSONObject()
+        sequenceObj.put(KEY_BPM, settings.bpm)
+        sequenceObj.put(KEY_LENGTH_BARS, settings.lengthBars)
+        sequenceObj.put(KEY_IS_QUANTIZING, settings.isQuantizing)
+        sequenceObj.put(KEY_QUANTIZE_TICKS, settings.quantizeTicks)
+        sequenceObj.put(KEY_EVENTS_BASE64, sequence.eventsBase64 ?: JSONObject.NULL)
+        sequenceObj.put(KEY_AUTO_LENGTH_BARS, sequence.autoLengthBars)
+        return sequenceObj
+    }
+
+    /** Out of range values are clamped by the engine when the sequence is restored. */
+    private fun deserializeSequence(sequenceObj: JSONObject): SequenceState {
+        val defaults = SequencerSettings()
+        val settings = SequencerSettings(
+            bpm = sequenceObj.optDouble(KEY_BPM, defaults.bpm),
+            lengthBars = sequenceObj.optInt(KEY_LENGTH_BARS, defaults.lengthBars),
+            isQuantizing = sequenceObj.optBoolean(KEY_IS_QUANTIZING, defaults.isQuantizing),
+            quantizeTicks = sequenceObj.optInt(KEY_QUANTIZE_TICKS, defaults.quantizeTicks)
+        )
+        val eventsBase64 = if (sequenceObj.isNull(KEY_EVENTS_BASE64)) {
+            null
+        } else {
+            sequenceObj.optString(KEY_EVENTS_BASE64).ifBlank { null }
+        }
+
+        return SequenceState(settings, eventsBase64, sequenceObj.optInt(KEY_AUTO_LENGTH_BARS, 0))
     }
 }

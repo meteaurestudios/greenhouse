@@ -14,7 +14,7 @@ import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
 
 /**
  * Modern, crisp 5-pin DIN (DIN-5) MIDI connector icon.
- * Features an outer metallic chassis ring, guide arc, 5 precision pins in 180° DIN arc, and alignment notch.
+ * Features an outer metallic chassis ring, 5 precision pins in 180° DIN arc, and alignment notch.
  */
 @Composable
 fun MidiDin5Icon(
@@ -36,17 +36,6 @@ fun MidiDin5Icon(
             radius = outerRadius,
             center = Offset(cx, cy),
             style = Stroke(width = outerStrokeWidth)
-        )
-
-        // Inner plug bezel ring
-        val innerRadius = 7.8f * s
-        val innerStrokeWidth = (0.9f * s).coerceAtLeast(0.7f)
-
-        drawCircle(
-            color = tint.copy(alpha = 0.35f),
-            radius = innerRadius,
-            center = Offset(cx, cy),
-            style = Stroke(width = innerStrokeWidth)
         )
 
         // 5 Pins in standard 180° DIN-5 arc (relative to 24x24 grid centered at (12, 12))

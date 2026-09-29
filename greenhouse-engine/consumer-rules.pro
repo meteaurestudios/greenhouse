@@ -8,6 +8,8 @@
 # Preserve RackEngine and its companion object for JNI interop
 -keep class org.androidaudioplugin.greenhouse.core.RackEngine { *; }
 -keep class org.androidaudioplugin.greenhouse.core.RackEngine$* { *; }
+-keep class org.androidaudioplugin.greenhouse.core.MidiSequencer { *; }
+-keep class org.androidaudioplugin.greenhouse.core.MidiSequencer$* { *; }
 
 # Preserve AAP Core Hosting and IPC structures
 -keep class org.androidaudioplugin.** { *; }

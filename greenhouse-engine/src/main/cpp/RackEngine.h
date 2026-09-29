@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/OboeEngine.h"
+#include "sequencer/MidiSequencer.h"
 #include <aap/core/host/plugin-instance.h>
 #include <aap/core/host/plugin-host.h>
 #include <array>
@@ -9,6 +10,7 @@ namespace aaphost
 {
 
 constexpr int32_t MAX_RACK_SLOTS = 16;
+static_assert(MAX_RACK_SLOTS <= MAX_SEQUENCER_SLOTS, "the sequencer must cover every rack slot");
 constexpr int32_t INSTRUMENT_SLOT_INDEX = 0;
 constexpr int32_t MIN_DSP_BLOCK_FRAMES = 1;
 // Plugins are prepared with this many frames (MAX_HOST_BUFFER_FRAMES on the Kotlin side)
@@ -32,13 +34,15 @@ constexpr float MAX_SLOT_GAIN = 4.0f; // about +12 dB
 constexpr float DRY_ONLY_MIX = 0.0f;
 constexpr float WET_ONLY_MIX = 1.0f;
 
-/** Indices of the first two audio input / output ports of a plugin. */
+/** Indices of the first two audio input / output ports of a plugin, and of its MIDI2 input. */
 struct AudioPorts
 {
     int32_t mIn[STEREO_CHANNEL_COUNT]{-1, -1};
     int32_t mOut[STEREO_CHANNEL_COUNT]{-1, -1};
     int32_t mInCount{0};  // capped at STEREO_CHANNEL_COUNT
     int32_t mOutCount{0}; // capped at STEREO_CHANNEL_COUNT
+    // The first MIDI2 input, where aap-core also merges the queued live input; -1 if none
+    int32_t mMidiIn{-1};
 };
 
 struct RackSlot
@@ -63,6 +67,7 @@ struct RackSlot
     double mSmoothedLoad{0.0};
     float mCurrentGain{UNITY_GAIN};
     float mCurrentMix{WET_ONLY_MIX};
+    bool mWasBypassed{false};
 };
 
 /**
@@ -94,7 +99,13 @@ public:
     void setSlotGain(int32_t slotIndex, float gain);
     /** Dry / wet balance of the slot, clamped to [DRY_ONLY_MIX, WET_ONLY_MIX]. */
     void setSlotMix(int32_t slotIndex, float mix);
+    /** Queues MIDI for the slot's next block. The sequencer records its notes if it is recording. */
     void sendUmpToSlot(int32_t slotIndex, const uint8_t* data, int32_t size);
+
+    MidiSequencer& getSequencer()
+    {
+        return mSequencer;
+    }
 
     float getTotalCpuLoad() const;
     float getSlotCpuLoad(int32_t slotIndex) const;
@@ -114,9 +125,12 @@ private:
     void updateMinimumBufferSizeLocked();
 
     void renderBlock(int32_t frames);
-    bool renderSlot(RackSlot& slot, bool isInstrument, int32_t frames);
+    bool renderSlot(int32_t slotIndex, int32_t frames);
+    void writeSequencerEvents(int32_t slotIndex, const AudioPorts& ports, aap_buffer_t* buffer);
+    void setSequencerCapacityLocked(int32_t slotIndex, aap::PluginInstance* instance);
 
     std::array<RackSlot, MAX_RACK_SLOTS> mSlots;
+    MidiSequencer mSequencer{*this};
     std::atomic<int32_t> mNumSlots{0};
     std::atomic<int32_t> mFramesPerCallback{DEFAULT_FRAMES_PER_CALLBACK};
 

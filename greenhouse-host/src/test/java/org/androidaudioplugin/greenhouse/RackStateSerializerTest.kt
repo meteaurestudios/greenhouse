@@ -1,6 +1,8 @@
 package org.androidaudioplugin.greenhouse
 
+import org.androidaudioplugin.greenhouse.core.SequencerSettings
 import org.androidaudioplugin.greenhouse.data.RackPreset
+import org.androidaudioplugin.greenhouse.data.SequenceState
 import org.androidaudioplugin.greenhouse.data.RackStateSerializer
 import org.androidaudioplugin.greenhouse.data.SlotState
 import org.junit.Assert.assertEquals
@@ -25,6 +27,9 @@ class RackStateSerializerTest {
         private const val TEST_PARAM_RESONANCE = 11
         private const val TEST_PARAM_DELAY_TIME = 20
         private const val TEST_PARAM_FEEDBACK = 21
+        private const val TEST_BPM = 97.5
+        private const val TEST_NOTE_OFF_TICK = 480
+        private const val TEST_QUANTIZE_TICKS = 240
     }
 
     @Test
@@ -184,5 +189,38 @@ class RackStateSerializerTest {
         assertEquals(sessionName, parsed!!.name)
         assertEquals(2, parsed.loadedSlotCount)
         assertEquals(listOf(TEST_DISPLAY_SYNTH, TEST_DISPLAY_DELAY), parsed.pluginDisplayNames)
+    }
+
+    @Test
+    fun testSequenceSerializationRoundtrip() {
+        // Two packed events: tick, slot, take, word count, 4 words (a MIDI 2.0 note-on / note-off of C4)
+        val packed = intArrayOf(
+            0, 0, 0, 2, 0x40903C00, 0xFFFF0000.toInt(), 0, 0,
+            TEST_NOTE_OFF_TICK, 0, 0, 2, 0x40803C00, 0, 0, 0
+        )
+        val settings = SequencerSettings(
+            bpm = TEST_BPM,
+            lengthBars = 2,
+            isQuantizing = true,
+            quantizeTicks = TEST_QUANTIZE_TICKS
+        )
+        val preset = RackPreset(name = TEST_PRESET_NAME, sequence = SequenceState(settings, SequenceState.encodeEvents(packed), autoLengthBars = 3))
+
+        val parsed = RackStateSerializer.deserializeFromJson(RackStateSerializer.serializeToJson(preset))
+
+        assertNotNull(parsed?.sequence)
+        assertEquals(settings, parsed!!.sequence!!.settings)
+        assertEquals(3, parsed.sequence!!.autoLengthBars)
+        assertTrue(packed.contentEquals(SequenceState.decodeEvents(parsed.sequence!!.eventsBase64)))
+    }
+
+    @Test
+    fun testSessionWithoutSequence() {
+        val parsed = RackStateSerializer.deserializeFromJson(RackStateSerializer.serializeToJson(RackPreset(name = TEST_PRESET_NAME)))
+
+        assertNotNull(parsed)
+        assertNull(parsed!!.sequence)
+        assertEquals(0, SequenceState.decodeEvents(null).size)
+        assertNull(SequenceState.encodeEvents(IntArray(0)))
     }
 }
