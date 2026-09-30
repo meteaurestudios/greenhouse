@@ -9,6 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -56,6 +59,11 @@ class RackController(
     }
 
     val slotUi = List(NUM_RACK_SLOTS) { SlotUiState() }
+
+    private val loadErrorEvents = Channel<String>(Channel.BUFFERED)
+
+    /** One message per plugin that failed to load into a slot, for the UI to show once. */
+    val loadErrors: Flow<String> = loadErrorEvents.receiveAsFlow()
 
     /** Serializes preset changes per slot so they reach the plugin in tap order. */
     private val presetLocks = List(NUM_RACK_SLOTS) { Mutex() }
@@ -138,6 +146,11 @@ class RackController(
                     PluginSlotLoader.instantiate(hostEngine, slotIndex, plugin, audio.sampleRate, audio.framesPerCallback)
                 }
 
+                if (loaded == null) {
+                    reportLoadFailure(slotIndex, plugin)
+                    return@launch
+                }
+
                 attachLoadedPlugin(
                     slotIndex = slotIndex,
                     plugin = plugin,
@@ -154,8 +167,7 @@ class RackController(
                 postStatus("Loaded ${plugin.displayName} into ${slots[slotIndex].title} (${slots[slotIndex].slotType})")
             } catch (e: Throwable) {
                 Log.e(TAG, "Failed to load plugin ${plugin.displayName}", e)
-                postStatus("Error loading plugin: ${e.localizedMessage ?: e.message}")
-                slots[slotIndex] = slots[slotIndex].copy(isLoading = false, loadingPluginName = null)
+                reportLoadFailure(slotIndex, plugin)
             } finally {
                 isInstantiating = false
             }
@@ -179,6 +191,11 @@ class RackController(
                 }
             }
 
+            if (loaded == null) {
+                reportLoadFailure(slotIndex, plugin)
+                return false
+            }
+
             attachLoadedPlugin(
                 slotIndex = slotIndex,
                 plugin = plugin,
@@ -199,9 +216,17 @@ class RackController(
             return true
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to instantiate plugin for slot $slotIndex during session restore", e)
-            slots[slotIndex] = slots[slotIndex].copy(isLoading = false, loadingPluginName = null)
+            reportLoadFailure(slotIndex, plugin)
             return false
         }
+    }
+
+    /** Takes [slotIndex] out of its loading state and tells the user [plugin] couldn't be loaded. */
+    private fun reportLoadFailure(slotIndex: Int, plugin: PluginInformation) {
+        val message = "${plugin.displayName} failed to load"
+        postStatus(message)
+        loadErrorEvents.trySend(message)
+        slots[slotIndex] = slots[slotIndex].copy(isLoading = false, loadingPluginName = null)
     }
 
     fun unloadSlot(slotIndex: Int) {

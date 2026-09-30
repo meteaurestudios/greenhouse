@@ -24,11 +24,12 @@ class SlotPluginHost(
     val client: AudioPluginClientBase?
         get() = currentClient
 
+    /** Returns null if the plugin service fails to create the instance. */
     suspend fun instantiatePlugin(
         pluginInfo: PluginInformation,
         sampleRate: Int,
         framesPerCallback: Int
-    ): Pair<AudioPluginClientBase, NativeRemotePluginInstance> = withContext(Dispatchers.IO) {
+    ): Pair<AudioPluginClientBase, NativeRemotePluginInstance>? = withContext(Dispatchers.IO) {
         close()
 
         val newClient = AudioPluginClientBase(context)
@@ -39,6 +40,14 @@ class SlotPluginHost(
 
         Log.d(tag, "Instantiating native plugin: ${pluginInfo.pluginId}")
         val instance = newClient.instantiateNativePlugin(pluginInfo)
+
+        // aap-core reports a failed instantiation as a negative id, and its JNI calls dereference
+        // the missing instance (SIGSEGV in prepare), so stop before touching it
+        if (instance.instanceId < 0) {
+            Log.e(tag, "Plugin service ${pluginInfo.packageName} failed to instantiate ${pluginInfo.pluginId}")
+            close()
+            return@withContext null
+        }
 
         // Also fired when the client is disposed on purpose: only a disconnection while it is still current is a death
         newClient.onDisconnectingListeners.add {
@@ -88,7 +97,7 @@ class AapHostEngine(
         pluginInfo: PluginInformation,
         sampleRate: Int,
         framesPerCallback: Int
-    ): Pair<AudioPluginClientBase, NativeRemotePluginInstance> {
+    ): Pair<AudioPluginClientBase, NativeRemotePluginInstance>? {
         require(slotIndex in 0 until numSlots) { "Invalid slotIndex: $slotIndex" }
         return slotHosts[slotIndex].instantiatePlugin(pluginInfo, sampleRate, framesPerCallback)
     }

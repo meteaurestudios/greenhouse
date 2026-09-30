@@ -96,6 +96,7 @@ internal object PluginSlotLoader {
     /**
      * Instantiates [plugin] for [slotIndex], fills in parameters / ports the plugin only exposes
      * at runtime, lets [prepare] apply saved state, then reads back the resulting parameter values.
+     * Returns null if the plugin service fails to create the instance.
      */
     suspend fun instantiate(
         hostEngine: AapHostEngine,
@@ -104,8 +105,9 @@ internal object PluginSlotLoader {
         sampleRate: Int,
         framesPerCallback: Int,
         prepare: (NativeRemotePluginInstance) -> Unit = {}
-    ): LoadedPlugin {
+    ): LoadedPlugin? {
         val (_, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
+            ?: return null
 
         discoverDynamicPortsAndParameters(plugin, instance)
         prepare(instance)

@@ -11,6 +11,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
@@ -30,8 +33,11 @@ private val MAIN_PANEL_INNER_PADDING = 12.dp
 fun StudioRackScreen(
     viewModel: HostViewModel,
     onNavigateToBrowser: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    /** Reports the header banner's height, so the load-error snackbar can cover it exactly. */
+    onBannerHeightChanged: (Dp) -> Unit = {}
 ) {
+    val density = LocalDensity.current
     val currentSlotIndex = viewModel.rack.activeSlotIndex
     val activeSlot = viewModel.rack.slots[currentSlotIndex]
     val activePlugin = activeSlot.pluginInfo
@@ -65,7 +71,10 @@ fun StudioRackScreen(
                 totalCpuLoadProvider = { viewModel.meters.totalCpuLoad },
                 onToggleProcessing = { viewModel.audio.togglePlayback() },
                 onOpenSettings = onNavigateToSettings,
-                onOpenSessionDialog = { showSessionDialog = true }
+                onOpenSessionDialog = { showSessionDialog = true },
+                modifier = Modifier.onSizeChanged { size ->
+                    onBannerHeightChanged(with(density) { size.height.toDp() })
+                }
             )
 
             Spacer(modifier = Modifier.height(RACK_ELEMENT_SPACING))

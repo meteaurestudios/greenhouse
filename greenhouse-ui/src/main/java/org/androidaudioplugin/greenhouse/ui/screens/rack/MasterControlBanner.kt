@@ -78,16 +78,16 @@ private val BANNER_LOGO_SIZE = 28.dp
 private val BANNER_LOGO_ICON_SIZE = 16.dp
 private val BANNER_SETTINGS_BUTTON_SIZE = 30.dp
 private val BANNER_SETTINGS_ICON_SIZE = 16.dp
-private val BANNER_CORNER_RADIUS = 20.dp
+internal val BANNER_CORNER_RADIUS = 20.dp
 private val BANNER_SPACING = 10.dp
-private val BANNER_PADDING_HORIZONTAL = 10.dp
+internal val BANNER_PADDING_HORIZONTAL = 10.dp
 private val BANNER_PADDING_VERTICAL = 10.dp
 // Tight line heights keep the session name close under the title
 private val BANNER_TITLE_LINE_HEIGHT = 16.sp
 private val BANNER_TITLE_FONT_SIZE = 15.sp
 private val BANNER_TITLE_MIN_FONT_SIZE = 11.sp
 // Narrower screens (e.g. 360dp phones) get a smaller emblem, and a smaller title if needed, so the title fits
-private const val BANNER_COMPACT_SCREEN_WIDTH_DP = 380
+internal const val BANNER_COMPACT_SCREEN_WIDTH_DP = 380
 private val COMPACT_BANNER_LOGO_SIZE = 24.dp
 private val COMPACT_BANNER_LOGO_ICON_SIZE = 14.dp
 private val COMPACT_BANNER_TITLE_MIN_FONT_SIZE = 10.sp
