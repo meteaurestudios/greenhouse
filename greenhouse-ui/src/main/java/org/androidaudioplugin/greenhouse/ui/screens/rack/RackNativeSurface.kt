@@ -7,17 +7,15 @@ import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fullscreen
@@ -33,18 +30,13 @@ import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -77,18 +70,20 @@ import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.ui.GreenhouseSurfaceControlHost
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
-import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_CORNER_RADIUS
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_HEIGHT
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_LABEL_FONT_SIZE
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_SPACING
+import org.androidaudioplugin.greenhouse.ui.components.ControlButton
 import org.androidaudioplugin.greenhouse.ui.components.StepperControl
+import org.androidaudioplugin.greenhouse.ui.components.controlSurface
 import org.androidaudioplugin.greenhouse.ui.theme.AccentCyan
 import org.androidaudioplugin.greenhouse.ui.theme.AccentViolet
 import org.androidaudioplugin.greenhouse.ui.theme.BerryRose
-import org.androidaudioplugin.greenhouse.ui.theme.BlossomCoralSoft
+import org.androidaudioplugin.greenhouse.ui.theme.BlossomCoral
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
 import org.androidaudioplugin.greenhouse.ui.theme.StudioBackground
-import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurface
 import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceElevated
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceVariant
 import org.androidaudioplugin.greenhouse.ui.theme.TextMuted
 import org.androidaudioplugin.greenhouse.ui.theme.TextPrimary
 import org.androidaudioplugin.greenhouse.ui.theme.TextSecondary
@@ -106,20 +101,30 @@ private const val NATIVE_UI_MIN_SCALE = 0.05f
 private const val NATIVE_UI_MAX_SCALE = 3.0f
 private const val NATIVE_UI_FIT_SNAP_THRESHOLD = 0.02f
 private const val PERCENT_SCALE = 100f
+// Room for the widest zoom ("300%"), so the steps do not move while zooming
+private val ZOOM_LABEL_WIDTH = 44.dp
+private val SEGMENT_INSET = 3.dp
+private val SEGMENT_SHAPE = RoundedCornerShape(CONTROL_CORNER_RADIUS - SEGMENT_INSET)
+private val SEGMENT_HORIZONTAL_PADDING = 10.dp
+private val SEGMENT_CONTENT_SPACING = 5.dp
+private val SEGMENT_ICON_SIZE = 14.dp
+private val SURFACE_CORNER_RADIUS = 12.dp
+private val SURFACE_TOOLBAR_SPACING = 8.dp
 
-private val FALLBACK_CARD_MAX_WIDTH = 460.dp
-private val FALLBACK_CARD_CORNER_RADIUS = 20.dp
+private val FALLBACK_CARD_MAX_WIDTH = 420.dp
 private val FALLBACK_CARD_PADDING = 24.dp
-private val FALLBACK_ICON_SIZE = 40.dp
-private val FALLBACK_ICON_CONTAINER_SIZE = 64.dp
-private const val FALLBACK_BORDER_ALPHA = 0.45f
-private const val FALLBACK_ICON_BG_ALPHA = 0.15f
-private val FALLBACK_ACTION_SPACING = 10.dp
-private val FALLBACK_ACTION_CORNER_RADIUS = 10.dp
-private val FALLBACK_BUTTON_HORIZONTAL_PADDING = 12.dp
-private val FALLBACK_BUTTON_VERTICAL_PADDING = 10.dp
-private val FALLBACK_BUTTON_ICON_SIZE = 16.dp
-private val FALLBACK_BUTTON_ICON_SPACING = 6.dp
+private val FALLBACK_ICON_SIZE = 30.dp
+private val FALLBACK_ICON_SPACING = 8.dp
+private val FALLBACK_TEXT_SPACING = 6.dp
+private val FALLBACK_SECTION_SPACING = 18.dp
+private val FALLBACK_TITLE_FONT_SIZE = 16.sp
+private val FALLBACK_BODY_FONT_SIZE = 12.sp
+private val FALLBACK_BODY_LINE_HEIGHT = 17.sp
+private val FALLBACK_DETAILS_FONT_SIZE = 10.sp
+private val FALLBACK_DETAILS_HORIZONTAL_PADDING = 10.dp
+private val FALLBACK_DETAILS_VERTICAL_PADDING = 6.dp
+private val FALLBACK_ACTION_SPACING = CONTROL_SPACING
+private val FALLBACK_ACTION_HEIGHT = 40.dp
 
 sealed interface NativeUiStatus {
     object Loading : NativeUiStatus
@@ -143,13 +148,9 @@ fun NativeSurfaceZoomToolbar(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(StudioSurfaceVariant.copy(alpha = 0.95f))
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(12.dp))
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(CONTROL_SPACING)
     ) {
         // Zoom stepper: zooming out is disabled in FIT mode
         StepperControl(
@@ -159,34 +160,31 @@ fun NativeSurfaceZoomToolbar(
             decrementDescription = "Zoom Out",
             incrementDescription = "Zoom In",
             onDecrement = onZoomOut,
-            onIncrement = onZoomIn
+            onIncrement = onZoomIn,
+            labelWidth = ZOOM_LABEL_WIDTH
         )
 
         if (showFullscreenButton) {
-            Spacer(modifier = Modifier.width(2.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(CircleShape)
-                    .background(StudioSurfaceElevated)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { onToggleFullscreen() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                    contentDescription = if (isFullscreen) "Exit Fullscreen" else "Fullscreen",
-                    tint = TextPrimary,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
+            ControlButton(
+                label = null,
+                icon = if (isFullscreen) {
+                    Icons.Default.FullscreenExit
+                } else {
+                    Icons.Default.Fullscreen
+                },
+                contentDescription = if (isFullscreen) {
+                    "Exit Fullscreen"
+                } else {
+                    "Fullscreen"
+                },
+                isActive = isFullscreen,
+                onClick = onToggleFullscreen
+            )
         }
     }
 }
 
+/** Tweak (touches go to the plugin UI) or Move (touches pan it), as one segmented control. */
 @Composable
 fun NativeSurfaceInteractionToggle(
     isMoveMode: Boolean,
@@ -195,79 +193,72 @@ fun NativeSurfaceInteractionToggle(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier,
+        modifier = modifier
+            .height(CONTROL_HEIGHT)
+            .controlSurface()
+            .padding(SEGMENT_INSET),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(SEGMENT_INSET)
     ) {
-        // TWEAK Button
-        val isTweakActive = !isMoveMode
-        val tweakInteractionSource = remember { MutableInteractionSource() }
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (isTweakActive) StudioSurfaceElevated else StudioSurface.copy(alpha = 0.6f))
-                .border(1.dp, if (isTweakActive) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
-                .clickable(
-                    interactionSource = tweakInteractionSource,
-                    indication = ripple(bounded = true, color = Color.White)
-                ) { onSelectTweakMode() }
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.TouchApp,
-                    contentDescription = "Tweak Mode",
-                    tint = if (isTweakActive) TextPrimary else TextSecondary,
-                    modifier = Modifier.size(13.dp)
-                )
+        InteractionSegment(
+            label = "Tweak",
+            icon = Icons.Default.TouchApp,
+            isSelected = !isMoveMode,
+            onClick = onSelectTweakMode
+        )
 
-                Text(
-                    text = "TWEAK",
-                    fontSize = 9.sp,
-                    fontWeight = if (isTweakActive) FontWeight.Bold else FontWeight.Medium,
-                    color = if (isTweakActive) TextPrimary else TextSecondary
-                )
-            }
-        }
+        InteractionSegment(
+            label = "Move",
+            icon = Icons.Default.OpenWith,
+            isSelected = isMoveMode,
+            onClick = onSelectMoveMode
+        )
+    }
+}
 
-        // MOVE Button
-        val isMoveActive = isMoveMode
-        val moveInteractionSource = remember { MutableInteractionSource() }
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (isMoveActive) StudioSurfaceElevated else StudioSurface.copy(alpha = 0.6f))
-                .border(1.dp, if (isMoveActive) StudioPanelBorder else Color.Transparent, RoundedCornerShape(8.dp))
-                .clickable(
-                    interactionSource = moveInteractionSource,
-                    indication = ripple(bounded = true, color = Color.White)
-                ) { onSelectMoveMode() }
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.OpenWith,
-                    contentDescription = "Move Mode",
-                    tint = if (isMoveActive) TextPrimary else TextSecondary,
-                    modifier = Modifier.size(13.dp)
-                )
+@Composable
+private fun InteractionSegment(
+    label: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val contentColor = if (isSelected) {
+        TextPrimary
+    } else {
+        TextSecondary
+    }
 
-                Text(
-                    text = "MOVE",
-                    fontSize = 9.sp,
-                    fontWeight = if (isMoveActive) FontWeight.Bold else FontWeight.Medium,
-                    color = if (isMoveActive) TextPrimary else TextSecondary
-                )
-            }
-        }
+    Row(
+        modifier = Modifier
+            .fillMaxHeight()
+            .clip(SEGMENT_SHAPE)
+            .background(
+                if (isSelected) {
+                    StudioSurfaceElevated
+                } else {
+                    Color.Transparent
+                }
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = SEGMENT_HORIZONTAL_PADDING),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(SEGMENT_CONTENT_SPACING, Alignment.CenterHorizontally)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(SEGMENT_ICON_SIZE)
+        )
+
+        Text(
+            text = label,
+            fontSize = CONTROL_LABEL_FONT_SIZE,
+            fontWeight = FontWeight.Medium,
+            color = contentColor,
+            maxLines = 1
+        )
     }
 }
 
@@ -285,9 +276,8 @@ fun NativeUiLoadingView(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(16.dp))
-            .background(StudioBackground)
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(SURFACE_CORNER_RADIUS))
+            .background(StudioBackground),
         contentAlignment = Alignment.Center
     ) {
         CircularProgressIndicator(
@@ -315,9 +305,8 @@ fun NativePluginSurfaceViewer(
 ) {
     BoxWithConstraints(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(StudioBackground)
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(SURFACE_CORNER_RADIUS))
+            .background(StudioBackground),
         contentAlignment = Alignment.Center
     ) {
         val density = LocalDensity.current
@@ -474,6 +463,11 @@ fun NativePluginSurfaceViewer(
     }
 }
 
+/**
+ * Shown in place of the plugin UI when it cannot be shown: what happened, the error's details, and
+ * what to do next (retry the UI or reload the plugin, alone when its process died). The Parameters
+ * tab above stays at hand meanwhile.
+ */
 @Composable
 fun NativeUiErrorFallbackCard(
     plugin: PluginInformation,
@@ -481,230 +475,99 @@ fun NativeUiErrorFallbackCard(
     errorDetails: String?,
     isProcessDead: Boolean,
     onRetry: () -> Unit,
-    onSwitchToParameters: () -> Unit,
     onReloadPlugin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(FALLBACK_CARD_CORNER_RADIUS))
-            .background(StudioBackground)
-            .border(1.dp, BerryRose.copy(alpha = FALLBACK_BORDER_ALPHA), RoundedCornerShape(FALLBACK_CARD_CORNER_RADIUS)),
+        modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .widthIn(max = FALLBACK_CARD_MAX_WIDTH)
                 .padding(FALLBACK_CARD_PADDING),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
-                modifier = Modifier
-                    .size(FALLBACK_ICON_CONTAINER_SIZE)
-                    .clip(CircleShape)
-                    .background(BerryRose.copy(alpha = FALLBACK_ICON_BG_ALPHA))
-                    .border(1.dp, BerryRose.copy(alpha = FALLBACK_BORDER_ALPHA), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.WarningAmber,
-                    contentDescription = null,
-                    tint = BerryRose,
-                    modifier = Modifier.size(FALLBACK_ICON_SIZE)
-                )
-            }
+            Icon(
+                imageVector = Icons.Rounded.PriorityHigh,
+                contentDescription = null,
+                // As the load error snackbar shows it
+                tint = BlossomCoral,
+                modifier = Modifier.size(FALLBACK_ICON_SIZE)
+            )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(FALLBACK_ICON_SPACING))
 
             Text(
                 text = errorMessage,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = FALLBACK_TITLE_FONT_SIZE,
+                fontWeight = FontWeight.SemiBold,
                 color = TextPrimary,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            val descriptionText = if (isProcessDead) {
-                "The remote plugin process crashed or terminated unexpectedly."
-            } else {
-                "The native editor could not be connected. You can retry the UI connection or switch to generic parameter controls."
-            }
+            Spacer(modifier = Modifier.height(FALLBACK_TEXT_SPACING))
 
             Text(
-                text = descriptionText,
-                fontSize = 12.sp,
+                text = if (isProcessDead) {
+                    "${plugin.displayName} stopped running. Reload it to bring it back."
+                } else {
+                    "${plugin.displayName}'s interface didn't respond. Try again, or use the Parameters tab meanwhile."
+                },
+                fontSize = FALLBACK_BODY_FONT_SIZE,
+                lineHeight = FALLBACK_BODY_LINE_HEIGHT,
                 color = TextSecondary,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth(),
-                lineHeight = 18.sp
+                textAlign = TextAlign.Center
             )
 
             if (!errorDetails.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(FALLBACK_SECTION_SPACING))
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = StudioSurfaceVariant,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, StudioPanelBorder)
-                ) {
-                    Text(
-                        text = errorDetails,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = BlossomCoralSoft,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                // The technical details, for a bug report
+                Text(
+                    text = errorDetails,
+                    fontSize = FALLBACK_DETAILS_FONT_SIZE,
+                    fontFamily = FontFamily.Monospace,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .controlSurface()
+                        .padding(horizontal = FALLBACK_DETAILS_HORIZONTAL_PADDING, vertical = FALLBACK_DETAILS_VERTICAL_PADDING)
+                )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(FALLBACK_SECTION_SPACING))
 
-            if (isProcessDead) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(FALLBACK_ACTION_SPACING)
-                ) {
-                    Button(
-                        onClick = onReloadPlugin,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SproutGreen,
-                            contentColor = StudioBackground
-                        ),
-                        shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
-                        contentPadding = PaddingValues(
-                            horizontal = FALLBACK_BUTTON_HORIZONTAL_PADDING,
-                            vertical = FALLBACK_BUTTON_VERTICAL_PADDING
-                        ),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.RestartAlt,
-                            contentDescription = null,
-                            modifier = Modifier.size(FALLBACK_BUTTON_ICON_SIZE)
-                        )
-
-                        Spacer(modifier = Modifier.width(FALLBACK_BUTTON_ICON_SPACING))
-
-                        Text(
-                            text = "Reload Plugin",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
-                            maxLines = 1
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = onSwitchToParameters,
-                        shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = TextPrimary
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, StudioPanelBorder),
-                        contentPadding = PaddingValues(
-                            horizontal = FALLBACK_BUTTON_HORIZONTAL_PADDING,
-                            vertical = FALLBACK_BUTTON_VERTICAL_PADDING
-                        ),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = null,
-                            modifier = Modifier.size(FALLBACK_BUTTON_ICON_SIZE)
-                        )
-
-                        Spacer(modifier = Modifier.width(FALLBACK_BUTTON_ICON_SPACING))
-
-                        Text(
-                            text = "Parameters",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
-                            maxLines = 1
-                        )
-                    }
-                }
-            } else {
-                Button(
-                    onClick = onSwitchToParameters,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = SproutGreen,
-                        contentColor = StudioBackground
-                    ),
-                    shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Text(
-                        text = "Switch to Parameters",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(FALLBACK_ACTION_SPACING, Alignment.CenterHorizontally)
+            ) {
+                // Retrying is pointless once the process died: reloading is the way back
+                if (!isProcessDead) {
+                    ControlButton(
+                        label = "Retry",
+                        icon = Icons.Default.Refresh,
+                        isActive = true,
+                        height = FALLBACK_ACTION_HEIGHT,
+                        onClick = onRetry
                     )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(FALLBACK_ACTION_SPACING)
-                ) {
-                    OutlinedButton(
-                        onClick = onRetry,
-                        shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = TextPrimary
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, StudioPanelBorder),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        Text(
-                            text = "Retry UI",
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = onReloadPlugin,
-                        shape = RoundedCornerShape(FALLBACK_ACTION_CORNER_RADIUS),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = BerryRose
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, BerryRose.copy(alpha = FALLBACK_BORDER_ALPHA)),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.RestartAlt,
-                            contentDescription = null,
-                            tint = BerryRose,
-                            modifier = Modifier.size(16.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(6.dp))
-
-                        Text(
-                            text = "Reload Plugin",
-                            fontSize = 12.sp
-                        )
-                    }
-                }
+                // Restarts the plugin: in the warning colour while the plugin still runs, the way
+                // forward once its process died
+                ControlButton(
+                    label = "Reload plugin",
+                    icon = Icons.Default.RestartAlt,
+                    isActive = true,
+                    accent = if (isProcessDead) {
+                        SproutGreen
+                    } else {
+                        BerryRose
+                    },
+                    height = FALLBACK_ACTION_HEIGHT,
+                    onClick = onReloadPlugin
+                )
             }
         }
     }
@@ -755,7 +618,7 @@ fun NativePluginSurfaceContainer(
 
             host.onDisconnected = { reason ->
                 uiStatus = NativeUiStatus.Error(
-                    message = "Plugin Process Crashed",
+                    message = "Plugin stopped",
                     details = reason,
                     isProcessDead = true
                 )
@@ -763,7 +626,7 @@ fun NativePluginSurfaceContainer(
 
             host.onError = { error ->
                 uiStatus = NativeUiStatus.Error(
-                    message = "Plugin Process Error",
+                    message = "Plugin error",
                     details = error.localizedMessage ?: error.javaClass.simpleName,
                     isProcessDead = true
                 )
@@ -786,14 +649,14 @@ fun NativePluginSurfaceContainer(
 
                     if (uiStatus is NativeUiStatus.Loading) {
                         uiStatus = NativeUiStatus.Error(
-                            message = "Connection Timed Out",
-                            details = "The plugin UI did not respond within ${NATIVE_UI_CONNECT_TIMEOUT.inWholeSeconds}s",
+                            message = "Connection timed out",
+                            details = "The plugin UI did not respond within ${NATIVE_UI_CONNECT_TIMEOUT.inWholeSeconds} seconds",
                             isProcessDead = false
                         )
                     }
                 } catch (e: Throwable) {
                     uiStatus = NativeUiStatus.Error(
-                        message = "Failed to Connect Editor",
+                        message = "Couldn't open the plugin UI",
                         details = e.localizedMessage ?: e.javaClass.simpleName,
                         isProcessDead = false
                     )
@@ -820,9 +683,6 @@ fun NativePluginSurfaceContainer(
                 onRetry = {
                     retryCount++
                 },
-                onSwitchToParameters = {
-                    viewModel.rack.updateViewMode(StudioRackViewMode.PARAMETERS)
-                },
                 onReloadPlugin = {
                     viewModel.loadPluginIntoSlot(slot.index, plugin)
                 },
@@ -837,13 +697,13 @@ fun NativePluginSurfaceContainer(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 6.dp),
+                            .padding(bottom = SURFACE_TOOLBAR_SPACING),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(CONTROL_SPACING)
                         ) {
                             NativeSurfaceZoomToolbar(
                                 isFitMode = zoomState.isFitMode,

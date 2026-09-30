@@ -2,7 +2,6 @@ package org.androidaudioplugin.greenhouse.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,6 +40,7 @@ import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.data.PluginCategory
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.host.PluginBrowserController
+import org.androidaudioplugin.greenhouse.ui.components.ControlButton
 import org.androidaudioplugin.greenhouse.ui.theme.*
 import androidx.activity.compose.BackHandler
 import java.util.Locale
@@ -84,7 +84,6 @@ fun PluginBrowserScreen(
                         .size(38.dp)
                         .clip(CircleShape)
                         .background(StudioSurfaceElevated)
-                        .border(1.dp, StudioPanelBorder, CircleShape)
                         .clickable { onNavigateToRack() },
                     contentAlignment = Alignment.Center
                 ) {
@@ -102,11 +101,10 @@ fun PluginBrowserScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = "PLUGINS FOR ${targetSlot.title.uppercase(Locale.US)}",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SproutGreen,
-                        letterSpacing = 0.5.sp,
+                        text = "Plugins for ${targetSlot.title}",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -130,7 +128,6 @@ fun PluginBrowserScreen(
                     .size(38.dp)
                     .clip(CircleShape)
                     .background(StudioSurfaceElevated)
-                    .border(1.dp, StudioPanelBorder, CircleShape)
                     .clickable { viewModel.browser.refresh() },
                 contentAlignment = Alignment.Center
             ) {
@@ -156,9 +153,10 @@ fun PluginBrowserScreen(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
                 .background(StudioSurface),
+            // Filled, without an outline, like the rack's controls
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = SproutGreen,
-                unfocusedBorderColor = StudioPanelBorder,
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
                 focusedTextColor = TextPrimary,
                 unfocusedTextColor = TextPrimary
             ),
@@ -174,25 +172,12 @@ fun PluginBrowserScreen(
         ) {
             items(viewModel.browser.availableDevelopers) { dev ->
                 val isSelected = viewModel.browser.selectedDeveloper == dev
-                Box(
-                    modifier = Modifier
-                        .border(
-                            width = 1.dp,
-                            color = if (isSelected) SproutGreen else StudioPanelBorder,
-                            shape = CircleShape
-                        )
-                        .clip(CircleShape)
-                        .background(if (isSelected) StudioSurfaceElevated else StudioSurface)
-                        .clickable { viewModel.browser.selectDeveloper(dev) }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = if (dev == PluginBrowserController.ALL_DEVELOPERS) "All Developers" else dev,
-                        fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) TextPrimary else TextSecondary
-                    )
-                }
+
+                ControlButton(
+                    label = if (dev == PluginBrowserController.ALL_DEVELOPERS) "All Developers" else dev,
+                    isActive = isSelected,
+                    onClick = { viewModel.browser.selectDeveloper(dev) }
+                )
             }
         }
 
@@ -366,7 +351,6 @@ private fun GetPluginsLink(modifier: Modifier = Modifier) {
             .clip(GET_PLUGINS_SHAPE)
             .background(StudioSurfaceElevated)
             .background(SproutGreen.copy(alpha = GET_PLUGINS_TINT_ALPHA))
-            .border(1.dp, SproutGreen.copy(alpha = 0.8f), GET_PLUGINS_SHAPE)
             .clickable { uriHandler.openUri(AAP_PLUGINS_STORE_URL) }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -379,11 +363,10 @@ private fun GetPluginsLink(modifier: Modifier = Modifier) {
             modifier = Modifier.size(16.dp)
         )
         Text(
-            text = "GET AAP PLUGINS ON GOOGLE PLAY",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = SproutGreen,
-            letterSpacing = 0.5.sp
+            text = "Get AAP plugins on Google Play",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = SproutGreen
         )
     }
 }
@@ -403,100 +386,64 @@ private fun PluginCard(
     val tagBg = tagColor.copy(alpha = 0.15f)
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(16.dp)),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = StudioSurface
         )
     ) {
-        Column(
+        // The plugin's name and details, and the load button centered against them
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Main Row: Title & Dev + Category & Load Action Button
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = plugin.displayName,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Box(
-                            modifier = Modifier
-                                .border(1.dp, tagColor.copy(alpha = 0.8f), CircleShape)
-                                .clip(CircleShape)
-                                .background(tagBg)
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = (plugin.category ?: "plugin").lowercase(Locale.US),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = tagColor
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "${plugin.developer ?: "Unknown Vendor"} • ${plugin.ports.size} ports",
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isEnabled) SproutGreen.copy(alpha = 0.15f) else StudioSurface)
-                        .border(
-                            1.dp,
-                            if (isEnabled) SproutGreen.copy(alpha = 0.8f) else StudioPanelBorder,
-                            RoundedCornerShape(12.dp)
-                        )
-                        .clickable(enabled = isEnabled) {
-                            onLoad()
-                        }
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "LOAD",
-                        fontSize = 11.sp,
+                        text = plugin.displayName,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isEnabled) SproutGreen else TextMuted,
-                        letterSpacing = 0.5.sp
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(tagBg)
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = (plugin.category ?: "plugin").lowercase(Locale.US),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = tagColor
+                        )
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Text(
+                    text = plugin.developer ?: "Unknown Vendor",
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            // Sub-row: Package Identifier
-            Text(
-                text = plugin.packageName,
-                fontSize = 9.sp,
-                color = TextMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            ControlButton(
+                label = "Load",
+                isActive = true,
+                isEnabled = isEnabled,
+                onClick = onLoad
             )
         }
     }

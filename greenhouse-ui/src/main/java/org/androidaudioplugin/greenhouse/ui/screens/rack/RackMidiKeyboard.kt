@@ -1,7 +1,6 @@
 package org.androidaudioplugin.greenhouse.ui.screens.rack
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,15 +14,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.greenhouse.core.TransportState
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.host.SequencerController
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_ACTIVE_FILL_ALPHA
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_CORNER_RADIUS
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_HEIGHT
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_HORIZONTAL_PADDING
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_ICON_SIZE
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_LABEL_FONT_SIZE
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_SPACING
+import org.androidaudioplugin.greenhouse.ui.components.ControlButton
 import org.androidaudioplugin.greenhouse.ui.components.MidiDin5Icon
+import org.androidaudioplugin.greenhouse.ui.components.controlContentColor
+import org.androidaudioplugin.greenhouse.ui.components.controlSurface
+import org.androidaudioplugin.greenhouse.ui.components.panelSurface
+import org.androidaudioplugin.greenhouse.ui.components.toggleClickable
 import org.androidaudioplugin.greenhouse.ui.components.StepperControl
 import org.androidaudioplugin.greenhouse.ui.components.StudioKeyboard
 import org.androidaudioplugin.greenhouse.ui.theme.*
@@ -31,16 +42,24 @@ import org.androidaudioplugin.greenhouse.ui.theme.*
 private val KEYBOARD_HEIGHT = 90.dp
 private val KEYBOARD_BLACK_KEY_HEIGHT = 52.dp
 private const val KEYBOARD_NUM_WHITE_KEYS = 14
-private val KEYBOARD_PANEL_CORNER_RADIUS = 12.dp
-// Same height as the sequencer controls under it
-private val KEYBOARD_CONTROL_BUTTON_SIZE = 32.dp
-private val KEYBOARD_CONTROL_ICON_SIZE = 16.dp
-private val KEYBOARD_FOLD_ICON_SIZE = 20.dp
-private val KEYBOARD_CONTROL_TEXT_SIZE = 10.5.sp
-private val LOOP_PROGRESS_HEIGHT = 2.5.dp
-// Clear of the button's rounded corners
-private val LOOP_PROGRESS_INSET = 6.dp
-private val LOOP_PROGRESS_BOTTOM_MARGIN = 3.dp
+private val KEYBOARD_PANEL_PADDING = 10.dp
+private val KEYBOARD_PANEL_SPACING = 10.dp
+private val KEYBOARD_KEYS_CORNER_RADIUS = 10.dp
+// The open sequencer: a recessed tray, and its tab in the header joined to it (square where they meet)
+private val SEQUENCER_TRAY_COLOR = StudioBackground
+private val SEQUENCER_TRAY_PADDING = 8.dp
+// How far the open tab reaches below the header down to the tray: also the other controls' gap above it
+private val SEQUENCER_TAB_JOIN_HEIGHT = 6.dp
+private const val QUARTER_TURN_DEGREES = 90f
+private val SEQUENCER_TAB_SHAPE = RoundedCornerShape(topStart = CONTROL_CORNER_RADIUS, topEnd = CONTROL_CORNER_RADIUS)
+private val SEQUENCER_TRAY_SHAPE = RoundedCornerShape(
+    topStart = 0.dp,
+    topEnd = CONTROL_CORNER_RADIUS,
+    bottomStart = CONTROL_CORNER_RADIUS,
+    bottomEnd = CONTROL_CORNER_RADIUS
+)
+// Room for the widest octave name ("C-1"), so the steps do not move
+private val OCTAVE_LABEL_WIDTH = 30.dp
 private const val NOTES_PER_OCTAVE = 12
 private const val MIN_OCTAVE = 0
 private const val MAX_OCTAVE = 9
@@ -67,159 +86,116 @@ fun MidiKeyboardSection(
     // Lowest note of the keys, covering octaves 0..9
     val startNoteName = getNoteName(octave * NOTES_PER_OCTAVE)
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(KEYBOARD_PANEL_CORNER_RADIUS),
-        colors = CardDefaults.cardColors(containerColor = StudioSurfaceVariant),
-        border = androidx.compose.foundation.BorderStroke(1.dp, StudioPanelBorder)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .panelSurface()
+            .padding(KEYBOARD_PANEL_PADDING),
+        verticalArrangement = Arrangement.spacedBy(KEYBOARD_PANEL_SPACING)
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            // Attached Control Header Strip
+        // The header, and the sequencer under it while open, joined to its tab
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Control header: the sequencer tab, then the keyboard's own controls. Top-aligned: the
+            // open tab reaches down to the sequencer, the other controls keep their gap above it.
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(CONTROL_SPACING),
+                verticalAlignment = Alignment.Top
             ) {
-                // Left: SEQUENCE Button, shows / hides the sequencer strip
+                // Shows / hides the sequencer strip
                 SequenceToggleButton(sequencer = viewModel.sequencer, isOn = isSequencerVisible) {
                     isSequencerVisible = !isSequencerVisible
                 }
 
-                // Center / Right Controls
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val hasMidiDeviceAttached = viewModel.midi.availableDevices.isNotEmpty() || viewModel.midi.isDeviceConnected
-                    val isMidiInUse = viewModel.midi.isDeviceConnected && viewModel.midi.activeDevice != null
+                Spacer(modifier = Modifier.weight(1f))
 
-                    // MIDI Controller Icon Button (Always visible if hardware controller is connected to the device)
-                    if (hasMidiDeviceAttached) {
-                        Box(
-                            modifier = Modifier
-                                .size(KEYBOARD_CONTROL_BUTTON_SIZE)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(
-                                    if (isMidiInUse) {
-                                        SproutGreen.copy(alpha = 0.15f)
-                                    } else {
-                                        StudioSurfaceElevated
-                                    }
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = if (isMidiInUse) {
-                                        SproutGreen.copy(alpha = 0.5f)
-                                    } else {
-                                        StudioPanelBorder
-                                    },
-                                    shape = RoundedCornerShape(6.dp)
-                                )
-                                .clickable { showMidiMenuDialog = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            MidiDin5Icon(
-                                tint = if (isMidiInUse) {
-                                    SproutGreen
-                                } else {
-                                    TextMuted
-                                },
-                                modifier = Modifier.size(KEYBOARD_CONTROL_ICON_SIZE)
-                            )
-                        }
-                    }
+                val hasMidiDeviceAttached = viewModel.midi.availableDevices.isNotEmpty() || viewModel.midi.isDeviceConnected
+                val isMidiInUse = viewModel.midi.isDeviceConnected && viewModel.midi.activeDevice != null
 
-                    // HOLD Button
-                    KeyboardToggleButton(label = "HOLD", isOn = isHoldEnabled) {
-                        viewModel.keyboard.toggleHold()
-                    }
-
-                    // Octave Stepper (- / lowest octave / +): the keys label their octaves, the lowest is enough here
-                    StepperControl(
-                        label = startNoteName,
-                        canDecrement = octave > MIN_OCTAVE,
-                        canIncrement = octave < MAX_OCTAVE,
-                        decrementDescription = "Octave Down",
-                        incrementDescription = "Octave Up",
-                        onDecrement = { viewModel.keyboard.octave = octave - 1 },
-                        onIncrement = { viewModel.keyboard.octave = octave + 1 },
-                        height = KEYBOARD_CONTROL_BUTTON_SIZE,
-                        iconSize = KEYBOARD_CONTROL_ICON_SIZE,
-                        fontSize = KEYBOARD_CONTROL_TEXT_SIZE
-                    )
-
-                    // Hide / Fold Toggle Button
+                // MIDI controller button, while a hardware controller is connected to the device
+                if (hasMidiDeviceAttached) {
                     Box(
                         modifier = Modifier
-                            .size(KEYBOARD_CONTROL_BUTTON_SIZE)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(StudioSurfaceElevated)
-                            .border(1.dp, StudioPanelBorder, RoundedCornerShape(6.dp))
-                            .clickable {
-                                isKeyboardFolded = !isKeyboardFolded
-                            },
+                            .size(CONTROL_HEIGHT)
+                            .controlSurface(isActive = isMidiInUse)
+                            .clickable { showMidiMenuDialog = true },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = if (isKeyboardFolded) {
-                                Icons.Default.KeyboardArrowUp
-                            } else {
-                                Icons.Default.KeyboardArrowDown
-                            },
-                            contentDescription = if (isKeyboardFolded) {
-                                "Show Keyboard"
-                            } else {
-                                "Hide Keyboard"
-                            },
-                            tint = TextSecondary,
-                            modifier = Modifier.size(KEYBOARD_FOLD_ICON_SIZE)
+                        MidiDin5Icon(
+                            tint = controlContentColor(isActive = isMidiInUse),
+                            modifier = Modifier.size(CONTROL_ICON_SIZE)
                         )
                     }
                 }
+
+                KeyboardToggleButton(label = "Hold", isOn = isHoldEnabled) {
+                    viewModel.keyboard.toggleHold()
+                }
+
+                // Octave stepper (- / lowest octave / +): the keys label their octaves, the lowest is enough here
+                StepperControl(
+                    label = startNoteName,
+                    canDecrement = octave > MIN_OCTAVE,
+                    canIncrement = octave < MAX_OCTAVE,
+                    decrementDescription = "Octave Down",
+                    incrementDescription = "Octave Up",
+                    onDecrement = { viewModel.keyboard.octave = octave - 1 },
+                    onIncrement = { viewModel.keyboard.octave = octave + 1 },
+                    labelWidth = OCTAVE_LABEL_WIDTH
+                )
+
+                ControlButton(
+                    label = null,
+                    icon = if (isKeyboardFolded) {
+                        Icons.Default.KeyboardArrowUp
+                    } else {
+                        Icons.Default.KeyboardArrowDown
+                    },
+                    contentDescription = if (isKeyboardFolded) {
+                        "Show Keyboard"
+                    } else {
+                        "Hide Keyboard"
+                    },
+                    onClick = { isKeyboardFolded = !isKeyboardFolded }
+                )
             }
 
-            // Sequencer transport and lane: stays visible when the keys are folded
+            // Sequencer transport and lane, in a recessed tray under its tab: stays visible when the keys are folded
             if (isSequencerVisible) {
-                HorizontalDivider(
-                    thickness = 1.dp,
-                    color = StudioPanelBorder
-                )
-
-                SequencerStrip(viewModel = viewModel)
-            }
-
-            // Attached Keyboard Surface
-            if (!isKeyboardFolded) {
-                HorizontalDivider(
-                    thickness = 1.dp,
-                    color = StudioPanelBorder
-                )
-
-                StudioKeyboard(
-                    noteOnStates = noteOnStates.toList(),
-                    octaveZeroBased = octave,
-                    numWhiteKeys = KEYBOARD_NUM_WHITE_KEYS,
-                    totalHeight = KEYBOARD_HEIGHT,
-                    blackKeyHeight = KEYBOARD_BLACK_KEY_HEIGHT,
-                    whiteKeyColor = KeyboardWhiteKey,
-                    blackKeyColor = KeyboardBlackKey,
-                    whiteNoteOnColor = SproutGreen,
-                    blackNoteOnColor = SproutGreen,
-                    onNoteOn = { note ->
-                        viewModel.keyboard.noteOn(note)
-                    },
-                    onNoteOff = { note ->
-                        viewModel.keyboard.noteOff(note)
-                    },
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(KEYBOARD_HEIGHT)
-                )
+                        .clip(SEQUENCER_TRAY_SHAPE)
+                        .background(SEQUENCER_TRAY_COLOR)
+                        .padding(SEQUENCER_TRAY_PADDING)
+                ) {
+                    SequencerStrip(viewModel = viewModel)
+                }
             }
+        }
+
+        if (!isKeyboardFolded) {
+            StudioKeyboard(
+                noteOnStates = noteOnStates.toList(),
+                octaveZeroBased = octave,
+                numWhiteKeys = KEYBOARD_NUM_WHITE_KEYS,
+                totalHeight = KEYBOARD_HEIGHT,
+                blackKeyHeight = KEYBOARD_BLACK_KEY_HEIGHT,
+                whiteKeyColor = KeyboardWhiteKey,
+                blackKeyColor = KeyboardBlackKey,
+                whiteNoteOnColor = SproutGreen,
+                blackNoteOnColor = SproutGreen,
+                onNoteOn = { note ->
+                    viewModel.keyboard.noteOn(note)
+                },
+                onNoteOff = { note ->
+                    viewModel.keyboard.noteOff(note)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(KEYBOARD_HEIGHT)
+                    .clip(RoundedCornerShape(KEYBOARD_KEYS_CORNER_RADIUS))
+            )
         }
     }
 
@@ -232,9 +208,10 @@ fun MidiKeyboardSection(
 }
 
 /**
- * Shows / hides the sequencer strip. Hiding it ends recording, which it could no longer show. While
- * playing, a bar along its bottom shows the position in the loop. It reads the sequencer on its own,
- * so the rest of the keyboard does not recompose with it.
+ * Shows / hides the sequencer strip. Open, it is the tab of the sequencer tray: in the tray's
+ * colour, reaching down to join it. Hiding it ends recording, which it could no longer show. While
+ * playing with the strip hidden, it fills up with the position in the loop. It reads the
+ * sequencer on its own, so the rest of the keyboard does not recompose with it.
  */
 @Composable
 private fun SequenceToggleButton(
@@ -243,22 +220,52 @@ private fun SequenceToggleButton(
     onToggle: () -> Unit
 ) {
     val status = sequencer.status
+    val progressModifier = if (!isOn && status.state == TransportState.PLAYING) {
+        val playheadTick = rememberPlayheadTick(sequencer)
+        Modifier.loopProgress(positionProvider = { playheadTick.doubleValue }, lengthTicks = status.lengthTicks)
+    } else {
+        Modifier
+    }
 
-    KeyboardToggleButton(
-        label = "SEQUENCE",
-        isOn = isOn,
-        modifier = if (status.state == TransportState.PLAYING) {
-            val playheadTick = rememberPlayheadTick(sequencer)
-            Modifier.loopProgress(positionProvider = { playheadTick.doubleValue }, lengthTicks = status.lengthTicks)
-        } else {
-            Modifier
-        }
+    val surfaceModifier = if (isOn) {
+        Modifier
+            .height(CONTROL_HEIGHT + SEQUENCER_TAB_JOIN_HEIGHT)
+            .trayJoinCorner()
+            .clip(SEQUENCER_TAB_SHAPE)
+            .background(SEQUENCER_TRAY_COLOR)
+    } else {
+        Modifier
+            .height(CONTROL_HEIGHT)
+            .controlSurface()
+    }
+
+    Box(
+        modifier = surfaceModifier
+            // After the fill: the loop progress is drawn over it
+            .then(progressModifier)
+            .toggleClickable {
+                onToggle()
+
+                if (isOn && status.isRecording) {
+                    sequencer.toggleRecording()
+                }
+            }
+            .padding(horizontal = CONTROL_HORIZONTAL_PADDING),
+        // Centered in the whole tab: the short join keeps it close to level with the other controls
+        contentAlignment = Alignment.Center
     ) {
-        onToggle()
-
-        if (isOn && status.isRecording) {
-            sequencer.toggleRecording()
-        }
+        Text(
+            text = "Sequencer",
+            fontSize = CONTROL_LABEL_FONT_SIZE,
+            fontWeight = if (isOn) {
+                FontWeight.SemiBold
+            } else {
+                FontWeight.Medium
+            },
+            color = controlContentColor(isActive = isOn),
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
@@ -267,57 +274,59 @@ private fun SequenceToggleButton(
 private fun KeyboardToggleButton(
     label: String,
     isOn: Boolean,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
-            .height(KEYBOARD_CONTROL_BUTTON_SIZE)
-            .clip(RoundedCornerShape(6.dp))
-            .background(
-                if (isOn) {
-                    SproutGreen.copy(alpha = 0.15f)
-                } else {
-                    StudioSurfaceElevated
-                }
-            )
-            .border(
-                width = 1.dp,
-                color = if (isOn) {
-                    SproutGreen
-                } else {
-                    StudioPanelBorder
-                },
-                shape = RoundedCornerShape(6.dp)
-            )
-            .then(modifier)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp),
+            .height(CONTROL_HEIGHT)
+            .controlSurface(isActive = isOn)
+            .toggleClickable(onClick = onClick)
+            .padding(horizontal = CONTROL_HORIZONTAL_PADDING),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            fontSize = KEYBOARD_CONTROL_TEXT_SIZE,
-            fontWeight = FontWeight.Bold,
-            color = if (isOn) {
-                SproutGreen
-            } else {
-                TextSecondary
-            },
-            letterSpacing = 0.5.sp
+            fontSize = CONTROL_LABEL_FONT_SIZE,
+            fontWeight = FontWeight.Medium,
+            color = controlContentColor(isActive = isOn),
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
 
-/** Position in the loop, drawn as a rounded line near the bottom. The position is read while drawing, so it moves without recomposing. */
+/**
+ * The rounded inner corner where the open tab meets the tray, drawn just outside the tab's bottom
+ * end: the tray's colour, less a quarter circle.
+ */
+private fun Modifier.trayJoinCorner(): Modifier {
+    return drawBehind {
+        val radius = CONTROL_CORNER_RADIUS.toPx()
+        val corner = Path().apply {
+            moveTo(size.width, size.height - radius)
+            // Along the tab's edge down to the tray, along the tray, then the curve back up
+            lineTo(size.width, size.height)
+            lineTo(size.width + radius, size.height)
+            arcTo(
+                rect = Rect(size.width, size.height - 2 * radius, size.width + 2 * radius, size.height),
+                startAngleDegrees = QUARTER_TURN_DEGREES,
+                sweepAngleDegrees = QUARTER_TURN_DEGREES,
+                forceMoveTo = false
+            )
+            close()
+        }
+
+        drawPath(corner, SEQUENCER_TRAY_COLOR)
+    }
+}
+
+/**
+ * Position in the loop, as the button filling up with a tint from the left. The position is read
+ * while drawing, so it moves without recomposing. Drawn over the button's fill, inside its shape.
+ */
 private fun Modifier.loopProgress(positionProvider: () -> Double, lengthTicks: Long): Modifier {
     return drawBehind {
-        val thickness = LOOP_PROGRESS_HEIGHT.toPx()
-        val y = size.height - LOOP_PROGRESS_BOTTOM_MARGIN.toPx() - thickness / 2
-        val start = LOOP_PROGRESS_INSET.toPx()
-        val end = size.width - start
-        val played = start + (end - start) * (positionProvider() / lengthTicks).toFloat().coerceIn(0f, 1f)
-        drawLine(StudioPanelBorder, Offset(start, y), Offset(end, y), thickness, StrokeCap.Round)
-        drawLine(SproutGreen, Offset(start, y), Offset(played, y), thickness, StrokeCap.Round)
+        val played = size.width * (positionProvider() / lengthTicks).toFloat().coerceIn(0f, 1f)
+        drawRect(SproutGreen.copy(alpha = CONTROL_ACTIVE_FILL_ALPHA), size = Size(played, size.height))
     }
 }

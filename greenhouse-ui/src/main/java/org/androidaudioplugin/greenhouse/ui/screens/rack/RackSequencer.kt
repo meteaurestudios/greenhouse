@@ -19,7 +19,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -33,6 +32,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
@@ -74,7 +74,18 @@ import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.greenhouse.core.MidiSequencer
 import org.androidaudioplugin.greenhouse.core.TransportState
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_CONTENT_SPACING
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_DISABLED_ALPHA
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_HEIGHT
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_HORIZONTAL_PADDING
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_ICON_SIZE
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_LABEL_FONT_SIZE
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_SHAPE
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_SPACING
 import org.androidaudioplugin.greenhouse.ui.components.LevelFader
+import org.androidaudioplugin.greenhouse.ui.components.controlContentColor
+import org.androidaudioplugin.greenhouse.ui.components.controlSurface
+import org.androidaudioplugin.greenhouse.ui.components.toggleClickable
 import org.androidaudioplugin.greenhouse.ui.components.formatLevelDb
 import org.androidaudioplugin.greenhouse.ui.host.SequenceNote
 import org.androidaudioplugin.greenhouse.ui.host.SequencerController
@@ -89,25 +100,22 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.withSign
 
-private val SEQUENCER_SHAPE = RoundedCornerShape(6.dp)
-private val SEQUENCER_CONTROL_SIZE = 32.dp
-private val QUANTIZE_BADGE_SPACING = 4.dp
+private val SEQUENCER_CONTROL_SIZE = CONTROL_HEIGHT
+private val QUANTIZE_BADGE_SPACING = CONTROL_CONTENT_SPACING
+private val TEMPO_BOX_HORIZONTAL_PADDING = CONTROL_CONTENT_SPACING
 private val QUANTIZE_BADGE_SIZE = 14.dp
-private val STRIP_HORIZONTAL_PADDING = 10.dp
-private val STRIP_VERTICAL_PADDING = 8.dp
-private val STRIP_SPACING = 6.dp
+// Inside the keyboard panel, which pads it
+private val STRIP_SPACING = CONTROL_SPACING
 private val STRIP_LANE_HEIGHT = 64.dp
-private val STRIP_BUTTON_HORIZONTAL_PADDING = 8.dp
-private val STRIP_BUTTON_CONTENT_SPACING = 4.dp
+private val STRIP_BUTTON_HORIZONTAL_PADDING = CONTROL_HORIZONTAL_PADDING
+private val STRIP_BUTTON_CONTENT_SPACING = CONTROL_CONTENT_SPACING
 private val STRIP_DROPDOWN_MIN_WIDTH = 0.dp
-private val STRIP_TEXT_SIZE = 10.5.sp
-private val TRANSPORT_LABELS = listOf("PLAY", "STOP")
-private val SEQUENCER_ICON_SIZE = 15.dp
+private val STRIP_TEXT_SIZE = CONTROL_LABEL_FONT_SIZE
+private val TRANSPORT_LABELS = listOf("Play", "Stop")
+private val QUANTIZE_LABELS = listOf("On", "Off")
+private val SEQUENCER_ICON_SIZE = CONTROL_ICON_SIZE
 private val SEQUENCER_RECORD_DOT_SIZE = 10.dp
-private const val ACTIVE_BACKGROUND_ALPHA = 0.15f
 private const val IDLE_RECORD_DOT_ALPHA = 0.7f
-// A disabled control fades as a whole, not only its content
-private const val DISABLED_ALPHA = 0.35f
 private const val BLINK_PERIOD_MS = 500
 private const val BLINK_MIN_ALPHA = 0.25f
 // Notes are pills as tall as their pitch row leaves room for, within these. The shortest ones are round dots.
@@ -125,8 +133,7 @@ private const val PLAYHEAD_CORRECTION = 0.2
 private const val PLAYHEAD_SNAP_TICKS = MidiSequencer.PPQ / 2
 private val LANE_BAR_LINE_WIDTH = 1.dp
 // First beat of each bar, then the other beats, dimmed
-private val LANE_HINT_FONT_SIZE = 8.5.sp
-private val LANE_HINT_LETTER_SPACING = 0.5.sp
+private val LANE_HINT_FONT_SIZE = 11.sp
 private val LANE_HINT_PADDING = 4.dp
 private const val BAR_LINE_ALPHA = 0.5f
 private const val BEAT_LINE_ALPHA = 0.5f
@@ -137,9 +144,21 @@ private const val LANE_NOTE_MIN_ALPHA = 0.3f
 private val SHEET_HORIZONTAL_PADDING = 20.dp
 private val SHEET_BOTTOM_PADDING = 16.dp
 private val SHEET_ROW_SPACING = 14.dp
-private val SHEET_DRAG_HANDLE_PADDING = 10.dp
+// Material's handle has 22 dp above and below it: this one keeps the title close to the top
+private val SHEET_DRAG_HANDLE_TOP_PADDING = 14.dp
+private val SHEET_DRAG_HANDLE_BOTTOM_PADDING = 12.dp
+private val SHEET_DRAG_HANDLE_WIDTH = 32.dp
+private val SHEET_TIP_SPACING = 8.dp
+private val SHEET_TIP_ICON_SPACING = 10.dp
+// Room for the widest tip icon, so the texts line up
+private val SHEET_TIP_ICON_SLOT_WIDTH = 16.dp
+private val SHEET_TIP_ICON_SIZE = 15.dp
+private val SHEET_TIP_FONT_SIZE = 12.sp
+private val SHEET_TIP_LINE_HEIGHT = 17.sp
+private val SHEET_DRAG_HANDLE_HEIGHT = 4.dp
+// The sheet's actions (clear, import, export) are taller than its settings, easier to hit
+private val SETTINGS_ACTION_HEIGHT = 44.dp
 private val SETTINGS_LABEL_WIDTH = 76.dp
-private val SETTINGS_PILL_ICON_SPACING = 4.dp
 private val SETTINGS_PILL_SPACING = 6.dp
 private val SETTINGS_CONTROL_HEIGHT = 34.dp
 private val SETTINGS_ACTION_ICON_SIZE = 16.dp
@@ -170,14 +189,18 @@ private fun formatLength(lengthBars: Int): String {
     return "$lengthBars bars"
 }
 
-/** Rounded, bordered surface of the sequencer controls. */
+/** Filled surface of the sequencer controls, outlined only to show a [focus] such as typing. */
 private fun Modifier.sequencerControl(
-    background: Color = StudioSurfaceElevated,
-    border: Color = StudioPanelBorder
+    background: Color = StudioSurfaceVariant,
+    focus: Color? = null
 ): Modifier {
-    return clip(SEQUENCER_SHAPE)
-        .background(background)
-        .border(1.dp, border, SEQUENCER_SHAPE)
+    val surface = controlSurface(background = background)
+
+    if (focus == null) {
+        return surface
+    }
+
+    return surface.border(1.dp, focus, CONTROL_SHAPE)
 }
 
 /**
@@ -206,8 +229,7 @@ fun SequencerStrip(viewModel: HostViewModel) {
 
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = STRIP_HORIZONTAL_PADDING, vertical = STRIP_VERTICAL_PADDING),
+            .fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(STRIP_SPACING)
     ) {
         Row(
@@ -224,9 +246,9 @@ fun SequencerStrip(viewModel: HostViewModel) {
             ) {
                 StripButtonContent(
                     label = if (isRunning) {
-                        "STOP"
+                        "Stop"
                     } else {
-                        "PLAY"
+                        "Play"
                     },
                     labels = TRANSPORT_LABELS
                 ) {
@@ -250,7 +272,7 @@ fun SequencerStrip(viewModel: HostViewModel) {
                 onClick = { sequencer.toggleRecording() },
                 modifier = Modifier.height(SEQUENCER_CONTROL_SIZE)
             ) {
-                StripButtonContent(label = "REC") {
+                StripButtonContent(label = "Rec") {
                     Box(
                         modifier = Modifier
                             .size(SEQUENCER_RECORD_DOT_SIZE)
@@ -267,38 +289,14 @@ fun SequencerStrip(viewModel: HostViewModel) {
                 }
             }
 
-            // Tempo, centered, and the quantize note just before it while quantize is on: opens the
-            // settings, where they are set. A blank as wide as the note after the text keeps it centered.
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(SEQUENCER_CONTROL_SIZE)
-                    .sequencerControl()
-                    .clickable(onClickLabel = "Sequencer Settings") { showSettings = true },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(QUANTIZE_BADGE_SPACING, Alignment.CenterHorizontally)
-            ) {
-                if (settings.isQuantizing) {
-                    QuantizeIcon(
-                        color = SproutGreen,
-                        contentDescription = "Quantize On"
-                    )
-                }
-
-                Text(
-                    text = "${formatBpm(settings.bpm)} bpm",
-                    fontSize = STRIP_TEXT_SIZE,
-                    style = tabularTextStyle,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    softWrap = false
-                )
-
-                if (settings.isQuantizing) {
-                    Spacer(modifier = Modifier.width(QUANTIZE_BADGE_SIZE))
-                }
-            }
+            // Tempo, and the quantize note just before it while quantize is on, centered together
+            // and clear of the edges: opens the settings, where they are set
+            TempoBox(
+                bpm = settings.bpm,
+                isQuantizing = settings.isQuantizing,
+                onClick = { showSettings = true },
+                modifier = Modifier.weight(1f)
+            )
 
             LengthDropdown(sequencer = sequencer)
 
@@ -325,7 +323,7 @@ fun SequencerStrip(viewModel: HostViewModel) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(STRIP_LANE_HEIGHT)
-                .sequencerControl(background = MeterTrackBackground)
+                .sequencerControl(background = StudioSurface)
                 .clickable { showSettings = true },
             contentAlignment = Alignment.Center
         ) {
@@ -356,9 +354,9 @@ fun SequencerStrip(viewModel: HostViewModel) {
             if (showHint) {
                 LaneHint(
                     text = if (isArmed) {
-                        "PLAY A NOTE TO START"
+                        "Play a note to start"
                     } else {
-                        "PRESS RECORD, THEN PLAY NOTES"
+                        "Press Rec, then play notes"
                     },
                     color = if (isArmed) {
                         BerryRose
@@ -376,6 +374,66 @@ fun SequencerStrip(viewModel: HostViewModel) {
             viewModel = viewModel,
             onDismiss = { showSettings = false }
         )
+    }
+}
+
+/**
+ * The tempo in the strip ("120 bpm"), after the quantize note while quantize is on. The strip
+ * leaves it what the other controls do not take: where "bpm" does not fit, it shows the number alone.
+ */
+@Composable
+private fun TempoBox(
+    bpm: Double,
+    isQuantizing: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val textMeasurer = rememberTextMeasurer()
+    val style = tabularTextStyle.copy(fontSize = STRIP_TEXT_SIZE, fontWeight = FontWeight.SemiBold)
+    val number = formatBpm(bpm)
+    val fullText = "$number bpm"
+
+    BoxWithConstraints(
+        modifier = modifier
+            .height(SEQUENCER_CONTROL_SIZE)
+            .sequencerControl()
+            .clickable(onClickLabel = "Sequencer Settings", onClick = onClick)
+            .padding(horizontal = TEMPO_BOX_HORIZONTAL_PADDING),
+        contentAlignment = Alignment.Center
+    ) {
+        val noteWidth = if (isQuantizing) {
+            QUANTIZE_BADGE_SIZE + QUANTIZE_BADGE_SPACING
+        } else {
+            0.dp
+        }
+        val fullTextWidth = with(LocalDensity.current) {
+            remember(fullText, style, textMeasurer) { textMeasurer.measure(fullText, style).size.width }.toDp()
+        }
+        val text = if (noteWidth + fullTextWidth <= maxWidth) {
+            fullText
+        } else {
+            number
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(QUANTIZE_BADGE_SPACING, Alignment.CenterHorizontally)
+        ) {
+            if (isQuantizing) {
+                QuantizeIcon(
+                    color = SproutGreen,
+                    contentDescription = "Quantize On"
+                )
+            }
+
+            Text(
+                text = text,
+                style = style,
+                color = TextPrimary,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }
 
@@ -420,7 +478,7 @@ private fun StripButtonLabel(
     Text(
         text = text,
         fontSize = STRIP_TEXT_SIZE,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.Medium,
         maxLines = 1,
         modifier = modifier
     )
@@ -441,8 +499,8 @@ private fun LengthDropdown(sequencer: SequencerController) {
         label = { option ->
             when {
                 option != MidiSequencer.AUTO_LENGTH_BARS -> formatLength(option)
-                isAuto -> "AUTO ($bars)"
-                else -> "AUTO"
+                isAuto -> "Auto ($bars)"
+                else -> "Auto"
             }
         },
         height = SEQUENCER_CONTROL_SIZE,
@@ -468,8 +526,7 @@ private fun LaneHint(
     ) {
         val style = TextStyle(
             fontSize = LANE_HINT_FONT_SIZE,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = LANE_HINT_LETTER_SPACING
+            fontWeight = FontWeight.Medium
         )
         val textWidth = remember(text, textMeasurer) { textMeasurer.measure(text, style).size.width }
         val scale = min(1f, constraints.maxWidth.toFloat() / max(textWidth, 1))
@@ -477,7 +534,7 @@ private fun LaneHint(
         Text(
             text = text,
             color = color,
-            style = style.copy(fontSize = LANE_HINT_FONT_SIZE * scale, letterSpacing = LANE_HINT_LETTER_SPACING * scale),
+            style = style.copy(fontSize = LANE_HINT_FONT_SIZE * scale),
             maxLines = 1,
             softWrap = false,
             modifier = Modifier.graphicsLayer { this.alpha = alpha.value }
@@ -509,39 +566,30 @@ private fun ToggleBox(
     activeColor: Color = SproutGreen,
     isEnabled: Boolean = true,
     onClickLabel: String? = null,
+    /** A one-shot action (tap tempo) rather than a toggle: it keeps the press ripple, as its only feedback. */
+    isMomentary: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val contentColor = when {
-        !isEnabled -> TextMuted
-        isActive -> activeColor
-        else -> TextSecondary
-    }
-
     Box(
         modifier = modifier
             .alpha(
                 if (isEnabled) {
                     1f
                 } else {
-                    DISABLED_ALPHA
+                    CONTROL_DISABLED_ALPHA
                 }
             )
-            .sequencerControl(
-                background = if (isActive) {
-                    activeColor.copy(alpha = ACTIVE_BACKGROUND_ALPHA)
+            .controlSurface(isActive = isActive && isEnabled, accent = activeColor)
+            .then(
+                if (isMomentary) {
+                    Modifier.clickable(enabled = isEnabled, onClickLabel = onClickLabel, onClick = onClick)
                 } else {
-                    StudioSurfaceElevated
-                },
-                border = if (isActive) {
-                    activeColor
-                } else {
-                    StudioPanelBorder
+                    Modifier.toggleClickable(enabled = isEnabled, onClickLabel = onClickLabel, onClick = onClick)
                 }
-            )
-            .clickable(enabled = isEnabled, onClickLabel = onClickLabel, onClick = onClick),
+            ),
         contentAlignment = Alignment.Center
     ) {
-        CompositionLocalProvider(LocalContentColor provides contentColor) {
+        CompositionLocalProvider(LocalContentColor provides controlContentColor(isActive, isEnabled, activeColor)) {
             content()
         }
     }
@@ -719,7 +767,7 @@ private fun SequencerSettingsSheet(
         modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
         sheetState = sheetState,
         containerColor = StudioSurface,
-        dragHandle = { BottomSheetDefaults.DragHandle(modifier = Modifier.padding(vertical = SHEET_DRAG_HANDLE_PADDING)) },
+        dragHandle = { SheetDragHandle() },
         contentWindowInsets = { WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal) }
     ) {
         // Read here: the sheet is its own window, with its own focus, which the tempo field's belongs to
@@ -753,11 +801,10 @@ private fun SequencerSettingsSheet(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "SEQUENCER",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SproutGreen,
-                    letterSpacing = 0.5.sp
+                    text = "Sequencer settings",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
                 )
 
                 Text(
@@ -772,27 +819,28 @@ private fun SequencerSettingsSheet(
                 )
             }
 
-            SettingsRow(title = "TEMPO") {
+            SettingsRow(title = "Tempo") {
                 BpmField(
                     bpm = settings.bpm,
                     onBpmChange = { bpm -> sequencer.updateSettings { it.copy(bpm = bpm) } },
                     modifier = Modifier.onGloballyPositioned { bpmFieldBounds = it.boundsInRoot() }
                 )
 
-                SettingsPill(label = "TAP", isSelected = false) {
+                SettingsPill(label = "Tap", isSelected = false, isMomentary = true) {
                     sequencer.tapTempo()
                 }
             }
 
-            SettingsRow(title = "QUANTIZE") {
+            SettingsRow(title = "Quantize") {
                 // The note that marks quantize in the tempo box while it is on
                 SettingsPill(
                     label = if (settings.isQuantizing) {
-                        "ON"
+                        "On"
                     } else {
-                        "OFF"
+                        "Off"
                     },
                     isSelected = settings.isQuantizing,
+                    labels = QUANTIZE_LABELS,
                     icon = { QuantizeIcon() }
                 ) {
                     sequencer.updateSettings { it.copy(isQuantizing = !it.isQuantizing) }
@@ -808,7 +856,7 @@ private fun SequencerSettingsSheet(
                 )
             }
 
-            SettingsRow(title = "METRONOME") {
+            SettingsRow(title = "Metronome") {
                 // Like the slots' LEVEL: the same fader and value, over a range and travel suited to a click
                 LevelFader(
                     levelDb = settings.metronomeLevelDb,
@@ -824,7 +872,7 @@ private fun SequencerSettingsSheet(
                 )
 
                 Text(
-                    text = formatLevelDb(settings.metronomeLevelDb, MidiSequencer.MIN_METRONOME_LEVEL_DB, mutedLabel = "OFF"),
+                    text = formatLevelDb(settings.metronomeLevelDb, MidiSequencer.MIN_METRONOME_LEVEL_DB, mutedLabel = "Off"),
                     fontSize = 11.sp,
                     style = tabularTextStyle,
                     color = SproutGreen,
@@ -835,15 +883,35 @@ private fun SequencerSettingsSheet(
                 )
             }
 
-            Text(
-                text = "Records the notes you play, in a loop. Recording starts with the first note, and the metronome " +
-                    "clicks while recording. With an AUTO length, the first take sets the number of bars. Lengthening the loop adds empty bars. " +
-                    "Quantize applies on playback: what you played is kept. Undo removes the last phrase: " +
-                    "after a bar without playing, the next note starts a new one.",
-                fontSize = 11.sp,
-                lineHeight = 15.sp,
-                color = TextMuted
-            )
+            // How the sequencer works, one tip per control
+            Column(verticalArrangement = Arrangement.spacedBy(SHEET_TIP_SPACING)) {
+                SheetTip(
+                    icon = {
+                        Box(
+                            modifier = Modifier
+                                .size(SEQUENCER_RECORD_DOT_SIZE)
+                                .clip(CircleShape)
+                                .background(BerryRose)
+                        )
+                    },
+                    text = "Press Rec, then play some notes: recording starts on your first note, with the metronome clicking along."
+                )
+
+                SheetTip(
+                    icon = { SheetTipIcon(Icons.Default.Repeat) },
+                    text = "On Auto, your first take sets the loop length. A longer loop adds empty bars."
+                )
+
+                SheetTip(
+                    icon = { QuantizeIcon(color = TextSecondary) },
+                    text = "Quantize tidies the timing on playback only: what you played is kept."
+                )
+
+                SheetTip(
+                    icon = { SheetTipIcon(Icons.AutoMirrored.Filled.Undo) },
+                    text = "Undo removes your last phrase. A bar of silence starts a new one."
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -852,9 +920,9 @@ private fun SequencerSettingsSheet(
                 SettingsActionButton(
                     icon = Icons.Default.DeleteOutline,
                     label = if (isClearArmed) {
-                        "CONFIRM"
+                        "Confirm"
                     } else {
-                        "CLEAR"
+                        "Clear"
                     },
                     isEnabled = sequencer.hasEvents && !status.isRecording,
                     color = BerryRose,
@@ -869,7 +937,7 @@ private fun SequencerSettingsSheet(
 
                 SettingsActionButton(
                     icon = Icons.Default.FileDownload,
-                    label = "IMPORT .MID",
+                    label = "Import .mid",
                     isEnabled = !status.isRecording,
                     modifier = Modifier.weight(1f)
                 ) {
@@ -878,7 +946,7 @@ private fun SequencerSettingsSheet(
 
                 SettingsActionButton(
                     icon = Icons.Default.FileUpload,
-                    label = "EXPORT .MID",
+                    label = "Export .mid",
                     isEnabled = sequencer.hasEvents,
                     modifier = Modifier.weight(1f)
                 ) {
@@ -904,6 +972,59 @@ private fun QuantizeIcon(
     )
 }
 
+/** A line of the sheet's help: the icon of the control it is about, then the tip. */
+@Composable
+private fun SheetTip(
+    icon: @Composable () -> Unit,
+    text: String
+) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(SHEET_TIP_ICON_SPACING)
+    ) {
+        // As tall as the text's first line, so the icon sits level with it
+        Box(
+            modifier = Modifier
+                .size(width = SHEET_TIP_ICON_SLOT_WIDTH, height = with(LocalDensity.current) { SHEET_TIP_LINE_HEIGHT.toDp() }),
+            contentAlignment = Alignment.Center
+        ) {
+            icon()
+        }
+
+        Text(
+            text = text,
+            fontSize = SHEET_TIP_FONT_SIZE,
+            lineHeight = SHEET_TIP_LINE_HEIGHT,
+            color = TextSecondary
+        )
+    }
+}
+
+@Composable
+private fun SheetTipIcon(icon: ImageVector) {
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = TextSecondary,
+        modifier = Modifier.size(SHEET_TIP_ICON_SIZE)
+    )
+}
+
+/** The sheet's drag handle, with less room around it than Material's. */
+@Composable
+private fun SheetDragHandle() {
+    Box(
+        modifier = Modifier.padding(top = SHEET_DRAG_HANDLE_TOP_PADDING, bottom = SHEET_DRAG_HANDLE_BOTTOM_PADDING)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = SHEET_DRAG_HANDLE_WIDTH, height = SHEET_DRAG_HANDLE_HEIGHT)
+                .clip(CircleShape)
+                .background(TextMuted)
+        )
+    }
+}
+
 /** A setting on one line: its name, then its choices (wrapping if they do not fit). */
 @Composable
 private fun SettingsRow(
@@ -913,10 +1034,9 @@ private fun SettingsRow(
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = title,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = CONTROL_LABEL_FONT_SIZE,
+            fontWeight = FontWeight.Medium,
             color = TextSecondary,
-            letterSpacing = 0.5.sp,
             modifier = Modifier.width(SETTINGS_LABEL_WIDTH)
         )
 
@@ -934,26 +1054,20 @@ private fun SettingsRow(
 private fun SettingsPill(
     label: String,
     isSelected: Boolean,
+    /** Every label the pill can show: it keeps the width of the widest, so it does not resize when the label changes. */
+    labels: List<String> = listOf(label),
     icon: (@Composable () -> Unit)? = null,
+    isMomentary: Boolean = false,
     onClick: () -> Unit
 ) {
     ToggleBox(
         isActive = isSelected,
         onClick = onClick,
+        isMomentary = isMomentary,
         modifier = Modifier.height(SETTINGS_CONTROL_HEIGHT)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SETTINGS_PILL_ICON_SPACING)
-        ) {
+        StripButtonContent(label = label, labels = labels) {
             icon?.invoke()
-
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }
@@ -975,11 +1089,11 @@ private fun SettingsActionButton(
 
     Row(
         modifier = modifier
-            .height(SETTINGS_CONTROL_HEIGHT)
-            .sequencerControl(background = Color.Transparent)
+            .height(SETTINGS_ACTION_HEIGHT)
+            .sequencerControl()
             .clickable(enabled = isEnabled, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+        horizontalArrangement = Arrangement.spacedBy(CONTROL_CONTENT_SPACING, Alignment.CenterHorizontally)
     ) {
         Icon(
             imageVector = icon,
@@ -988,12 +1102,10 @@ private fun SettingsActionButton(
             modifier = Modifier.size(SETTINGS_ACTION_ICON_SIZE)
         )
 
-        Spacer(modifier = Modifier.width(4.dp))
-
         Text(
             text = label,
-            fontSize = 10.5.sp,
-            fontWeight = FontWeight.Bold,
+            fontSize = CONTROL_LABEL_FONT_SIZE,
+            fontWeight = FontWeight.Medium,
             color = contentColor,
             maxLines = 1
         )
@@ -1072,10 +1184,10 @@ private fun BpmField(
         modifier = modifier
             .height(SETTINGS_CONTROL_HEIGHT)
             .sequencerControl(
-                border = if (isEditing) {
+                focus = if (isEditing) {
                     SproutGreen
                 } else {
-                    StudioPanelBorder
+                    null
                 }
             ),
         verticalAlignment = Alignment.CenterVertically
@@ -1120,7 +1232,7 @@ private fun BpmField(
                         color = TextPrimary,
                         fontSize = 13.sp,
                         fontFeatureSettings = TABULAR_FIGURES,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center
                     ),
                     cursorBrush = SolidColor(SproutGreen),
@@ -1142,7 +1254,7 @@ private fun BpmField(
                     text = "${formatBpm(bpm)} bpm",
                     fontSize = 13.sp,
                     style = tabularTextStyle,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = TextPrimary,
                     maxLines = 1,
                     softWrap = false
@@ -1177,7 +1289,7 @@ private fun BpmStepButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = if (isEnabled) {
-                SproutGreen
+                TextSecondary
             } else {
                 TextMuted
             },
@@ -1215,7 +1327,7 @@ private fun <T> SettingsDropdown(
                 text = label(selected),
                 fontSize = 11.sp,
                 style = tabularTextStyle,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = if (isDimmed) {
                     TextSecondary
                 } else {
@@ -1242,7 +1354,7 @@ private fun <T> SettingsDropdown(
                         Text(
                             text = label(option),
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             color = if (option == selected) {
                                 SproutGreen
                             } else {

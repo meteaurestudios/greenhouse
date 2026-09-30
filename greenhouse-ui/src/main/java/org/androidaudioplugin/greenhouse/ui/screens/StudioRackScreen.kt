@@ -4,13 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -19,14 +16,9 @@ import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
 import org.androidaudioplugin.greenhouse.ui.screens.rack.*
 import org.androidaudioplugin.greenhouse.ui.theme.StudioBackground
-import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurface
 
 private val RACK_OUTER_PADDING = 12.dp
 private val RACK_ELEMENT_SPACING = 10.dp
-private val MAIN_PANEL_CORNER_RADIUS = 20.dp
-private val MAIN_PANEL_BORDER_WIDTH = 1.dp
-private val MAIN_PANEL_INNER_PADDING = 12.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,29 +97,19 @@ fun StudioRackScreen(
                 }
             )
 
-            if (activeSlot.pluginInfo != null && !activeSlot.isLoading) {
-                Spacer(modifier = Modifier.height(RACK_ELEMENT_SPACING))
-
-                // View Mode Selector Bar for Active Slot
-                StatusAndModeSelectorBar(
-                    activeSlot = activeSlot,
-                    currentMode = viewModel.rack.currentViewMode,
-                    onModeSelected = { viewModel.rack.updateViewMode(it) }
-                )
-            }
-
             Spacer(modifier = Modifier.height(RACK_ELEMENT_SPACING))
         }
 
-        // Dynamic Main Panel (Parameter Controls / Native Embedded GUI / Presets)
-        Box(
+        // Dynamic Main Panel (Parameter Controls / Native Embedded GUI / Presets), under the tabs of
+        // the active slot's views. Folded (plugin UI full screen), the plugin UI stays alone.
+        ModeTabbedPanel(
+            activeSlot = activeSlot,
+            currentMode = viewModel.rack.currentViewMode,
+            showTabs = !isRackFolded,
+            onModeSelected = { viewModel.rack.updateViewMode(it) },
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clip(RoundedCornerShape(MAIN_PANEL_CORNER_RADIUS))
-                .background(StudioSurface)
-                .border(MAIN_PANEL_BORDER_WIDTH, StudioPanelBorder, RoundedCornerShape(MAIN_PANEL_CORNER_RADIUS))
-                .padding(MAIN_PANEL_INNER_PADDING)
         ) {
             key(activeSlot.index, activePlugin?.pluginId, activePlugin?.parameters?.size, activeSlot.isLoading) {
 

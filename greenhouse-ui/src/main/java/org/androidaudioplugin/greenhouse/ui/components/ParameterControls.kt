@@ -45,7 +45,6 @@ import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
 import org.androidaudioplugin.greenhouse.ui.theme.BerryRose
 import org.androidaudioplugin.greenhouse.ui.theme.StudioBackground
 import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurface
 import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceElevated
 import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceVariant
 import org.androidaudioplugin.greenhouse.ui.theme.TextMuted
@@ -59,21 +58,20 @@ private const val BOOLEAN_OFF_VALUE = 0.0
 private const val BOOLEAN_ON_VALUE = 1.0
 
 private val CONTROL_CONTAINER_HEIGHT = 54.dp
-private val TOGGLE_BUTTON_HEIGHT = 34.dp
-private val TOGGLE_BUTTON_CORNER_RADIUS = 17.dp
+private val TOGGLE_BUTTON_HEIGHT = 30.dp
+private val CONTROL_VALUE_FONT_SIZE = 11.sp
 private val BUTTON_CORNER_RADIUS = 8.dp
 private val STEPPER_BUTTON_SIZE = 28.dp
 private val STEPPER_ICON_SIZE = 14.dp
 private val LED_INDICATOR_SIZE = 6.dp
-private val TOGGLE_BORDER_WIDTH = 1.dp
 private const val TOGGLE_BUTTON_WIDTH_FRACTION = 0.84f
 private const val DROPDOWN_FIELD_WIDTH_FRACTION = 0.92f
 private val DROPDOWN_ICON_SIZE = 16.dp
+private val DROPDOWN_LABEL_START_INSET = 2.dp
 private val DROPDOWN_FIELD_HORIZONTAL_PADDING = 4.dp
 private val ACTIVE_ALPHA = 0.18f
 private val INACTIVE_ALPHA = 0.06f
 private val BORDER_ACTIVE_ALPHA = 0.55f
-private val BORDER_INACTIVE_ALPHA = 0.3f
 
 @Composable
 fun BooleanParameterToggle(
@@ -90,18 +88,6 @@ fun BooleanParameterToggle(
         offLabel
     }
 
-    val backgroundColor = if (isOn) {
-        activeColor.copy(alpha = ACTIVE_ALPHA)
-    } else {
-        StudioSurfaceVariant.copy(alpha = 0.5f)
-    }
-
-    val borderColor = if (isOn) {
-        activeColor.copy(alpha = BORDER_ACTIVE_ALPHA)
-    } else {
-        StudioPanelBorder.copy(alpha = BORDER_INACTIVE_ALPHA)
-    }
-
     val textColor = if (isOn) {
         activeColor
     } else {
@@ -111,16 +97,14 @@ fun BooleanParameterToggle(
     val ledColor = if (isOn) {
         activeColor
     } else {
-        TextMuted.copy(alpha = 0.4f)
+        TextMuted
     }
 
     Box(
         modifier = modifier
             .fillMaxWidth(TOGGLE_BUTTON_WIDTH_FRACTION)
             .height(TOGGLE_BUTTON_HEIGHT)
-            .clip(RoundedCornerShape(TOGGLE_BUTTON_CORNER_RADIUS))
-            .background(backgroundColor)
-            .border(TOGGLE_BORDER_WIDTH, borderColor, RoundedCornerShape(TOGGLE_BUTTON_CORNER_RADIUS))
+            .controlSurface(isActive = isOn, accent = activeColor, background = StudioSurfaceElevated)
             .clickable {
                 val nextValue = if (isOn) {
                     BOOLEAN_OFF_VALUE
@@ -146,9 +130,9 @@ fun BooleanParameterToggle(
             Spacer(modifier = Modifier.width(6.dp))
 
             Text(
-                text = currentLabel.uppercase(),
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold,
+                text = currentLabel,
+                fontSize = CONTROL_VALUE_FONT_SIZE,
+                fontWeight = FontWeight.SemiBold,
                 color = textColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -196,33 +180,31 @@ fun EnumParameterSelector(
             modifier = Modifier
                 .fillMaxWidth(DROPDOWN_FIELD_WIDTH_FRACTION)
                 .height(TOGGLE_BUTTON_HEIGHT)
-                .clip(RoundedCornerShape(BUTTON_CORNER_RADIUS))
-                .background(activeColor.copy(alpha = ACTIVE_ALPHA))
-                .border(1.dp, activeColor.copy(alpha = BORDER_ACTIVE_ALPHA), RoundedCornerShape(BUTTON_CORNER_RADIUS))
+                .controlSurface(background = StudioSurfaceElevated)
                 .clickable(enabled = options.isNotEmpty()) {
                     isMenuExpanded = true
                 }
                 .padding(horizontal = DROPDOWN_FIELD_HORIZONTAL_PADDING),
             contentAlignment = Alignment.Center
         ) {
-            // Equal insets on both sides keep the label centered in the field without running under the arrow.
+            // Centered in the room the arrow leaves: the tiles are narrow, so the label gets all the width it can
             Text(
                 text = currentLabel,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = activeColor,
+                fontSize = CONTROL_VALUE_FONT_SIZE,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = DROPDOWN_ICON_SIZE)
+                    .padding(start = DROPDOWN_LABEL_START_INSET, end = DROPDOWN_ICON_SIZE)
             )
 
             Icon(
                 imageVector = Icons.Filled.KeyboardArrowDown,
                 contentDescription = "Show Options Menu",
-                tint = activeColor.copy(alpha = 0.7f),
+                tint = TextSecondary,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .size(DROPDOWN_ICON_SIZE)
@@ -231,9 +213,8 @@ fun EnumParameterSelector(
             DropdownMenu(
                 expanded = isMenuExpanded,
                 onDismissRequest = { isMenuExpanded = false },
-                modifier = Modifier
-                    .background(StudioSurface)
-                    .border(1.dp, StudioPanelBorder, RoundedCornerShape(BUTTON_CORNER_RADIUS))
+                shape = CONTROL_SHAPE,
+                containerColor = StudioSurfaceElevated
             ) {
                 options.forEachIndexed { index, option ->
                     val isSelected = index == currentIndex

@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import org.androidaudioplugin.greenhouse.ui.theme.KnobArcBackground
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
 import org.androidaudioplugin.greenhouse.ui.theme.StudioSurface
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceVariant
+import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -232,7 +232,7 @@ fun FlatRotaryKnob(
 
             // Disc Hairline Outline
             drawCircle(
-                color = StudioSurfaceVariant,
+                color = StudioPanelBorder,
                 radius = innerDiscRadius,
                 center = center,
                 style = Stroke(width = discBorderWidthPx)

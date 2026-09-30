@@ -26,7 +26,7 @@
 ## Installation
 
 1. Go to the [**Releases**](https://github.com/meteaurestudios/greenhouse/releases) page.
-2. Download the latest `app-release.apk`.
+2. Download the latest `greenhouse-*.apk`.
 3. Install the APK on your Android device (Android 10+ / API 29+).
 4. Launch the app and explore your installed AAP plugins!
 

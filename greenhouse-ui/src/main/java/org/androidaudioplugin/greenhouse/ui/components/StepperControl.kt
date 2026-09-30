@@ -1,13 +1,11 @@
 package org.androidaudioplugin.greenhouse.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
@@ -17,29 +15,23 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
-import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
-import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceElevated
 import org.androidaudioplugin.greenhouse.ui.theme.TextMuted
 import org.androidaudioplugin.greenhouse.ui.theme.TextPrimary
+import org.androidaudioplugin.greenhouse.ui.theme.TextSecondary
 
-private val STEPPER_BUTTON_SIZE = 26.dp
-private val STEPPER_ICON_SIZE = 14.dp
-private val STEPPER_FONT_SIZE = 10.sp
-private val STEPPER_CORNER_RADIUS = 6.dp
+private val STEPPER_ICON_SIZE = 16.dp
 // Tap feedback of the steps: a circle around the icon, clear of the label
-private val STEPPER_RIPPLE_RADIUS = 10.dp
+private val STEPPER_RIPPLE_RADIUS = 14.dp
 
 /**
- * A value between - and + steps in one bordered pill (the keyboard octave, the plugin UI zoom).
+ * A value between - and + steps in one control (the keyboard octave, the plugin UI zoom).
  * A step that cannot go further is dimmed.
  */
 @Composable
@@ -53,18 +45,16 @@ fun StepperControl(
     onIncrement: () -> Unit,
     modifier: Modifier = Modifier,
     /** Also the width of each step. */
-    height: Dp = STEPPER_BUTTON_SIZE,
+    height: Dp = CONTROL_HEIGHT,
     iconSize: Dp = STEPPER_ICON_SIZE,
-    fontSize: TextUnit = STEPPER_FONT_SIZE
+    fontSize: TextUnit = CONTROL_LABEL_FONT_SIZE,
+    /** Width kept for the label, so the steps do not move as it changes; null to fit it. */
+    labelWidth: Dp? = null
 ) {
-    val shape = RoundedCornerShape(STEPPER_CORNER_RADIUS)
-
     Row(
         modifier = modifier
             .height(height)
-            .clip(shape)
-            .background(StudioSurfaceElevated)
-            .border(1.dp, StudioPanelBorder, shape),
+            .controlSurface(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         StepButton(Icons.Default.Remove, decrementDescription, canDecrement, height, iconSize, onDecrement)
@@ -73,10 +63,15 @@ fun StepperControl(
             text = label,
             fontSize = fontSize,
             style = tabularTextStyle,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
             color = TextPrimary,
-            letterSpacing = 0.5.sp,
-            maxLines = 1
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = if (labelWidth != null) {
+                Modifier.width(labelWidth)
+            } else {
+                Modifier
+            }
         )
 
         StepButton(Icons.Default.Add, incrementDescription, canIncrement, height, iconSize, onIncrement)
@@ -107,9 +102,9 @@ private fun StepButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = if (isEnabled) {
-                SproutGreen
+                TextSecondary
             } else {
-                TextMuted
+                TextMuted.copy(alpha = CONTROL_DISABLED_ALPHA)
             },
             modifier = Modifier.size(iconSize)
         )

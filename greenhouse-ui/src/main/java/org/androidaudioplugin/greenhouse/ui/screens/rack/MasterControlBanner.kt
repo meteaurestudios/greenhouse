@@ -40,6 +40,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,9 +73,11 @@ private val DSP_PILL_PADDING_HORIZONTAL = 10.dp
 private val DSP_PILL_PADDING_VERTICAL = 5.dp
 private val DSP_PILL_SPACING = 6.dp
 private val DSP_LED_SIZE = 6.dp
-private val DSP_METER_BAR_WIDTH = 32.dp
+private val DSP_METER_BAR_WIDTH = 24.dp
 private val DSP_METER_BAR_HEIGHT = 5.dp
-private val DSP_PERCENT_TEXT_WIDTH = 28.dp
+private val DSP_VALUE_FONT_SIZE = 10.sp
+// The widest value the pill shows: the gauge leaves room for it
+private const val DSP_WIDEST_VALUE = "100%"
 
 private val BANNER_LOGO_SIZE = 28.dp
 private val BANNER_LOGO_ICON_SIZE = 16.dp
@@ -109,8 +114,7 @@ fun MasterControlBanner(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(BANNER_CORNER_RADIUS))
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(BANNER_CORNER_RADIUS)),
+            .clip(RoundedCornerShape(BANNER_CORNER_RADIUS)),
         colors = CardDefaults.cardColors(containerColor = StudioSurfaceVariant)
     ) {
         Column(
@@ -233,7 +237,6 @@ fun MasterControlBanner(
                             .size(BANNER_SETTINGS_BUTTON_SIZE)
                             .clip(CircleShape)
                             .background(StudioSurfaceElevated)
-                            .border(1.dp, StudioPanelBorder, CircleShape)
                             .clickable { onOpenSessionDialog() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -251,7 +254,6 @@ fun MasterControlBanner(
                             .size(BANNER_SETTINGS_BUTTON_SIZE)
                             .clip(CircleShape)
                             .background(StudioSurfaceElevated)
-                            .border(1.dp, StudioPanelBorder, CircleShape)
                             .clickable { onOpenSettings() },
                         contentAlignment = Alignment.Center
                     ) {
@@ -291,12 +293,6 @@ fun DspCpuMeter(
         DangerRed.copy(alpha = 0.08f)
     }
 
-    val borderColor = if (isProcessing) {
-        StudioPanelBorder
-    } else {
-        DangerRed.copy(alpha = 0.4f)
-    }
-
     val ledColor = when {
         !isProcessing -> DangerRed
         isLegacyPath -> WarningOrange
@@ -313,11 +309,6 @@ fun DspCpuMeter(
         modifier = Modifier
             .clip(CircleShape)
             .background(backgroundColor)
-            .border(
-                width = 1.dp,
-                color = borderColor,
-                shape = CircleShape
-            )
             .clickable { onToggleProcessing() }
             .padding(horizontal = DSP_PILL_PADDING_HORIZONTAL, vertical = DSP_PILL_PADDING_VERTICAL),
         verticalAlignment = Alignment.CenterVertically,
@@ -337,6 +328,17 @@ fun DspCpuMeter(
             color = labelColor
         )
 
+        val valueStyle = tabularTextStyle.copy(fontSize = DSP_VALUE_FONT_SIZE, fontWeight = FontWeight.Bold)
+        val textMeasurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val widestValueWidth = remember(textMeasurer, valueStyle, density) {
+            with(density) {
+                textMeasurer.measure(DSP_WIDEST_VALUE, valueStyle).size.width.toDp()
+            }
+        }
+
+        // A fixed gauge, then the value in a slot as wide as the widest one ("100%"), so neither
+        // moves nor resizes as the value changes
         Box(
             modifier = Modifier
                 .width(DSP_METER_BAR_WIDTH)
@@ -367,12 +369,10 @@ fun DspCpuMeter(
 
         Text(
             text = dspValueText,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            style = tabularTextStyle,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(DSP_PERCENT_TEXT_WIDTH),
+            style = valueStyle,
             maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.width(widestValueWidth),
             color = meterColor
         )
     }

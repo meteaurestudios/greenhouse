@@ -1,7 +1,6 @@
 package org.androidaudioplugin.greenhouse.ui.screens.rack
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.greenhouse.ui.components.BooleanParameterToggle
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_HEIGHT
+import org.androidaudioplugin.greenhouse.ui.components.controlSurface
 import org.androidaudioplugin.greenhouse.ui.components.EnumParameterSelector
 import org.androidaudioplugin.greenhouse.ui.components.FlatRotaryKnob
 import org.androidaudioplugin.greenhouse.ui.components.GridVerticalScrollBar
@@ -63,8 +64,7 @@ import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
 import org.androidaudioplugin.greenhouse.ui.theme.BlossomCoral
 import org.androidaudioplugin.greenhouse.ui.theme.PeriwinkleBlue
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
-import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurface
+import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceVariant
 import org.androidaudioplugin.greenhouse.ui.theme.TextMuted
 import org.androidaudioplugin.greenhouse.ui.theme.TextPrimary
 import org.androidaudioplugin.greenhouse.ui.theme.TextSecondary
@@ -76,12 +76,15 @@ private const val PARAMETER_INT_DISCRETE_STEP = 1.0
 private val PARAMETER_CARD_HEIGHT = 112.dp
 private val PARAMETER_KNOB_SIZE = 44.dp
 private val PARAMETER_CARD_CORNER_RADIUS = 12.dp
+private val PARAMETER_NAME_FONT_SIZE = 10.sp
+private val PARAMETER_VALUE_FONT_SIZE = 10.sp
+private val TOOLBAR_ICON_SIZE = 15.dp
+private val TOOLBAR_FONT_SIZE = 11.sp
 // Shared by the host control, the filter button and the search field on the panel's first line
-internal val PARAMETER_TOOLBAR_HEIGHT = 34.dp
-internal val PARAMETER_TOOLBAR_CORNER_RADIUS = 8.dp
+internal val PARAMETER_TOOLBAR_HEIGHT = CONTROL_HEIGHT
 // Room for the grid scroll bar; the first line uses it too so its right edge lines up with the cards
 private val GRID_END_PADDING = 8.dp
-private val GRID_SPACING = 8.dp
+private val GRID_SPACING = 6.dp
 // The host control spans this many parameter cards, or one while the search field shares its line
 private const val HOST_CONTROL_CARD_SPAN = 3
 private const val COMPACT_HOST_CONTROL_CARD_SPAN = 1
@@ -170,13 +173,12 @@ fun ParameterControlRack(
         Column(modifier = modifier.fillMaxSize()) {
             val isSearchable = parameters.size > PARAMETER_SEARCH_THRESHOLD
             val isSearchOpen = isSearchable && (isSearchVisible || searchQuery.isNotEmpty())
-            val toolbarShape = RoundedCornerShape(PARAMETER_TOOLBAR_CORNER_RADIUS)
 
             // Host control pinned above the plugin's parameters, sharing the line with the filter
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(end = GRID_END_PADDING, bottom = 8.dp)
+                    .padding(end = GRID_END_PADDING, bottom = GRID_SPACING)
             ) {
                 val gridWidth = maxWidth
 
@@ -209,17 +211,15 @@ fun ParameterControlRack(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(PARAMETER_TOOLBAR_HEIGHT)
-                                .clip(toolbarShape)
-                                .background(StudioSurface)
-                                .border(1.dp, StudioPanelBorder, toolbarShape)
-                                .padding(horizontal = 8.dp),
+                                .controlSurface()
+                                .padding(horizontal = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Search,
                                 contentDescription = "Search Parameters",
                                 tint = TextSecondary,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(TOOLBAR_ICON_SIZE)
                             )
 
                             Spacer(modifier = Modifier.width(6.dp))
@@ -235,7 +235,7 @@ fun ParameterControlRack(
                                     cursorBrush = SolidColor(SproutGreen),
                                     textStyle = TextStyle(
                                         color = TextPrimary,
-                                        fontSize = 10.sp
+                                        fontSize = TOOLBAR_FONT_SIZE
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -247,9 +247,9 @@ fun ParameterControlRack(
                                         ) {
                                             if (searchQuery.isEmpty()) {
                                                 Text(
-                                                    text = "Search...",
+                                                    text = "Search parameters",
                                                     color = TextMuted,
-                                                    fontSize = 10.sp,
+                                                    fontSize = TOOLBAR_FONT_SIZE,
                                                     maxLines = 1
                                                 )
                                             }
@@ -304,9 +304,7 @@ fun ParameterControlRack(
                             modifier = Modifier
                                 .width(gridSpanWidth(gridWidth, FILTER_BUTTON_CARD_SPAN))
                                 .height(PARAMETER_TOOLBAR_HEIGHT)
-                                .clip(toolbarShape)
-                                .background(StudioSurface)
-                                .border(1.dp, StudioPanelBorder, toolbarShape)
+                                .controlSurface()
                                 .clickable { isSearchVisible = true }
                                 .padding(horizontal = 8.dp),
                             contentAlignment = Alignment.Center
@@ -319,7 +317,7 @@ fun ParameterControlRack(
                                     imageVector = Icons.Filled.Search,
                                     contentDescription = "Filter Parameters",
                                     tint = TextSecondary,
-                                    modifier = Modifier.size(13.dp)
+                                    modifier = Modifier.size(TOOLBAR_ICON_SIZE)
                                 )
 
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -333,7 +331,7 @@ fun ParameterControlRack(
                                     } else {
                                         "Filter (${parameters.size})"
                                     },
-                                    fontSize = 10.sp,
+                                    fontSize = TOOLBAR_FONT_SIZE,
                                     style = tabularTextStyle,
                                     color = TextSecondary,
                                     maxLines = 1,
@@ -418,22 +416,21 @@ fun ParameterCard(
             .fillMaxWidth()
             .height(PARAMETER_CARD_HEIGHT)
             .clip(RoundedCornerShape(PARAMETER_CARD_CORNER_RADIUS))
-            .background(StudioSurface)
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(PARAMETER_CARD_CORNER_RADIUS))
+            .background(StudioSurfaceVariant)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 6.dp),
+                .padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             // 1. Parameter Name Header
             Text(
                 text = paramName,
-                fontSize = 9.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
+                fontSize = PARAMETER_NAME_FONT_SIZE,
+                fontWeight = FontWeight.Medium,
+                color = TextSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
@@ -505,11 +502,10 @@ fun ParameterCard(
 
                 Text(
                     text = valueText,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = PARAMETER_VALUE_FONT_SIZE,
+                    fontWeight = FontWeight.SemiBold,
                     style = tabularTextStyle,
-                    letterSpacing = 0.2.sp,
-                    color = activeAccent,
+                    color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

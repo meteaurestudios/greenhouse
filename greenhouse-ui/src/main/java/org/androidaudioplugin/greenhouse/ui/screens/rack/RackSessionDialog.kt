@@ -36,10 +36,6 @@ import androidx.compose.material.icons.filled.SaveAs
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.rounded.Eco
 import androidx.compose.material.icons.rounded.Spa
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -81,11 +77,16 @@ import androidx.core.content.FileProvider
 import org.androidaudioplugin.greenhouse.data.RackPreset
 import org.androidaudioplugin.greenhouse.data.RackPresetHeader
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_HEIGHT
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_HORIZONTAL_PADDING
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_LABEL_FONT_SIZE
+import org.androidaudioplugin.greenhouse.ui.components.CONTROL_SHAPE
+import org.androidaudioplugin.greenhouse.ui.components.ControlButton
+import org.androidaudioplugin.greenhouse.ui.components.panelSurface
 import org.androidaudioplugin.greenhouse.ui.theme.DangerRed
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
 import org.androidaudioplugin.greenhouse.ui.theme.StudioBackground
 import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurface
 import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceElevated
 import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceVariant
 import org.androidaudioplugin.greenhouse.ui.theme.TextMuted
@@ -99,7 +100,6 @@ import java.util.Date
 import java.util.Locale
 
 // Dialog frame
-private val DIALOG_CORNER_RADIUS = 24.dp
 private val DIALOG_PADDING = 20.dp
 private const val DIALOG_WIDTH_FRACTION = 0.94f
 private const val DIALOG_MAX_HEIGHT_FRACTION = 0.85f
@@ -113,7 +113,6 @@ private val CURRENT_CARD_H_PADDING = 14.dp
 private val CURRENT_CARD_V_PADDING = 12.dp
 private val CURRENT_LABEL_SPACING = 2.dp
 private const val CURRENT_CARD_TINT_ALPHA = 0.08f
-private const val CURRENT_CARD_BORDER_ALPHA = 0.3f
 private val CURRENT_LABEL_ICON_SIZE = 12.dp
 private val CURRENT_LABEL_ICON_GAP = 4.dp
 
@@ -133,11 +132,9 @@ private val ROW_VERTICAL_PADDING = 10.dp
 private const val ROW_DIVIDER_ALPHA = 0.6f
 private val INLINE_GAP = 8.dp
 private val TIGHT_GAP = 4.dp
-private const val ACTIVE_BORDER_ALPHA = 0.5f
 
 // Name input bar
 private val INPUT_BAR_HEIGHT = 44.dp
-private val INPUT_CORNER_RADIUS = 10.dp
 private val INPUT_START_PADDING = 12.dp
 private val INPUT_END_PADDING = 5.dp
 private val INPUT_WARNING_SPACING = 6.dp
@@ -147,7 +144,6 @@ private val ICON_BUTTON_SIZE = 34.dp
 private val SMALL_ICON_BUTTON_SIZE = 28.dp
 private val ICON_SIZE = 16.dp
 private val SMALL_ICON_SIZE = 14.dp
-private val MENU_CORNER_RADIUS = 8.dp
 
 // Text actions
 private val TEXT_ACTION_CORNER_RADIUS = 8.dp
@@ -155,11 +151,11 @@ private val TEXT_ACTION_H_PADDING = 10.dp
 private val TEXT_ACTION_V_PADDING = 6.dp
 
 // Session action buttons (Save / Load)
-private val SESSION_BUTTON_HEIGHT = 34.dp
-private val SESSION_BUTTON_CORNER_RADIUS = 9.dp
-private val SESSION_BUTTON_H_PADDING = 16.dp
-private val SESSION_BUTTON_FONT_SIZE = 12.5.sp
-private const val TONAL_BG_ALPHA = 0.16f
+private val SESSION_BUTTON_HEIGHT = CONTROL_HEIGHT
+private val SESSION_BUTTON_H_PADDING = CONTROL_HORIZONTAL_PADDING
+private val SESSION_BUTTON_FONT_SIZE = CONTROL_LABEL_FONT_SIZE
+// The warning state's tint, stronger than the other controls': it stands out on the green-tinted session card
+private const val SESSION_BUTTON_TINT_ALPHA = 0.3f
 private const val DISABLED_BG_ALPHA = 0.6f
 private val SESSION_BUTTON_ICON_SIZE = 15.dp
 private val SESSION_BUTTON_ICON_GAP = 5.dp
@@ -167,9 +163,9 @@ private const val SAVE_FAILED_FEEDBACK_DURATION_MS = 2000L
 
 // Empty state & confirmation dialogs
 private val EMPTY_STATE_V_PADDING = 28.dp
-private val CONFIRM_DIALOG_CORNER_RADIUS = 20.dp
 private val CONFIRM_DIALOG_PADDING = 20.dp
-private val CONFIRM_BUTTON_CORNER_RADIUS = 8.dp
+private val CONFIRM_TITLE_FONT_SIZE = 16.sp
+private val CONFIRM_MESSAGE_FONT_SIZE = 13.sp
 private const val CONFIRM_DIALOG_WIDTH_FRACTION = 0.9f
 
 private const val SESSION_DATE_PATTERN = "d MMM yyyy"
@@ -202,9 +198,7 @@ fun RackSessionDialog(
             modifier = Modifier
                 .fillMaxWidth(DIALOG_WIDTH_FRACTION)
                 .heightIn(max = maxDialogHeight)
-                .clip(RoundedCornerShape(DIALOG_CORNER_RADIUS))
-                .background(StudioSurface)
-                .border(1.dp, StudioPanelBorder, RoundedCornerShape(DIALOG_CORNER_RADIUS))
+                .panelSurface()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
@@ -249,7 +243,6 @@ fun RackSessionDialog(
                         .weight(1f, fill = false)
                         .clip(listShape)
                         .background(StudioSurfaceVariant)
-                        .border(1.dp, StudioPanelBorder, listShape)
                 ) {
                     itemsIndexed(
                         items = viewModel.sessions.savedSessions,
@@ -372,7 +365,6 @@ private fun CurrentSessionCard(viewModel: HostViewModel) {
     val focusManager = LocalFocusManager.current
     val activeSessionName = viewModel.sessions.currentSessionName
     val hasActiveSession = !activeSessionName.isNullOrBlank()
-    val loadedPluginsCount = viewModel.rack.slots.count { it.isLoaded }
     var nameInput by remember { mutableStateOf(TextFieldValue()) }
     var isSaveAsExpanded by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -394,16 +386,11 @@ private fun CurrentSessionCard(viewModel: HostViewModel) {
         }
     }
 
-    val pluginSummary = when (loadedPluginsCount) {
-        0 -> "No plugins"
-        1 -> "1 plugin"
-        else -> "$loadedPluginsCount plugins"
-    }
-
+    // Only an unsaved rack says more than its name
     val details = if (hasActiveSession) {
-        "$DETAIL_SEPARATOR$pluginSummary"
+        null
     } else {
-        "$DETAIL_SEPARATOR$pluginSummary${DETAIL_SEPARATOR}not saved yet"
+        "${DETAIL_SEPARATOR}not saved yet"
     }
 
     val showNameInput = !hasActiveSession || isSaveAsExpanded
@@ -441,7 +428,6 @@ private fun CurrentSessionCard(viewModel: HostViewModel) {
             .fillMaxWidth()
             .clip(shape)
             .background(SproutGreen.copy(alpha = CURRENT_CARD_TINT_ALPHA))
-            .border(1.dp, SproutGreen.copy(alpha = CURRENT_CARD_BORDER_ALPHA), shape)
     ) {
         // Decorative leaves, drawn first so they sit behind the content; the card's clip crops them.
         // matchParentSize: this layer takes the card's size without affecting it, and
@@ -499,13 +485,15 @@ private fun CurrentSessionCard(viewModel: HostViewModel) {
                             color = SproutGreen
                         )
 
-                        Text(
-                            text = details,
-                            fontSize = 11.sp,
-                            color = TextMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        if (details != null) {
+                            Text(
+                                text = details,
+                                fontSize = 11.sp,
+                                color = TextMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(CURRENT_LABEL_SPACING))
@@ -621,7 +609,7 @@ private fun SessionNameField(
     var isFocused by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    val shape = RoundedCornerShape(INPUT_CORNER_RADIUS)
+    val shape = CONTROL_SHAPE
 
     LaunchedEffect(Unit) {
         if (requestFocusOnShow) {
@@ -630,10 +618,11 @@ private fun SessionNameField(
         }
     }
 
+    // Filled like the other controls; outlined only to show focus, or a problem with the name
     val borderColor = when {
         warning != null -> WarmSunbeam
         isFocused -> SproutGreen
-        else -> StudioPanelBorder
+        else -> Color.Transparent
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -642,7 +631,8 @@ private fun SessionNameField(
                 .fillMaxWidth()
                 .height(INPUT_BAR_HEIGHT)
                 .clip(shape)
-                .background(StudioSurface)
+                // Recessed: darker than the tinted card it sits on, so it reads as a field
+                .background(StudioBackground)
                 .border(1.dp, borderColor, shape)
                 .padding(start = INPUT_START_PADDING, end = INPUT_END_PADDING),
             verticalAlignment = Alignment.CenterVertically
@@ -903,7 +893,7 @@ private fun SessionRow(
     }
 }
 
-/** Visual weight of a session action: Primary (solid), Tonal (soft green) or Warning (soft amber). */
+/** Visual weight of a session action: Primary (solid green, the call to action), Tonal (neutral fill) or Warning (amber tint). */
 private enum class SessionButtonStyle {
     Primary,
     Tonal,
@@ -929,26 +919,27 @@ private fun SessionActionButton(
     // false keeps the normal look but ignores taps (no ripple), unlike enabled = false which greys it out
     interactive: Boolean = true
 ) {
-    val shape = RoundedCornerShape(SESSION_BUTTON_CORNER_RADIUS)
-
     val backgroundColor = when {
-        !enabled -> StudioSurfaceVariant.copy(alpha = DISABLED_BG_ALPHA)
+        !enabled -> StudioSurfaceElevated.copy(alpha = DISABLED_BG_ALPHA)
         style == SessionButtonStyle.Primary -> SproutGreen
-        style == SessionButtonStyle.Warning -> WarmSunbeam.copy(alpha = TONAL_BG_ALPHA)
-        else -> SproutGreen.copy(alpha = TONAL_BG_ALPHA)
+        style == SessionButtonStyle.Warning -> WarmSunbeam.copy(alpha = SESSION_BUTTON_TINT_ALPHA)
+        else -> StudioSurfaceElevated
     }
 
     val contentColor = when {
         !enabled -> TextMuted
         style == SessionButtonStyle.Primary -> StudioBackground
         style == SessionButtonStyle.Warning -> WarmSunbeam
-        else -> SproutGreen
+        else -> TextPrimary
     }
 
     Row(
         modifier = modifier
             .height(SESSION_BUTTON_HEIGHT)
-            .clip(shape)
+            .clip(CONTROL_SHAPE)
+            // Opaque under the tint, so the current session card's leaves don't show through, and
+            // lighter than the tinted card, so the button stands out from it
+            .background(StudioSurfaceElevated)
             .background(backgroundColor)
             .clickable(enabled = enabled && interactive, onClick = onClick)
             .padding(horizontal = SESSION_BUTTON_H_PADDING),
@@ -1008,9 +999,8 @@ private fun SessionMenu(
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
-        modifier = Modifier
-            .background(StudioSurfaceElevated)
-            .border(1.dp, StudioPanelBorder, RoundedCornerShape(MENU_CORNER_RADIUS))
+        shape = CONTROL_SHAPE,
+        containerColor = StudioSurfaceElevated
     ) {
         content()
     }
@@ -1064,12 +1054,6 @@ private fun ConfirmationDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    val borderColor = if (isTitleDanger) {
-        DangerRed.copy(alpha = ACTIVE_BORDER_ALPHA)
-    } else {
-        StudioPanelBorder
-    }
-
     val titleColor = if (isTitleDanger) {
         DangerRed
     } else {
@@ -1077,62 +1061,45 @@ private fun ConfirmationDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
+        Column(
             modifier = Modifier
                 .fillMaxWidth(CONFIRM_DIALOG_WIDTH_FRACTION)
-                .clip(RoundedCornerShape(CONFIRM_DIALOG_CORNER_RADIUS))
-                .background(StudioSurface)
-                .border(1.dp, borderColor, RoundedCornerShape(CONFIRM_DIALOG_CORNER_RADIUS))
-                .padding(CONFIRM_DIALOG_PADDING),
-            colors = CardDefaults.cardColors(containerColor = StudioSurface)
+                .panelSurface()
+                .padding(CONFIRM_DIALOG_PADDING)
         ) {
-            Column {
-                Text(
-                    text = title,
-                    color = titleColor,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+            Text(
+                text = title,
+                color = titleColor,
+                fontSize = CONFIRM_TITLE_FONT_SIZE,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Spacer(modifier = Modifier.height(INLINE_GAP))
+
+            Text(
+                text = message,
+                color = TextSecondary,
+                fontSize = CONFIRM_MESSAGE_FONT_SIZE
+            )
+
+            Spacer(modifier = Modifier.height(SECTION_SPACING))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(INLINE_GAP, Alignment.End)
+            ) {
+                ControlButton(
+                    label = dismissLabel,
+                    onClick = onDismiss
                 )
 
-                Spacer(modifier = Modifier.height(INLINE_GAP))
-
-                Text(
-                    text = message,
-                    color = TextSecondary,
-                    fontSize = 13.sp
+                // Both confirmations lose something (a session, or the rack's unsaved state)
+                ControlButton(
+                    label = confirmLabel,
+                    isActive = true,
+                    accent = DangerRed,
+                    onClick = onConfirm
                 )
-
-                Spacer(modifier = Modifier.height(SECTION_SPACING))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = StudioSurfaceElevated,
-                            contentColor = TextPrimary
-                        ),
-                        shape = RoundedCornerShape(CONFIRM_BUTTON_CORNER_RADIUS)
-                    ) {
-                        Text(dismissLabel)
-                    }
-
-                    Spacer(modifier = Modifier.width(INLINE_GAP))
-
-                    Button(
-                        onClick = onConfirm,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = DangerRed,
-                            contentColor = TextPrimary
-                        ),
-                        shape = RoundedCornerShape(CONFIRM_BUTTON_CORNER_RADIUS)
-                    ) {
-                        Text(confirmLabel)
-                    }
-                }
             }
         }
     }

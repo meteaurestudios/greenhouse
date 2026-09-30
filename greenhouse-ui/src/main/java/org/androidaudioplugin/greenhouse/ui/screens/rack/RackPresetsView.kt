@@ -1,7 +1,5 @@
 package org.androidaudioplugin.greenhouse.ui.screens.rack
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,41 +17,34 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.components.GridVerticalScrollBar
+import org.androidaudioplugin.greenhouse.ui.components.controlSurface
 import org.androidaudioplugin.greenhouse.ui.components.SCROLLBAR_HORIZONTAL_OFFSET
 import org.androidaudioplugin.greenhouse.ui.components.SCROLLBAR_TRACK_PADDING
 import org.androidaudioplugin.greenhouse.ui.components.SCROLLBAR_WIDTH
 import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
-import org.androidaudioplugin.greenhouse.ui.theme.AccentGold
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
-import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurface
-import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceElevated
 import org.androidaudioplugin.greenhouse.ui.theme.TextMuted
 import org.androidaudioplugin.greenhouse.ui.theme.TextPrimary
 import androidx.compose.ui.unit.Dp
 import org.androidaudioplugin.greenhouse.ui.theme.TextSecondary
 
 private val PRESET_ITEM_HEIGHT = 38.dp
-private val PRESET_GRID_SPACING = 8.dp
+private val PRESET_GRID_SPACING = 6.dp
 private val PRESET_ADAPTIVE_MIN_WIDTH = 130.dp
-private val PRESET_CORNER_RADIUS = 10.dp
-private val PRESET_PADDING_HORIZONTAL = 10.dp
-private val PRESET_PADDING_VERTICAL = 8.dp
+private val PRESET_PADDING_HORIZONTAL = 12.dp
+private val PRESET_FONT_SIZE = 12.sp
 private val PRESET_LOADING_SPINNER_SIZE = 20.dp
-private const val PRESET_SELECTED_BORDER_ALPHA = 0.8f
 
 @Composable
 fun PluginPresetsView(
@@ -73,7 +64,7 @@ fun PluginPresetsView(
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(PRESET_LOADING_SPINNER_SIZE),
-                    color = AccentGold,
+                    color = SproutGreen,
                     strokeWidth = 2.dp
                 )
 
@@ -124,20 +115,8 @@ fun PluginPresetsView(
                 val preset = presets[idx]
                 val isPresetSelected = slot.selectedPresetIndex >= 0 && preset.nativeIndex == slot.selectedPresetIndex
 
-                val backgroundColor = if (isPresetSelected) {
-                    StudioSurfaceElevated
-                } else {
-                    StudioSurface
-                }
-
-                val borderColor = if (isPresetSelected) {
-                    SproutGreen.copy(alpha = PRESET_SELECTED_BORDER_ALPHA)
-                } else {
-                    StudioPanelBorder
-                }
-
                 val numberColor = if (isPresetSelected) {
-                    AccentGold
+                    SproutGreen
                 } else {
                     TextMuted
                 }
@@ -157,23 +136,18 @@ fun PluginPresetsView(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(PRESET_CORNER_RADIUS))
-                        .background(backgroundColor)
-                        .border(
-                            width = 1.dp,
-                            color = borderColor,
-                            shape = RoundedCornerShape(PRESET_CORNER_RADIUS)
-                        )
+                        .height(PRESET_ITEM_HEIGHT)
+                        .controlSurface(isActive = isPresetSelected)
                         .clickable {
                             onPresetSelected(preset.nativeIndex)
                         }
-                        .padding(horizontal = PRESET_PADDING_HORIZONTAL, vertical = PRESET_PADDING_VERTICAL),
+                        .padding(horizontal = PRESET_PADDING_HORIZONTAL),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "${idx + 1}.",
-                        fontSize = 11.sp,
+                        text = "${idx + 1}",
+                        fontSize = PRESET_FONT_SIZE,
                         style = tabularTextStyle,
                         fontWeight = if (isPresetSelected) FontWeight.Bold else FontWeight.Normal,
                         color = numberColor
@@ -181,7 +155,7 @@ fun PluginPresetsView(
 
                     Text(
                         text = preset.name,
-                        fontSize = 11.sp,
+                        fontSize = PRESET_FONT_SIZE,
                         fontWeight = nameWeight,
                         color = nameColor,
                         maxLines = 1,

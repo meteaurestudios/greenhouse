@@ -20,17 +20,13 @@ val TangerineGlow = Color(0xFFFFB066)        // Warm Tangerine (Sequencer Undo T
 val BerryRose = Color(0xFFF43F5E)            // Warm Berry Rose (Bypass / Warnings / Clips)
 
 // Backward-compatible Theme Aliases
-val AccentGold = SproutGreen
 val AccentCyan = PeriwinkleBlue
 val AccentViolet = BlossomCoral
-val ElectricBlue = SproutGreen
 val SignalGreen = SproutGreen
 val WarningOrange = WarmSunbeam
 val DangerRed = BerryRose
 
 val NeonCyan = SproutGreen
-val NeonCyanGlow = Color(0x3372D5A3)
-val NeonPurple = BlossomCoral
 
 // High-Contrast Cozy Typography
 val TextPrimary = Color(0xFFF7FAF6)          // Warm Oat / Cream White
@@ -38,8 +34,8 @@ val TextSecondary = Color(0xFF98AFA0)        // Soft Sage Muted Gray
 val TextMuted = Color(0xFF647D6E)            // Dark Earthy Slate
 
 // Hardware Controls & Meters
-val KnobArcBackground = Color(0xFF222E26)
-val KnobArcActive = SproutGreen
+// Knob and fader tracks sit on filled control tiles (StudioSurfaceVariant): one step lighter
+val KnobArcBackground = StudioPanelBorder
 val MeterTrackBackground = Color(0xFF121714)
 val MeterNormalColor = SproutGreen
 val MeterWarningColor = WarmSunbeam

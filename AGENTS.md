@@ -91,7 +91,11 @@ cmake -S greenhouse-engine/src/test/cpp -B build/sequencer-test && cmake --build
    - Standard Material 3 `IconButton` enforces a minimum 48dp interactive component size layout. When precise custom dimensions are needed without forced padding, use `Box(modifier = Modifier.size(...).clip(CircleShape).clickable { ... })`.
 3. **Window Insets**:
    - Account for system navigation bar insets using `WindowInsets.navigationBars` or `WindowInsets.systemBars`.
-4. **Icon + Text Buttons**:
+4. **Panels & Controls**:
+   - Use the shared style in `greenhouse-ui/.../ui/components/ControlSurface.kt`: `Modifier.panelSurface()` for a rack panel (bordered card), `Modifier.controlSurface()` / `ControlButton` for the controls inside it (`CONTROL_HEIGHT`, `CONTROL_SHAPE`).
+   - Controls inside a panel are filled, without an outline; while on, they take a tint of their accent (`isActive`). Do not nest outlined boxes inside outlined panels.
+   - Labels and buttons use sentence case ("Play", "Hold", "Load"), never all caps with letter spacing. The monospace, uppercase style is kept for the slot badges and diagnostic text.
+5. **Icon + Text Buttons**:
    - In any button or control combining an icon and text, the icon and text form one group, centered inside the container (`Box(contentAlignment = Alignment.Center)` around the group, or `horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally)`). Never push them apart with `Arrangement.SpaceBetween` or a weighted spacer, and never leave the group start-aligned in a wider container.
 
 ---

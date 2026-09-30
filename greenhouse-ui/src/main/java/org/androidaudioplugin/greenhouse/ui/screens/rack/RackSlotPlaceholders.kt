@@ -1,26 +1,23 @@
 package org.androidaudioplugin.greenhouse.ui.screens.rack
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
+import org.androidaudioplugin.greenhouse.ui.components.ControlButton
 import org.androidaudioplugin.greenhouse.ui.components.GreenhouseMascot
 import org.androidaudioplugin.greenhouse.ui.theme.*
 import java.util.Locale
 
-private val PLACEHOLDER_CARD_RADIUS = 18.dp
 private val MASCOT_SIZE_EMPTY = 72.dp
 private val MASCOT_SIZE_LOADING = 64.dp
 private val LOADING_INDICATOR_SIZE = 24.dp
@@ -34,9 +31,7 @@ fun NoPluginInSlotView(
 ) {
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(PLACEHOLDER_CARD_RADIUS))
-            .background(StudioBackground),
+            .fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -80,27 +75,13 @@ fun NoPluginInSlotView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Button(
-                onClick = onOpenBrowser,
-                colors = ButtonDefaults.buttonColors(containerColor = SproutGreen, contentColor = StudioBackground),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                Text(
-                    text = "BROWSE PLUGINS",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 12.sp,
-                    letterSpacing = 0.5.sp
-                )
-            }
+            // Styled like the rack's other controls, green as the way forward from an empty slot
+            ControlButton(
+                label = "Browse plugins",
+                icon = Icons.Default.Add,
+                isActive = true,
+                onClick = onOpenBrowser
+            )
         }
     }
 }
@@ -118,9 +99,7 @@ fun PluginLoadingView(
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(PLACEHOLDER_CARD_RADIUS))
-            .background(StudioBackground),
+            .fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(
