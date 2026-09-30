@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,6 +35,7 @@ import org.androidaudioplugin.greenhouse.ui.components.GridVerticalScrollBar
 import org.androidaudioplugin.greenhouse.ui.components.SCROLLBAR_HORIZONTAL_OFFSET
 import org.androidaudioplugin.greenhouse.ui.components.SCROLLBAR_TRACK_PADDING
 import org.androidaudioplugin.greenhouse.ui.components.SCROLLBAR_WIDTH
+import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
 import org.androidaudioplugin.greenhouse.ui.theme.AccentGold
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
 import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
@@ -174,7 +174,7 @@ fun PluginPresetsView(
                     Text(
                         text = "${idx + 1}.",
                         fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
+                        style = tabularTextStyle,
                         fontWeight = if (isPresetSelected) FontWeight.Bold else FontWeight.Normal,
                         color = numberColor
                     )

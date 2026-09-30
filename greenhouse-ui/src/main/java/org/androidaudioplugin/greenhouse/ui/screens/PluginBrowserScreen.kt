@@ -13,6 +13,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -24,9 +26,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,11 +59,15 @@ fun PluginBrowserScreen(
         LazyListState()
     }
 
+    // Edge to edge: the list scrolls under the navigation bar, its content inset above it
+    val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomClearance = GET_PLUGINS_CLEARANCE + navigationBarPadding
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(StudioBackground)
-            .padding(16.dp)
+            .padding(start = SCREEN_PADDING, top = SCREEN_PADDING, end = SCREEN_PADDING)
     ) {
         // Header
         Row(
@@ -188,50 +199,192 @@ fun PluginBrowserScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Available Plugins List
-        if (viewModel.browser.filteredPlugins.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = TextMuted
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "No plugins found matching criteria.",
-                        color = TextSecondary,
-                        fontSize = 14.sp
-                    )
+        val isFiltering = viewModel.browser.searchQuery.isNotBlank() ||
+                viewModel.browser.selectedDeveloper != PluginBrowserController.ALL_DEVELOPERS
+
+        // Nothing for this slot: the Google Play button goes with the explanation instead of floating
+        val isNothingInstalled = viewModel.browser.filteredPlugins.isEmpty() && !isFiltering
+
+        // The list, with the Google Play button floating over its bottom
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            if (isNothingInstalled) {
+                NoPluginsInstalled(
+                    hasAnyPlugin = viewModel.browser.plugins.isNotEmpty(),
+                    slotType = targetSlot.slotType,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = navigationBarPadding)
+                )
+            } else if (viewModel.browser.filteredPlugins.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = bottomClearance),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = TextMuted
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "No plugins found matching criteria.",
+                            color = TextSecondary,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    // The last card scrolls clear of the floating button
+                    contentPadding = PaddingValues(bottom = bottomClearance),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(viewModel.browser.filteredPlugins, key = { it.pluginId ?: it.displayName }) { plugin ->
+                        val isSlotLoading = targetSlot.isLoading || viewModel.rack.isInstantiating
+
+                        PluginCard(
+                            plugin = plugin,
+                            isEnabled = !isSlotLoading,
+                            onLoad = {
+                                viewModel.loadPluginIntoSlot(viewModel.browser.targetSlotIndex, plugin)
+                                onNavigateToRack()
+                            }
+                        )
+                    }
                 }
             }
-        } else {
-            LazyColumn(
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                items(viewModel.browser.filteredPlugins, key = { it.pluginId ?: it.displayName }) { plugin ->
-                    val isSlotLoading = targetSlot.isLoading || viewModel.rack.isInstantiating
 
-                    PluginCard(
-                        plugin = plugin,
-                        isEnabled = !isSlotLoading,
-                        onLoad = {
-                            viewModel.loadPluginIntoSlot(viewModel.browser.targetSlotIndex, plugin)
-                            onNavigateToRack()
-                        }
-                    )
-                }
+            if (!isNothingInstalled) {
+                GetPluginsLink(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = navigationBarPadding + GET_PLUGINS_BOTTOM_MARGIN)
+                )
             }
         }
+    }
+}
+
+/** Where to get AAP plugins. */
+private const val AAP_PLUGINS_STORE_URL = "https://play.google.com/store/apps/developer?id=atsushieno"
+private val GET_PLUGINS_SHAPE = RoundedCornerShape(12.dp)
+private val GET_PLUGINS_ELEVATION = 8.dp
+private val SCREEN_PADDING = 16.dp
+// Between the explanation and the button under it, when no plugins are installed, both this wide at most
+private val EMPTY_STATE_MAX_WIDTH = 300.dp
+private val GET_PLUGINS_EMPTY_STATE_SPACING = 20.dp
+// Above the navigation bar, as far as the screen's side padding
+private val GET_PLUGINS_BOTTOM_MARGIN = 16.dp
+// Room left under the list for the floating button: its height and margin, and a gap above it
+private val GET_PLUGINS_CLEARANCE = 76.dp
+private const val GET_PLUGINS_TINT_ALPHA = 0.15f
+
+/** Empty state when no installed AAP plugin fits the slot: Greenhouse ships none, so point to where to get them. */
+@Composable
+private fun NoPluginsInstalled(
+    hasAnyPlugin: Boolean,
+    slotType: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.verticalScroll(rememberScrollState()),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Default.Extension,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = TextMuted
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = if (hasAnyPlugin) {
+                    "No ${slotType.lowercase(Locale.US)} plugins yet"
+                } else {
+                    "Let's find you some sounds"
+                },
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // The explanation and the button as wide as each other
+            Column(
+                modifier = Modifier.widthIn(max = EMPTY_STATE_MAX_WIDTH),
+                verticalArrangement = Arrangement.spacedBy(GET_PLUGINS_EMPTY_STATE_SPACING)
+            ) {
+                Text(
+                    text = "Greenhouse hosts Audio Plugins for Android (AAP): synths and effects " +
+                            "that you install as separate apps. Grab a few from the link below, " +
+                            "then tap refresh and they'll show up here.",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                GetPluginsLink(modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+/**
+ * Link to the AAP plugins catalog, so people can come back for more plugins: floating over the plugin
+ * list, or under the explanation when none are installed. It fits its label unless modifier sizes it.
+ */
+@Composable
+private fun GetPluginsLink(modifier: Modifier = Modifier) {
+    val uriHandler = LocalUriHandler.current
+
+    // Opaque, and lifted by a shadow: it floats over the cards scrolling under it
+    Row(
+        modifier = modifier
+            .shadow(GET_PLUGINS_ELEVATION, GET_PLUGINS_SHAPE)
+            .clip(GET_PLUGINS_SHAPE)
+            .background(StudioSurfaceElevated)
+            .background(SproutGreen.copy(alpha = GET_PLUGINS_TINT_ALPHA))
+            .border(1.dp, SproutGreen.copy(alpha = 0.8f), GET_PLUGINS_SHAPE)
+            .clickable { uriHandler.openUri(AAP_PLUGINS_STORE_URL) }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            contentDescription = null,
+            tint = SproutGreen,
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = "GET AAP PLUGINS ON GOOGLE PLAY",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = SproutGreen,
+            letterSpacing = 0.5.sp
+        )
     }
 }
 

@@ -1,6 +1,6 @@
 # Greenhouse Roadmap: Milestones & Remaining Enhancements
 
-This document outlines the architectural milestones, remaining tasks, and future feature enhancements for **Greenhouse**, the modern Android Audio Plugin (AAP) host and workstation.
+This document outlines the architectural milestones, remaining tasks, and future feature enhancements for **Greenhouse**, a modern Audio Plugins for Android (AAP) host and workstation.
 
 ---
 

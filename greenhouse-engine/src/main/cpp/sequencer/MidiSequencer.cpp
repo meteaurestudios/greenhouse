@@ -30,6 +30,20 @@ int64_t unpackTick(uint64_t playhead)
     return static_cast<int64_t>(playhead & PLAYHEAD_TICK_MASK);
 }
 
+// Amplitude ratio: 20 dB per decade
+constexpr float DECIBELS_PER_DECADE = 20.0f;
+constexpr float DECIBEL_BASE = 10.0f;
+
+/** Linear gain of a metronome level in dB: the lowest level mutes it. */
+float metronomeGain(float levelDb)
+{
+    if (levelDb <= MIN_METRONOME_LEVEL_DB) {
+        return METRONOME_SILENT_GAIN;
+    }
+
+    return std::pow(DECIBEL_BASE, levelDb / DECIBELS_PER_DECADE);
+}
+
 double framesPerTick(int32_t sampleRate, double bpm)
 {
     return static_cast<double>(sampleRate) * SECONDS_PER_MINUTE / (bpm * SEQUENCER_PPQ);
@@ -63,6 +77,7 @@ MidiSequencer::MidiSequencer(const OboeEngine& engine) : mEngine(engine)
         capacity.store(MAX_SLOT_EVENT_WORDS, std::memory_order_relaxed);
     }
 
+    mMetronomeGain.store(metronomeGain(mSettings.mMetronomeLevelDb), std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(mMutex);
     publishLocked(false);
 }
@@ -89,6 +104,15 @@ void MidiSequencer::setSettings(const SequencerSettings& settings)
     clamped.mBpm = std::clamp(settings.mBpm, MIN_SEQUENCER_BPM, MAX_SEQUENCER_BPM);
     clamped.mLengthBars = std::clamp(settings.mLengthBars, AUTO_LENGTH_BARS, MAX_SEQUENCE_LENGTH_BARS);
     clamped.mQuantizeTicks = std::clamp(settings.mQuantizeTicks, 1, static_cast<int32_t>(SEQUENCER_TICKS_PER_BAR));
+    clamped.mMetronomeLevelDb = std::clamp(settings.mMetronomeLevelDb, MIN_METRONOME_LEVEL_DB, MAX_METRONOME_LEVEL_DB);
+
+    // The metronome level only changes how loud the next clicks are: the sequence is untouched, and
+    // not republished. It is a saved setting all the same: the revision marks the session modified.
+    if (clamped.mMetronomeLevelDb != mSettings.mMetronomeLevelDb) {
+        mSettings.mMetronomeLevelDb = clamped.mMetronomeLevelDb;
+        mMetronomeGain.store(metronomeGain(clamped.mMetronomeLevelDb), std::memory_order_relaxed);
+        mRevision++;
+    }
 
     // Moved or unreachable events could leave notes hanging: they are released
     auto isTimingChanged = clamped.mLengthBars != mSettings.mLengthBars || clamped.mIsQuantizing != mSettings.mIsQuantizing ||
@@ -142,6 +166,7 @@ void MidiSequencer::startRecording()
     }
 
     mRecordingTake = ++mLastTake;
+    mFirstRecordingTake = mRecordingTake;
     // In AUTO, the first take sets the length; later takes loop over it
     mIsTakeSettingLength = mSettings.mLengthBars == AUTO_LENGTH_BARS && mEvents.empty();
     publishLocked(false);
@@ -257,10 +282,19 @@ void MidiSequencer::recordInput(int32_t slotIndex, const uint8_t* data, int32_t 
             break;
         }
 
-        mRecordedNotes[slotIndex].track(packet);
-
         auto position = getRecordPositionLocked();
+
+        if (kind == ump::EventKind::NOTE_ON) {
+            startPhraseIfPausedLocked(position);
+        }
+
+        mRecordedNotes[slotIndex].track(packet);
         mEvents.push_back(SequenceEvent{position.mTick, slotIndex, mRecordingTake, position.mPass, packet});
+
+        if (kind == ump::EventKind::NOTE_OFF) {
+            mLastNoteEndTicks = getRecordedTicksLocked(position);
+        }
+
         mIsPlaybackStale = true;
         mRevision++;
     }
@@ -331,9 +365,9 @@ void MidiSequencer::setEvents(std::vector<SequenceEvent> events, int32_t autoLen
 std::vector<uint8_t> MidiSequencer::exportStandardMidiFile()
 {
     std::lock_guard<std::mutex> lock(mMutex);
-    auto events = mEvents;
-    sortByTick(events);
-    return smf::write(events, mSettings.mBpm, getLengthTicksLocked());
+    // As it plays: quantized when quantize is on
+    auto lengthTicks = getLengthTicksLocked();
+    return smf::write(buildPlaybackEventsLocked(lengthTicks), mSettings.mBpm, lengthTicks);
 }
 
 bool MidiSequencer::importStandardMidiFile(const uint8_t* data, int32_t size)
@@ -366,6 +400,7 @@ void MidiSequencer::reset()
     mAutoLengthBars = 0;
     mSettings = SequencerSettings{};
     mBpm.store(mSettings.mBpm, std::memory_order_relaxed);
+    mMetronomeGain.store(metronomeGain(mSettings.mMetronomeLevelDb), std::memory_order_relaxed);
     resetAudioStateLocked();
     commitChangeLocked(false);
 }
@@ -407,7 +442,7 @@ void MidiSequencer::publishLocked(bool releaseHeldNotes)
     auto buffer = new PlaybackBuffer();
     buffer->mLengthTicks = getLengthTicksLocked();
     buffer->mEvents = buildPlaybackEventsLocked(buffer->mLengthTicks);
-    buffer->mRecordingTake = mRecordingTake;
+    buffer->mFirstRecordingTake = mFirstRecordingTake;
     buffer->mIsTakeSettingLength = mIsTakeSettingLength;
 
     if (releaseHeldNotes) {
@@ -447,7 +482,15 @@ std::vector<SequenceEvent> MidiSequencer::buildPlaybackEventsLocked(int64_t leng
     auto events = mEvents;
 
     auto grid = mSettings.mIsQuantizing ? static_cast<int64_t>(mSettings.mQuantizeTicks) : 0;
-    std::unordered_map<int64_t, int64_t> noteShifts;
+
+    // How far a quantized note-on moved, for its note-off to move as far
+    struct NoteShift
+    {
+        int64_t mTicks{0};
+        bool mIsWrapped{false}; // quantized onto the loop end: it plays from the start
+    };
+
+    std::unordered_map<int64_t, NoteShift> noteShifts;
 
     for (auto& event : events) {
         auto kind = ump::classify(event.mPacket);
@@ -460,13 +503,20 @@ std::vector<SequenceEvent> MidiSequencer::buildPlaybackEventsLocked(int64_t leng
 
         if (grid > 0 && kind == ump::EventKind::NOTE_ON) {
             auto quantized = std::llround(static_cast<double>(event.mTick) / static_cast<double>(grid)) * grid;
-            noteShifts[getNoteKeyOfSlot(event.mSlot, event.mPacket)] = quantized - event.mTick;
+            auto isWrapped = quantized >= lengthTicks && originalTick < lengthTicks;
+            noteShifts[getNoteKeyOfSlot(event.mSlot, event.mPacket)] = NoteShift{quantized - event.mTick, isWrapped};
             event.mTick = quantized;
         } else if (grid > 0) {
             auto shift = noteShifts.find(getNoteKeyOfSlot(event.mSlot, event.mPacket));
 
             if (shift != noteShifts.end()) {
-                event.mTick = std::max<int64_t>(event.mTick + shift->second, 0);
+                event.mTick = std::max<int64_t>(event.mTick + shift->second.mTicks, 0);
+
+                // Released in the pass its note-on wrapped from: it wraps with it, and the note stays as long
+                if (shift->second.mIsWrapped && event.mTick >= lengthTicks) {
+                    event.mTick -= lengthTicks;
+                }
+
                 noteShifts.erase(shift);
             }
         }
@@ -525,8 +575,10 @@ void MidiSequencer::commitTakeLocked()
         });
     }
 
-    auto hasTakeEvents = std::any_of(mEvents.begin(), mEvents.end(), [take](const SequenceEvent& event) {
-        return event.mTake == take;
+    // Every phrase of the recording
+    auto firstTake = mFirstRecordingTake;
+    auto hasTakeEvents = std::any_of(mEvents.begin(), mEvents.end(), [firstTake](const SequenceEvent& event) {
+        return event.mTake >= firstTake;
     });
 
     // Like a looper: the loop is as many bars as were recorded, rounded to the nearest bar.
@@ -537,7 +589,7 @@ void MidiSequencer::commitTakeLocked()
         auto lengthTicks = getLengthTicksLocked();
 
         for (auto& event : mEvents) {
-            if (event.mTake == take && event.mTick >= lengthTicks) {
+            if (event.mTake >= firstTake && event.mTick >= lengthTicks) {
                 event.mTick %= lengthTicks;
             }
         }
@@ -582,6 +634,7 @@ void MidiSequencer::endHeldNotesAtLoopEndLocked(int64_t previousLengthTicks)
 void MidiSequencer::endTakeLocked()
 {
     mRecordingTake = NO_TAKE;
+    mFirstRecordingTake = NO_TAKE;
     mIsTakeSettingLength = false;
 
     for (auto& notes : mRecordedNotes) {
@@ -668,6 +721,30 @@ MidiSequencer::RecordPosition MidiSequencer::getRecordPositionLocked() const
     return RecordPosition{unpackPass(playhead), unpackTick(playhead)};
 }
 
+/** Ticks played since the transport started, across loop passes: the distance between two positions. */
+int64_t MidiSequencer::getRecordedTicksLocked(const RecordPosition& position) const
+{
+    return static_cast<int64_t>(position.mPass) * mPublished.load(std::memory_order_relaxed)->mLengthTicks + position.mTick;
+}
+
+/**
+ * A note played after a pause starts a new phrase: no recorded note held, and at least
+ * PHRASE_GAP_TICKS since the last one ended. An empty phrase (just started, or undone) goes on.
+ */
+void MidiSequencer::startPhraseIfPausedLocked(const RecordPosition& position)
+{
+    auto isPhraseEmpty = mEvents.empty() || mEvents.back().mTake != mRecordingTake;
+    auto isNoteHeld = std::any_of(mRecordedNotes.begin(), mRecordedNotes.end(), [](const HeldNotes& notes) {
+        return !notes.isEmpty();
+    });
+
+    if (isPhraseEmpty || isNoteHeld || getRecordedTicksLocked(position) - mLastNoteEndTicks < PHRASE_GAP_TICKS) {
+        return;
+    }
+
+    mRecordingTake = ++mLastTake;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Audio thread
 // ---------------------------------------------------------------------------------------------
@@ -750,7 +827,7 @@ void MidiSequencer::advance(const PlaybackBuffer& buffer, int32_t frames)
 {
     auto lengthFrames = std::max<int64_t>(1, tickToFrame(buffer.mLengthTicks));
     auto boundary = buffer.mIsTakeSettingLength ? std::numeric_limits<int64_t>::max() : lengthFrames;
-    auto isClicking = buffer.mRecordingTake != NO_TAKE;
+    auto isClicking = buffer.mFirstRecordingTake != NO_TAKE;
     auto offset = 0;
 
     while (offset < frames) {
@@ -791,8 +868,8 @@ void MidiSequencer::emitEvents(const PlaybackBuffer& buffer, int64_t segmentStar
             break;
         }
 
-        // Recorded in this pass: it was just heard live, and plays from the next pass on
-        if (it->mTake == buffer.mRecordingTake && it->mRecordedPass >= mPass) {
+        // Recorded in this pass (by any phrase of the recording): it was just heard live, and plays from the next pass on
+        if (buffer.mFirstRecordingTake != NO_TAKE && it->mTake >= buffer.mFirstRecordingTake && it->mRecordedPass >= mPass) {
             continue;
         }
 
@@ -905,7 +982,7 @@ const uint32_t* MidiSequencer::getSlotEvents(int32_t slotIndex, int32_t& wordCou
 
 void MidiSequencer::renderMetronome(float* interleaved, int32_t frames)
 {
-    mMetronome.render(interleaved, frames, mBlockSampleRate);
+    mMetronome.render(interleaved, frames, mBlockSampleRate, mMetronomeGain.load(std::memory_order_relaxed));
 }
 
 int64_t MidiSequencer::tickToFrame(int64_t tick) const

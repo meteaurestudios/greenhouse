@@ -36,6 +36,7 @@ object RackStateSerializer {
     private const val KEY_LENGTH_BARS = "lengthBars"
     private const val KEY_IS_QUANTIZING = "isQuantizing"
     private const val KEY_QUANTIZE_TICKS = "quantizeTicks"
+    private const val KEY_METRONOME_LEVEL_DB = "metronomeLevelDb"
     private const val KEY_EVENTS_BASE64 = "eventsBase64"
     private const val KEY_AUTO_LENGTH_BARS = "autoLengthBars"
 
@@ -235,6 +236,7 @@ object RackStateSerializer {
         sequenceObj.put(KEY_LENGTH_BARS, settings.lengthBars)
         sequenceObj.put(KEY_IS_QUANTIZING, settings.isQuantizing)
         sequenceObj.put(KEY_QUANTIZE_TICKS, settings.quantizeTicks)
+        sequenceObj.put(KEY_METRONOME_LEVEL_DB, settings.metronomeLevelDb.toDouble())
         sequenceObj.put(KEY_EVENTS_BASE64, sequence.eventsBase64 ?: JSONObject.NULL)
         sequenceObj.put(KEY_AUTO_LENGTH_BARS, sequence.autoLengthBars)
         return sequenceObj
@@ -247,7 +249,8 @@ object RackStateSerializer {
             bpm = sequenceObj.optDouble(KEY_BPM, defaults.bpm),
             lengthBars = sequenceObj.optInt(KEY_LENGTH_BARS, defaults.lengthBars),
             isQuantizing = sequenceObj.optBoolean(KEY_IS_QUANTIZING, defaults.isQuantizing),
-            quantizeTicks = sequenceObj.optInt(KEY_QUANTIZE_TICKS, defaults.quantizeTicks)
+            quantizeTicks = sequenceObj.optInt(KEY_QUANTIZE_TICKS, defaults.quantizeTicks),
+            metronomeLevelDb = sequenceObj.optDouble(KEY_METRONOME_LEVEL_DB, defaults.metronomeLevelDb.toDouble()).toFloat()
         )
         val eventsBase64 = if (sequenceObj.isNull(KEY_EVENTS_BASE64)) {
             null

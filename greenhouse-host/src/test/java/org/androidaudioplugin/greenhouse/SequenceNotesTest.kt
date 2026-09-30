@@ -99,4 +99,55 @@ class SequenceNotesTest {
         assertEquals(listOf(SequenceNote(0, 60, 3000, SequenceNote.HELD)), SequencerController.extractNotes(held, LENGTH_TICKS, isRecording = true))
         assertEquals(listOf(SequenceNote(0, 60, 3000, LENGTH_TICKS)), SequencerController.extractNotes(held, LENGTH_TICKS))
     }
+
+    @Test
+    fun quantizedNotesMoveWithTheirStart() {
+        // 1/4 grid: 500 rounds to 960, its end moves as far; 1300 rounds to 960, its end moves back
+        val packed = event(500, on(60), FULL_VELOCITY16) + event(700, off(60)) +
+            event(1300, on(64), FULL_VELOCITY16) + event(1500, off(64))
+
+        val notes = SequencerController.extractNotes(packed, LENGTH_TICKS, quantizeTicks = MidiSequencer.PPQ)
+
+        assertEquals(setOf(SequenceNote(0, 60, 960, 1160), SequenceNote(0, 64, 960, 1160)), notes.toSet())
+    }
+
+    @Test
+    fun noteQuantizedOntoTheLoopEndWrapsToTheStart() {
+        // Rounds to the loop end: it plays from the start, released in the next pass
+        val packed = event(3800, on(60), FULL_VELOCITY16) + event(100, off(60))
+
+        val notes = SequencerController.extractNotes(packed, LENGTH_TICKS, quantizeTicks = MidiSequencer.PPQ)
+
+        assertEquals(listOf(SequenceNote(0, 60, 0, 140)), notes)
+    }
+
+    @Test
+    fun shortNoteQuantizedOntoTheLoopEndStaysShort() {
+        // Released before the loop end: its note-off wraps with the note-on
+        val packed = event(3800, on(60), FULL_VELOCITY16) + event(3830, off(60))
+
+        val notes = SequencerController.extractNotes(packed, LENGTH_TICKS, quantizeTicks = MidiSequencer.PPQ)
+
+        assertEquals(listOf(SequenceNote(0, 60, 0, 30)), notes)
+    }
+
+    @Test
+    fun quantizedEndStopsAtTheLoopEnd() {
+        // 1/8 grid: 3300 rounds to 3360, its end moves past the loop end
+        val packed = event(3300, on(60), FULL_VELOCITY16) + event(3800, off(60))
+
+        val notes = SequencerController.extractNotes(packed, LENGTH_TICKS, quantizeTicks = MidiSequencer.PPQ / 2)
+
+        assertEquals(listOf(SequenceNote(0, 60, 3360, LENGTH_TICKS)), notes)
+    }
+
+    @Test
+    fun heldNoteIsNotQuantizedUntilReleased() {
+        // 900 would round to 960, ahead of the playhead
+        val held = event(900, on(60), FULL_VELOCITY16)
+
+        val notes = SequencerController.extractNotes(held, LENGTH_TICKS, isRecording = true, quantizeTicks = MidiSequencer.PPQ)
+
+        assertEquals(listOf(SequenceNote(0, 60, 900, SequenceNote.HELD)), notes)
+    }
 }

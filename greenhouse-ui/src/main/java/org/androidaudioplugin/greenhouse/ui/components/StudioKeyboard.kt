@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
@@ -249,7 +248,6 @@ fun StudioKeyboard(
                         text = noteName,
                         style = TextStyle(
                             fontSize = 9.sp,
-                            fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Black,
                             color = StudioBackground
                         )
@@ -263,7 +261,6 @@ fun StudioKeyboard(
                         text = rootName,
                         style = TextStyle(
                             fontSize = 8.sp,
-                            fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
                             color = TextMuted
                         )
@@ -304,7 +301,6 @@ fun StudioKeyboard(
                         text = noteName,
                         style = TextStyle(
                             fontSize = 7.5.sp,
-                            fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Black,
                             color = StudioBackground
                         )

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <set>
 #include <vector>
 
 using namespace aaphost;
@@ -281,6 +282,20 @@ void testOverdubAndMetronome()
     };
 
     CHECK(hasClicks());
+
+    // Muted at the lowest level, without touching the sequence, but marking it modified
+    auto settings = sequencer.getSettings();
+    auto revision = sequencer.getStatus().mRevision;
+    auto eventCount = sequencer.getEvents().size();
+    settings.mMetronomeLevelDb = MIN_METRONOME_LEVEL_DB;
+    sequencer.setSettings(settings);
+    CHECK(!hasClicks());
+    CHECK(sequencer.getEvents().size() == eventCount && sequencer.getStatus().mIsRecording);
+    CHECK(sequencer.getStatus().mRevision != revision);
+    settings.mMetronomeLevelDb = DEFAULT_METRONOME_LEVEL_DB;
+    sequencer.setSettings(settings);
+    CHECK(hasClicks());
+
     sequencer.stopRecording();
     harness.run(1);
     CHECK(!hasClicks());
@@ -464,6 +479,60 @@ void testUndo()
     CHECK(sequencer.getStatus().mState == TransportState::ARMED);
 }
 
+void testPhrases()
+{
+    Harness harness(4);
+    auto& sequencer = harness.mSequencer;
+    auto takeCount = [&sequencer]() {
+        std::set<int32_t> takes;
+
+        for (const auto& event : sequencer.getEvents()) {
+            takes.insert(event.mTake);
+        }
+
+        return takes.size();
+    };
+
+    sequencer.startPlayback();
+    harness.run(1);
+    sequencer.startRecording();
+
+    // A rest shorter than the gap stays in the phrase
+    harness.send(noteOn(60));
+    harness.runTicks(BEAT);
+    harness.send(noteOff(60));
+    harness.runTicks(PHRASE_GAP_TICKS / 2);
+    harness.send(noteOn(62));
+    harness.runTicks(BEAT);
+    harness.send(noteOff(62));
+    CHECK(takeCount() == 1);
+
+    // After a longer pause, the next note starts a new phrase
+    harness.runTicks(PHRASE_GAP_TICKS + BEAT);
+    harness.send(noteOn(64));
+    harness.runTicks(BEAT);
+    harness.send(noteOff(64));
+    CHECK(takeCount() == 2);
+
+    // Undo removes the last phrase only, and recording goes on
+    sequencer.undoLastTake();
+    CHECK(takeCount() == 1 && sequencer.getEvents().size() == 4 && sequencer.getStatus().mIsRecording);
+
+    // The next note continues the (now empty) phrase: no new take for it
+    harness.runTicks(PHRASE_GAP_TICKS + BEAT);
+    harness.send(noteOn(65));
+    harness.runTicks(BEAT);
+    harness.send(noteOff(65));
+    sequencer.stopRecording();
+    CHECK(takeCount() == 2);
+
+    // Undone after recording: the last phrase, then the one before
+    sequencer.undoLastTake();
+    CHECK(takeCount() == 1 && sequencer.getEvents().size() == 4);
+    sequencer.undoLastTake();
+    CHECK(sequencer.getEvents().empty());
+}
+
 void testUndoingEveryTakeWhileRecordingInAuto()
 {
     Harness harness(AUTO_LENGTH_BARS);
@@ -511,6 +580,39 @@ void testStandardMidiFile()
     Harness harness(AUTO_LENGTH_BARS);
     CHECK(harness.mSequencer.importStandardMidiFile(bytes.data(), static_cast<int32_t>(bytes.size())));
     CHECK(harness.mSequencer.getStatus().mLengthTicks == BAR);
+
+    // Exported as it plays: quantized when quantize is on, as recorded otherwise
+    constexpr int64_t OFF_GRID_TICK = BEAT + BEAT / 8;
+    Harness offGrid;
+    offGrid.mSequencer.setEvents({event(OFF_GRID_TICK, noteOn(60)), event(OFF_GRID_TICK + BEAT / 2, noteOff(60))}, 0);
+    auto exportedTick = [&offGrid, &imported]() {
+        auto exported = offGrid.mSequencer.exportStandardMidiFile();
+        return smf::read(exported.data(), static_cast<int32_t>(exported.size()), SLOT_COUNT, imported) && !imported.mEvents.empty()
+            ? imported.mEvents[0].mTick
+            : -1;
+    };
+
+    CHECK(exportedTick() == OFF_GRID_TICK);
+    auto settings = offGrid.mSequencer.getSettings();
+    settings.mIsQuantizing = true;
+    settings.mQuantizeTicks = BEAT;
+    offGrid.mSequencer.setSettings(settings);
+    CHECK(exportedTick() == BEAT);
+
+    // A short note quantized onto the loop end wraps to the start with its note-off: it stays short
+    constexpr int64_t LATE_TICK = BAR - BEAT / 8;
+    constexpr int64_t LATE_LENGTH = BEAT / 16;
+    Harness late;
+    late.mSequencer.setEvents({event(LATE_TICK, noteOn(60)), event(LATE_TICK + LATE_LENGTH, noteOff(60))}, 0);
+    late.mSequencer.setSettings(settings);
+    auto lateExported = late.mSequencer.exportStandardMidiFile();
+    CHECK(smf::read(lateExported.data(), static_cast<int32_t>(lateExported.size()), SLOT_COUNT, imported));
+    CHECK(imported.mEvents.size() == 2);
+
+    if (imported.mEvents.size() == 2) {
+        CHECK(imported.mEvents[0].mTick == 0 && isNoteOn(imported.mEvents[0].mPacket.mWords[0]));
+        CHECK(imported.mEvents[1].mTick == LATE_LENGTH);
+    }
 }
 
 } // namespace
@@ -526,6 +628,7 @@ int main()
     testNoStuckNotes();
     testReleaseSlotNotes();
     testUndo();
+    testPhrases();
     testUndoingEveryTakeWhileRecordingInAuto();
     testStandardMidiFile();
 

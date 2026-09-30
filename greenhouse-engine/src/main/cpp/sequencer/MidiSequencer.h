@@ -15,6 +15,8 @@ namespace aaphost
 constexpr int32_t MAX_SEQUENCER_EVENTS_PER_BLOCK = 256;
 constexpr int32_t MAX_SLOT_EVENT_WORDS = MAX_SEQUENCER_EVENTS_PER_BLOCK * (1 + ump::MAX_PACKET_WORDS);
 constexpr uint32_t TRANSPORT_COMMAND_CAPACITY = 32;
+// While recording, a note played after this long with no key held starts a new phrase (the unit of undo)
+constexpr int64_t PHRASE_GAP_TICKS = SEQUENCER_TICKS_PER_BAR;
 
 enum class TransportState : int32_t
 {
@@ -144,6 +146,11 @@ public:
         clear();
     }
 
+    bool isEmpty() const
+    {
+        return mCount == 0;
+    }
+
     void clear()
     {
         mNotes.clear();
@@ -189,7 +196,11 @@ public:
     void stopRecording();
     /** Stops the transport and ends recording. */
     void stop();
-    /** Removes the last take. While recording, discards what the take in progress recorded (or the previous take if it is empty): recording goes on. */
+    /**
+     * Removes the last take. While recording, a take is a phrase (notes played with less than
+     * PHRASE_GAP_TICKS of silence between them): undo discards the phrase in progress, or the
+     * previous take if it is empty, and recording goes on.
+     */
     void undoLastTake();
     void clear();
 
@@ -212,6 +223,7 @@ public:
      */
     void setEvents(std::vector<SequenceEvent> events, int32_t autoLengthBars);
 
+    /** The sequence as it plays (quantized when quantize is on), as a Standard MIDI File. */
     std::vector<uint8_t> exportStandardMidiFile();
     /** Replaces the sequence and tempo with a Standard MIDI File. Returns false if it cannot be read. */
     bool importStandardMidiFile(const uint8_t* data, int32_t size);
@@ -252,7 +264,8 @@ private:
         std::vector<SequenceEvent> mEvents; // in time order, quantized
         int64_t mLengthTicks{SEQUENCER_TICKS_PER_BAR};
         bool mIsTakeSettingLength{false}; // plays on past the length instead of looping
-        int32_t mRecordingTake{NO_TAKE};
+        // First take (phrase) of the recording in progress, NO_TAKE if none: it and the later ones are being recorded
+        int32_t mFirstRecordingTake{NO_TAKE};
         // Changes when held notes must be released because events moved or went away
         uint64_t mFlushSerial{0};
     };
@@ -287,6 +300,8 @@ private:
     TransportState getRequestedStateLocked() const;
     bool isAwaitingFirstNoteLocked() const;
     RecordPosition getRecordPositionLocked() const;
+    int64_t getRecordedTicksLocked(const RecordPosition& position) const;
+    void startPhraseIfPausedLocked(const RecordPosition& position);
 
     // Audio thread
     void processCommands();
@@ -307,7 +322,11 @@ private:
     // Loop length the first take set while the length setting is AUTO_LENGTH_BARS; 0 until then
     int32_t mAutoLengthBars{0};
     int32_t mLastTake{NO_TAKE};
+    // Take of the phrase being recorded, and the first one of this recording (NO_TAKE when not recording)
     int32_t mRecordingTake{NO_TAKE};
+    int32_t mFirstRecordingTake{NO_TAKE};
+    // When the last recorded note ended, in ticks played since the start of the transport (see getRecordedTicksLocked())
+    int64_t mLastNoteEndTicks{0};
     bool mIsTakeSettingLength{false};
     // Recorded events wait for the next getStatus() to be published: they only play from the next pass
     bool mIsPlaybackStale{false};
@@ -322,6 +341,8 @@ private:
     // -- Shared with the audio thread --
     std::atomic<PlaybackBuffer*> mPublished{nullptr};
     std::atomic<double> mBpm{DEFAULT_SEQUENCER_BPM};
+    // Linear, from the level in dB (set from the default settings on construction)
+    std::atomic<float> mMetronomeGain{METRONOME_SILENT_GAIN};
     // Single-producer (control thread, under mMutex), single-consumer (audio thread) queue
     std::array<Command, TRANSPORT_COMMAND_CAPACITY> mCommands{};
     std::atomic<uint32_t> mCommandWrite{0};

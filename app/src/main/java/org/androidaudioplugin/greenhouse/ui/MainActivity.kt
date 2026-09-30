@@ -1,8 +1,11 @@
 package org.androidaudioplugin.greenhouse.ui
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
@@ -14,6 +17,12 @@ class MainActivity : ComponentActivity() {
     private val viewModel: HostViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Edge to edge on every Android version, as Android 15+ always is: screens scroll under the
+        // navigation bar instead of stopping above it. Dark bars, with light icons, for the dark theme.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+        )
         super.onCreate(savedInstanceState)
 
         lifecycle.addObserver(viewModel)

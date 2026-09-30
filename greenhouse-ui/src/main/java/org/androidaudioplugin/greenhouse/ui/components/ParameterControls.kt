@@ -34,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +41,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.ParameterInformation
+import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
 import org.androidaudioplugin.greenhouse.ui.theme.BerryRose
 import org.androidaudioplugin.greenhouse.ui.theme.StudioBackground
 import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
@@ -149,7 +149,6 @@ fun BooleanParameterToggle(
                 text = currentLabel.uppercase(),
                 fontSize = 9.5.sp,
                 fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
                 color = textColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -345,7 +344,7 @@ fun IntParameterStepper(
                     text = currentValue.toString(),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
+                    style = tabularTextStyle,
                     color = activeColor,
                     maxLines = 1,
                     textAlign = TextAlign.Center

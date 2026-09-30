@@ -11,7 +11,8 @@ constexpr int32_t SETTINGS_BPM = 0;
 constexpr int32_t SETTINGS_LENGTH_BARS = 1;
 constexpr int32_t SETTINGS_IS_QUANTIZING = 2;
 constexpr int32_t SETTINGS_QUANTIZE_TICKS = 3;
-constexpr int32_t SETTINGS_SIZE = 4;
+constexpr int32_t SETTINGS_METRONOME_LEVEL_DB = 4;
+constexpr int32_t SETTINGS_SIZE = 5;
 
 constexpr int32_t STATUS_STATE = 0;
 constexpr int32_t STATUS_IS_RECORDING = 1;
@@ -54,6 +55,7 @@ Java_org_androidaudioplugin_greenhouse_core_MidiSequencer_nativeSetSettings(
     settings.mLengthBars = static_cast<int32_t>(v[SETTINGS_LENGTH_BARS]);
     settings.mIsQuantizing = v[SETTINGS_IS_QUANTIZING] != 0.0;
     settings.mQuantizeTicks = static_cast<int32_t>(v[SETTINGS_QUANTIZE_TICKS]);
+    settings.mMetronomeLevelDb = static_cast<float>(v[SETTINGS_METRONOME_LEVEL_DB]);
     getSequencer().setSettings(settings);
 }
 
@@ -71,6 +73,7 @@ Java_org_androidaudioplugin_greenhouse_core_MidiSequencer_nativeGetSettings(
     v[SETTINGS_LENGTH_BARS] = settings.mLengthBars;
     v[SETTINGS_IS_QUANTIZING] = settings.mIsQuantizing ? 1.0 : 0.0;
     v[SETTINGS_QUANTIZE_TICKS] = settings.mQuantizeTicks;
+    v[SETTINGS_METRONOME_LEVEL_DB] = settings.mMetronomeLevelDb;
     env->SetDoubleArrayRegion(out, 0, SETTINGS_SIZE, v);
 }
 

@@ -15,27 +15,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.greenhouse.data.SlotHostSettings
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.components.HostFader
+import org.androidaudioplugin.greenhouse.ui.components.LevelFader
+import org.androidaudioplugin.greenhouse.ui.components.formatLevelDb
 import org.androidaudioplugin.greenhouse.ui.host.RackController
+import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
 import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
 import org.androidaudioplugin.greenhouse.ui.theme.StudioSurface
 import org.androidaudioplugin.greenhouse.ui.theme.TextSecondary
-import java.util.Locale
-import kotlin.math.pow
 import kotlin.math.roundToInt
 
 private const val PERCENT_SCALE = 100f
-// Level fader taper: 0 dB sits at this position, and the level moves slowly around it and faster
-// towards the ends (dB grows with the distance from it raised to this exponent)
-private const val LEVEL_FADER_UNITY_POSITION = 0.7f
-private const val LEVEL_FADER_CURVE_EXPONENT = 2f
 private val HOST_CONTROL_HORIZONTAL_PADDING = 10.dp
 private val COMPACT_HOST_CONTROL_HORIZONTAL_PADDING = 8.dp
 // Room for the widest value of each control ("+12.0 dB", "100%"), so the unit is never cut off and
@@ -87,7 +83,6 @@ fun HostControl(
             Text(
                 text = label,
                 fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
                 color = TextSecondary
             )
 
@@ -100,12 +95,11 @@ fun HostControl(
             .fillMaxHeight()
 
         if (isInstrument) {
-            HostFader(
-                position = levelDbToFaderPosition(slot.levelDb),
-                defaultPosition = levelDbToFaderPosition(SlotHostSettings.DEFAULT_LEVEL_DB),
-                onPositionChange = { position ->
-                    onLevelChange(faderPositionToLevelDb(position))
-                },
+            LevelFader(
+                levelDb = slot.levelDb,
+                minLevelDb = SlotHostSettings.MIN_LEVEL_DB,
+                maxLevelDb = SlotHostSettings.MAX_LEVEL_DB,
+                onLevelChange = onLevelChange,
                 modifier = faderModifier
             )
         } else {
@@ -119,7 +113,7 @@ fun HostControl(
 
         if (!isCompact) {
             val valueText = if (isInstrument) {
-                formatLevel(slot.levelDb)
+                formatLevelDb(slot.levelDb, SlotHostSettings.MIN_LEVEL_DB)
             } else {
                 "${(slot.mix * PERCENT_SCALE).roundToInt()}%"
             }
@@ -127,7 +121,7 @@ fun HostControl(
             Text(
                 text = valueText,
                 fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
+                style = tabularTextStyle,
                 color = SproutGreen,
                 textAlign = TextAlign.End,
                 maxLines = 1,
@@ -142,37 +136,4 @@ fun HostControl(
             )
         }
     }
-}
-
-private fun formatLevel(levelDb: Float): String {
-    if (levelDb <= SlotHostSettings.MIN_LEVEL_DB) {
-        return "-∞ dB"
-    }
-
-    return String.format(Locale.US, "%+.1f dB", levelDb)
-}
-
-private fun faderPositionToLevelDb(position: Float): Float {
-    val unity = LEVEL_FADER_UNITY_POSITION
-
-    if (position >= unity) {
-        val distance = (position - unity) / (1f - unity)
-        return SlotHostSettings.MAX_LEVEL_DB * distance.pow(LEVEL_FADER_CURVE_EXPONENT)
-    }
-
-    val distance = (unity - position) / unity
-    return SlotHostSettings.MIN_LEVEL_DB * distance.pow(LEVEL_FADER_CURVE_EXPONENT)
-}
-
-private fun levelDbToFaderPosition(levelDb: Float): Float {
-    val unity = LEVEL_FADER_UNITY_POSITION
-    val inverseExponent = 1f / LEVEL_FADER_CURVE_EXPONENT
-
-    if (levelDb >= SlotHostSettings.DEFAULT_LEVEL_DB) {
-        val ratio = (levelDb / SlotHostSettings.MAX_LEVEL_DB).coerceIn(0f, 1f)
-        return unity + (1f - unity) * ratio.pow(inverseExponent)
-    }
-
-    val ratio = (levelDb / SlotHostSettings.MIN_LEVEL_DB).coerceIn(0f, 1f)
-    return unity - unity * ratio.pow(inverseExponent)
 }

@@ -28,7 +28,7 @@ void Metronome::schedule(int32_t frameOffset, bool isAccent)
     mPending[mPendingCount++] = Click{frameOffset, isAccent};
 }
 
-void Metronome::startClick(bool isAccent, int32_t sampleRate)
+void Metronome::startClick(bool isAccent, int32_t sampleRate, float gain)
 {
     auto frequency = isAccent ? METRONOME_ACCENT_FREQUENCY_HZ : METRONOME_BEAT_FREQUENCY_HZ;
     auto clickFrames = std::max(1, static_cast<int32_t>(METRONOME_CLICK_SECONDS * static_cast<float>(sampleRate)));
@@ -36,17 +36,17 @@ void Metronome::startClick(bool isAccent, int32_t sampleRate)
     mRemainingFrames = clickFrames;
     mPhase = 0.0f;
     mPhaseIncrement = TWO_PI * frequency / static_cast<float>(sampleRate);
-    mLevel = METRONOME_GAIN;
+    mLevel = METRONOME_GAIN * gain;
     mDecay = std::pow(METRONOME_CLICK_END_LEVEL, 1.0f / static_cast<float>(clickFrames));
 }
 
-void Metronome::render(float* interleaved, int32_t frames, int32_t sampleRate)
+void Metronome::render(float* interleaved, int32_t frames, int32_t sampleRate, float gain)
 {
     auto nextClick = 0;
 
     for (int32_t i = 0; i < frames; i++) {
         while (nextClick < mPendingCount && mPending[nextClick].mFrameOffset <= i) {
-            startClick(mPending[nextClick].mIsAccent, sampleRate);
+            startClick(mPending[nextClick].mIsAccent, sampleRate, gain);
             nextClick++;
         }
 

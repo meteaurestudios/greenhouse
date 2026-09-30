@@ -50,6 +50,7 @@ import org.androidaudioplugin.greenhouse.core.MidiControllerManager
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.components.MidiDin5Icon
+import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
 import org.androidaudioplugin.greenhouse.ui.theme.DangerRed
 import org.androidaudioplugin.greenhouse.ui.theme.NeonCyan
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
@@ -368,7 +369,7 @@ fun DspCpuMeter(
             text = dspValueText,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
+            style = tabularTextStyle,
             textAlign = TextAlign.End,
             modifier = Modifier.width(DSP_PERCENT_TEXT_WIDTH),
             maxLines = 1,
@@ -528,8 +529,7 @@ fun MidiDeviceSelectionDialog(
                                 Text(
                                     text = "DISCONNECT",
                                     fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }

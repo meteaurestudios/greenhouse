@@ -10,13 +10,13 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,8 +32,11 @@ private val KEYBOARD_HEIGHT = 90.dp
 private val KEYBOARD_BLACK_KEY_HEIGHT = 52.dp
 private const val KEYBOARD_NUM_WHITE_KEYS = 14
 private val KEYBOARD_PANEL_CORNER_RADIUS = 12.dp
-private val KEYBOARD_CONTROL_BUTTON_SIZE = 26.dp
-private val KEYBOARD_CONTROL_ICON_SIZE = 14.dp
+// Same height as the sequencer controls under it
+private val KEYBOARD_CONTROL_BUTTON_SIZE = 32.dp
+private val KEYBOARD_CONTROL_ICON_SIZE = 16.dp
+private val KEYBOARD_FOLD_ICON_SIZE = 20.dp
+private val KEYBOARD_CONTROL_TEXT_SIZE = 10.5.sp
 private val LOOP_PROGRESS_HEIGHT = 2.5.dp
 // Clear of the button's rounded corners
 private val LOOP_PROGRESS_INSET = 6.dp
@@ -56,8 +59,9 @@ fun MidiKeyboardSection(
     val noteOnStates = viewModel.keyboard.noteOnStates
     val octave = viewModel.keyboard.octave
     val isHoldEnabled = viewModel.keyboard.isHoldActive
-    var isKeyboardFolded by remember { mutableStateOf(false) }
-    var isSequencerVisible by remember { mutableStateOf(false) }
+    // Saveable: kept while the plugin browser is open, as the rack screen leaves the composition
+    var isKeyboardFolded by rememberSaveable { mutableStateOf(false) }
+    var isSequencerVisible by rememberSaveable { mutableStateOf(false) }
     var showMidiMenuDialog by remember { mutableStateOf(false) }
 
     // Lowest note of the keys, covering octaves 0..9
@@ -142,7 +146,10 @@ fun MidiKeyboardSection(
                         decrementDescription = "Octave Down",
                         incrementDescription = "Octave Up",
                         onDecrement = { viewModel.keyboard.octave = octave - 1 },
-                        onIncrement = { viewModel.keyboard.octave = octave + 1 }
+                        onIncrement = { viewModel.keyboard.octave = octave + 1 },
+                        height = KEYBOARD_CONTROL_BUTTON_SIZE,
+                        iconSize = KEYBOARD_CONTROL_ICON_SIZE,
+                        fontSize = KEYBOARD_CONTROL_TEXT_SIZE
                     )
 
                     // Hide / Fold Toggle Button
@@ -169,7 +176,7 @@ fun MidiKeyboardSection(
                                 "Hide Keyboard"
                             },
                             tint = TextSecondary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(KEYBOARD_FOLD_ICON_SIZE)
                         )
                     }
                 }
@@ -241,7 +248,8 @@ private fun SequenceToggleButton(
         label = "SEQUENCE",
         isOn = isOn,
         modifier = if (status.state == TransportState.PLAYING) {
-            Modifier.loopProgress(positionProvider = { sequencer.positionTick }, lengthTicks = status.lengthTicks)
+            val playheadTick = rememberPlayheadTick(sequencer)
+            Modifier.loopProgress(positionProvider = { playheadTick.doubleValue }, lengthTicks = status.lengthTicks)
         } else {
             Modifier
         }
@@ -289,8 +297,7 @@ private fun KeyboardToggleButton(
     ) {
         Text(
             text = label,
-            fontSize = 9.5.sp,
-            fontFamily = FontFamily.Monospace,
+            fontSize = KEYBOARD_CONTROL_TEXT_SIZE,
             fontWeight = FontWeight.Bold,
             color = if (isOn) {
                 SproutGreen
@@ -302,15 +309,14 @@ private fun KeyboardToggleButton(
     }
 }
 
-/** An octave step at one end of the octave stepper. */
 /** Position in the loop, drawn as a rounded line near the bottom. The position is read while drawing, so it moves without recomposing. */
-private fun Modifier.loopProgress(positionProvider: () -> Long, lengthTicks: Long): Modifier {
+private fun Modifier.loopProgress(positionProvider: () -> Double, lengthTicks: Long): Modifier {
     return drawBehind {
         val thickness = LOOP_PROGRESS_HEIGHT.toPx()
         val y = size.height - LOOP_PROGRESS_BOTTOM_MARGIN.toPx() - thickness / 2
         val start = LOOP_PROGRESS_INSET.toPx()
         val end = size.width - start
-        val played = start + (end - start) * positionProvider().coerceIn(0L, lengthTicks) / lengthTicks
+        val played = start + (end - start) * (positionProvider() / lengthTicks).toFloat().coerceIn(0f, 1f)
         drawLine(StudioPanelBorder, Offset(start, y), Offset(end, y), thickness, StrokeCap.Round)
         drawLine(SproutGreen, Offset(start, y), Offset(played, y), thickness, StrokeCap.Round)
     }

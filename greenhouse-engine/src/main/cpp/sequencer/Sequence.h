@@ -27,6 +27,12 @@ constexpr int32_t MAX_SEQUENCER_SLOTS = 16;
 constexpr int32_t NO_TAKE = -1;
 constexpr int32_t DEFAULT_QUANTIZE_TICKS = SEQUENCER_PPQ / 4; // 1/16
 
+// Metronome level in dB, 0 dB peaking at -12 dBFS (see METRONOME_GAIN). It only clicks while
+// recording, so the range stays audible: the lowest level mutes it, the highest peaks at full scale.
+constexpr float MIN_METRONOME_LEVEL_DB = -30.0f;
+constexpr float MAX_METRONOME_LEVEL_DB = 12.0f;
+constexpr float DEFAULT_METRONOME_LEVEL_DB = 0.0f;
+
 /** Sequencer settings, saved with the session. */
 struct SequencerSettings
 {
@@ -34,6 +40,7 @@ struct SequencerSettings
     int32_t mLengthBars{AUTO_LENGTH_BARS};
     bool mIsQuantizing{false}; // quantize note starts on playback
     int32_t mQuantizeTicks{DEFAULT_QUANTIZE_TICKS}; // quantize grid
+    float mMetronomeLevelDb{DEFAULT_METRONOME_LEVEL_DB};
 };
 
 /** A MIDI event of the sequence: a UMP packet sent to a rack slot at a musical position. */

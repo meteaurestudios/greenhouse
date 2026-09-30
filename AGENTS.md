@@ -1,6 +1,6 @@
 # Greenhouse Development Guide (`AGENTS.md`)
 
-This repository is **`greenhouse`**, a modern Jetpack Compose Android host application for testing and playing **Android Audio Plugins (AAP)**.
+This repository is **`greenhouse`**, a modern Jetpack Compose Android host application for testing and playing **Audio Plugins for Android (AAP)**.
 
 ---
 
@@ -91,6 +91,8 @@ cmake -S greenhouse-engine/src/test/cpp -B build/sequencer-test && cmake --build
    - Standard Material 3 `IconButton` enforces a minimum 48dp interactive component size layout. When precise custom dimensions are needed without forced padding, use `Box(modifier = Modifier.size(...).clip(CircleShape).clickable { ... })`.
 3. **Window Insets**:
    - Account for system navigation bar insets using `WindowInsets.navigationBars` or `WindowInsets.systemBars`.
+4. **Icon + Text Buttons**:
+   - In any button or control combining an icon and text, the icon and text form one group, centered inside the container (`Box(contentAlignment = Alignment.Center)` around the group, or `horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally)`). Never push them apart with `Arrangement.SpaceBetween` or a weighted spacer, and never leave the group start-aligned in a wider container.
 
 ---
 

@@ -43,7 +43,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,6 +59,7 @@ import org.androidaudioplugin.greenhouse.ui.components.SCROLLBAR_TRACK_PADDING
 import org.androidaudioplugin.greenhouse.ui.components.SCROLLBAR_WIDTH
 import org.androidaudioplugin.greenhouse.ui.model.ParameterType
 import org.androidaudioplugin.greenhouse.ui.model.inferredType
+import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
 import org.androidaudioplugin.greenhouse.ui.theme.BlossomCoral
 import org.androidaudioplugin.greenhouse.ui.theme.PeriwinkleBlue
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
@@ -235,8 +235,7 @@ fun ParameterControlRack(
                                     cursorBrush = SolidColor(SproutGreen),
                                     textStyle = TextStyle(
                                         color = TextPrimary,
-                                        fontSize = 10.sp,
-                                        fontFamily = FontFamily.Monospace
+                                        fontSize = 10.sp
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -251,7 +250,6 @@ fun ParameterControlRack(
                                                     text = "Search...",
                                                     color = TextMuted,
                                                     fontSize = 10.sp,
-                                                    fontFamily = FontFamily.Monospace,
                                                     maxLines = 1
                                                 )
                                             }
@@ -268,7 +266,7 @@ fun ParameterControlRack(
                                 Text(
                                     text = "${filteredParameters.size}/${parameters.size}",
                                     fontSize = 9.sp,
-                                    fontFamily = FontFamily.Monospace,
+                                    style = tabularTextStyle,
                                     color = TextMuted,
                                     maxLines = 1
                                 )
@@ -336,7 +334,7 @@ fun ParameterControlRack(
                                         "Filter (${parameters.size})"
                                     },
                                     fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace,
+                                    style = tabularTextStyle,
                                     color = TextSecondary,
                                     maxLines = 1,
                                     softWrap = false,
@@ -509,7 +507,7 @@ fun ParameterCard(
                     text = valueText,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
+                    style = tabularTextStyle,
                     letterSpacing = 0.2.sp,
                     color = activeAccent,
                     maxLines = 1,

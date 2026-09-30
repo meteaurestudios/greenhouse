@@ -20,6 +20,7 @@ import org.androidaudioplugin.greenhouse.data.SequenceState
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** A note of the sequence, as the read-only lane draws it. */
 data class SequenceNote(
@@ -102,10 +103,14 @@ class SequencerController(
          * passes overlap in time. A note ending before it starts was held across the loop end: it is
          * split into the end of the loop and its start. Notes without a note-off are [SequenceNote.HELD]
          * while [isRecording], and end at the loop end otherwise.
+         *
+         * With a [quantizeTicks] grid (0: none), the notes are where the engine plays them: each start
+         * on the nearest grid line (the loop end wraps to the start), its end moved with it, up to the
+         * loop end. Held notes stay where they were played until released.
          */
-        fun extractNotes(packed: IntArray, lengthTicks: Long, isRecording: Boolean = false): List<SequenceNote> {
+        fun extractNotes(packed: IntArray, lengthTicks: Long, isRecording: Boolean = false, quantizeTicks: Int = 0): List<SequenceNote> {
             val notes = mutableListOf<SequenceNote>()
-            val openNotes = HashMap<Long, SequenceNote>()
+            val openNotes = HashMap<Long, OpenNote>()
 
             for (index in 0..packed.size - MidiSequencer.EVENT_STRIDE step MidiSequencer.EVENT_STRIDE) {
                 val tick = packed[index + MidiSequencer.EVENT_TICK].toLong()
@@ -123,14 +128,21 @@ class SequencerController(
                 val key = (slot.toLong() shl SLOT_KEY_SHIFT) or (word0 and UMP_GROUP_CHANNEL_NOTE_MASK).toLong()
                 val isMidi1ZeroVelocity = type == UMP_MIDI1_CHANNEL_VOICE && (word0 and UMP_DATA7_MASK) == 0
 
-                // A retriggered note ends the previous one
+                val isNoteOn = status == UMP_STATUS_NOTE_ON && !isMidi1ZeroVelocity
                 val open = openNotes.remove(key)
 
                 if (open != null) {
-                    addNote(notes, open, tick, lengthTicks)
+                    // A retriggered note ends the previous one where the new one starts
+                    val end = if (isNoteOn) {
+                        quantizeStart(tick, quantizeTicks, lengthTicks)
+                    } else {
+                        releaseTick(tick, open, lengthTicks)
+                    }
+
+                    addNote(notes, open.note, end, lengthTicks)
                 }
 
-                if (status == UMP_STATUS_NOTE_ON && !isMidi1ZeroVelocity) {
+                if (isNoteOn) {
                     val velocity = if (type == UMP_MIDI1_CHANNEL_VOICE) {
                         (word0 and UMP_DATA7_MASK).toFloat() / UMP_MIDI1_VELOCITY_MAX
                     } else {
@@ -139,19 +151,54 @@ class SequencerController(
                     }
 
                     val note = (word0 ushr UMP_NOTE_SHIFT) and UMP_DATA7_MASK
-                    openNotes[key] = SequenceNote(slot, note, tick, tick, take, velocity)
+                    val quantized = quantize(tick, quantizeTicks)
+                    val start = quantizeStart(tick, quantizeTicks, lengthTicks)
+                    val isWrapped = start != quantized
+                    openNotes[key] = OpenNote(SequenceNote(slot, note, start, start, take, velocity), quantized - tick, tick, isWrapped)
                 }
             }
 
             for (open in openNotes.values) {
                 if (isRecording) {
-                    notes.add(open.copy(endTick = SequenceNote.HELD))
+                    // Where it was played until released: quantized, it could start ahead of the playhead
+                    notes.add(open.note.copy(startTick = open.playedTick, endTick = SequenceNote.HELD))
                 } else {
-                    addNote(notes, open, lengthTicks, lengthTicks)
+                    addNote(notes, open.note, lengthTicks, lengthTicks)
                 }
             }
 
             return notes
+        }
+
+        /** The nearest line of the quantizeTicks grid, as the engine rounds it. No grid: tick. */
+        private fun quantize(tick: Long, quantizeTicks: Int): Long {
+            if (quantizeTicks <= 0) {
+                return tick
+            }
+
+            return (tick.toDouble() / quantizeTicks).roundToLong() * quantizeTicks
+        }
+
+        /** A quantized note start: quantized onto the loop end, it wraps to the start. */
+        private fun quantizeStart(tick: Long, quantizeTicks: Int, lengthTicks: Long): Long {
+            val quantized = quantize(tick, quantizeTicks)
+
+            if (quantized >= lengthTicks && tick < lengthTicks) {
+                return quantized - lengthTicks
+            }
+
+            return quantized
+        }
+
+        /** A note-off moved as far as its note-on: released in the pass its note-on wrapped from, it wraps with it. */
+        private fun releaseTick(tick: Long, open: OpenNote, lengthTicks: Long): Long {
+            val shifted = tick + open.shift
+
+            if (open.isWrapped && shifted >= lengthTicks) {
+                return shifted - lengthTicks
+            }
+
+            return shifted.coerceIn(0L, lengthTicks)
         }
 
         private fun addNote(notes: MutableList<SequenceNote>, open: SequenceNote, end: Long, lengthTicks: Long) {
@@ -165,6 +212,12 @@ class SequencerController(
             notes.add(open.copy(startTick = 0L, endTick = end))
         }
     }
+
+    /**
+     * A note waiting for its note-off, which moves by shift as the quantized note-on did. playedTick: its
+     * unquantized start. isWrapped: quantized onto the loop end, it plays from the start.
+     */
+    private class OpenNote(val note: SequenceNote, val shift: Long, val playedTick: Long, val isWrapped: Boolean)
 
     /** What the UI shows of the sequence, read together. */
     private class Snapshot(val status: SequencerStatus, val settings: SequencerSettings, val notes: List<SequenceNote>)
@@ -183,6 +236,10 @@ class SequencerController(
 
     /** Tick of the playhead while playing. Separate from [status] so it can change without recomposing its readers. */
     var positionTick by mutableLongStateOf(0L)
+        private set
+
+    /** [System.nanoTime] when [positionTick] was read, to move the playhead on between polls. */
+    var positionNanos = 0L
         private set
 
     val hasEvents: Boolean
@@ -290,7 +347,7 @@ class SequencerController(
                 }
 
                 apply(snapshot)
-                postStatus("MIDI file imported: ${status.eventCount} events at ${formatBpm(settings.bpm)} BPM.")
+                postStatus("MIDI file imported: ${status.eventCount} events at ${formatBpm(settings.bpm)} bpm.")
             }
         }
     }
@@ -340,6 +397,7 @@ class SequencerController(
     /** Reads the engine on the calling thread and publishes the results on Main. */
     suspend fun poll() {
         val polledPosition = sequencer.getPositionTick()
+        val polledNanos = System.nanoTime()
         val polled = sequencer.status
         val snapshot = if (polled.revision != polledRevision) {
             snapshot(polled)
@@ -349,6 +407,7 @@ class SequencerController(
 
         withContext(Dispatchers.Main) {
             positionTick = polledPosition
+            positionNanos = polledNanos
             status = polled
 
             if (snapshot != null) {
@@ -358,7 +417,14 @@ class SequencerController(
     }
 
     private fun snapshot(polled: SequencerStatus = sequencer.status): Snapshot {
-        return Snapshot(polled, sequencer.settings, extractNotes(sequencer.getEvents(), polled.lengthTicks, polled.isRecording))
+        val settings = sequencer.settings
+        val quantizeTicks = if (settings.isQuantizing) {
+            settings.quantizeTicks
+        } else {
+            0
+        }
+
+        return Snapshot(polled, settings, extractNotes(sequencer.getEvents(), polled.lengthTicks, polled.isRecording, quantizeTicks))
     }
 
     private fun apply(snapshot: Snapshot) {

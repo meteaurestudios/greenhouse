@@ -1,7 +1,7 @@
 package org.androidaudioplugin.greenhouse.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,8 +28,8 @@ private const val FADER_MIN_TRAVEL_PX = 1f
  * Small horizontal fader for host-side controls, drawn like [FlatRotaryKnob] laid flat. It works in
  * fader positions (0..1), so the caller picks the taper. Dragging moves the position relative to
  * where it was; travel past either end is kept, so the thumb only moves again once the finger comes
- * back to where it left the track. Double-tap goes back to [defaultPosition], marked by a dot on the
- * track.
+ * back to where it left the track. It keeps every drag started on it, vertical ones included.
+ * Double-tap goes back to [defaultPosition], marked by a dot on the track.
  */
 @Composable
 fun HostFader(
@@ -58,7 +58,9 @@ fun HostFader(
                 // Unclamped, so overshoot past 0 or 1 has to be dragged back before the value moves
                 var dragPosition = currentPosition
 
-                detectHorizontalDragGestures(
+                // A drag started on the fader is its own in any direction, only its horizontal part
+                // moving it: a vertical wobble must not scroll the page or close a bottom sheet under it
+                detectDragGestures(
                     onDragStart = {
                         dragPosition = currentPosition
                     }
@@ -66,7 +68,7 @@ fun HostFader(
                     change.consume()
 
                     val travel = (size.width - FADER_THUMB_RADIUS.toPx() * 2f).coerceAtLeast(FADER_MIN_TRAVEL_PX)
-                    dragPosition += dragAmount / travel
+                    dragPosition += dragAmount.x / travel
                     val newPosition = dragPosition.coerceIn(0f, 1f)
 
                     if (newPosition != currentPosition) {

@@ -19,10 +19,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.androidaudioplugin.greenhouse.ui.theme.tabularTextStyle
 import org.androidaudioplugin.greenhouse.ui.theme.SproutGreen
 import org.androidaudioplugin.greenhouse.ui.theme.StudioPanelBorder
 import org.androidaudioplugin.greenhouse.ui.theme.StudioSurfaceElevated
@@ -31,6 +33,7 @@ import org.androidaudioplugin.greenhouse.ui.theme.TextPrimary
 
 private val STEPPER_BUTTON_SIZE = 26.dp
 private val STEPPER_ICON_SIZE = 14.dp
+private val STEPPER_FONT_SIZE = 10.sp
 private val STEPPER_CORNER_RADIUS = 6.dp
 // Tap feedback of the steps: a circle around the icon, clear of the label
 private val STEPPER_RIPPLE_RADIUS = 10.dp
@@ -48,31 +51,35 @@ fun StepperControl(
     incrementDescription: String,
     onDecrement: () -> Unit,
     onIncrement: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Also the width of each step. */
+    height: Dp = STEPPER_BUTTON_SIZE,
+    iconSize: Dp = STEPPER_ICON_SIZE,
+    fontSize: TextUnit = STEPPER_FONT_SIZE
 ) {
     val shape = RoundedCornerShape(STEPPER_CORNER_RADIUS)
 
     Row(
         modifier = modifier
-            .height(STEPPER_BUTTON_SIZE)
+            .height(height)
             .clip(shape)
             .background(StudioSurfaceElevated)
             .border(1.dp, StudioPanelBorder, shape),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        StepButton(Icons.Default.Remove, decrementDescription, isEnabled = canDecrement, onClick = onDecrement)
+        StepButton(Icons.Default.Remove, decrementDescription, canDecrement, height, iconSize, onDecrement)
 
         Text(
             text = label,
-            fontSize = 10.sp,
-            fontFamily = FontFamily.Monospace,
+            fontSize = fontSize,
+            style = tabularTextStyle,
             fontWeight = FontWeight.Bold,
             color = TextPrimary,
             letterSpacing = 0.5.sp,
             maxLines = 1
         )
 
-        StepButton(Icons.Default.Add, incrementDescription, isEnabled = canIncrement, onClick = onIncrement)
+        StepButton(Icons.Default.Add, incrementDescription, canIncrement, height, iconSize, onIncrement)
     }
 }
 
@@ -81,11 +88,13 @@ private fun StepButton(
     icon: ImageVector,
     contentDescription: String,
     isEnabled: Boolean,
+    size: Dp,
+    iconSize: Dp,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
-            .size(STEPPER_BUTTON_SIZE)
+            .size(size)
             .clickable(
                 interactionSource = null,
                 indication = ripple(bounded = false, radius = STEPPER_RIPPLE_RADIUS),
@@ -102,7 +111,7 @@ private fun StepButton(
             } else {
                 TextMuted
             },
-            modifier = Modifier.size(STEPPER_ICON_SIZE)
+            modifier = Modifier.size(iconSize)
         )
     }
 }

@@ -30,6 +30,7 @@ class RackStateSerializerTest {
         private const val TEST_BPM = 97.5
         private const val TEST_NOTE_OFF_TICK = 480
         private const val TEST_QUANTIZE_TICKS = 240
+        private const val TEST_METRONOME_LEVEL_DB = -12f
     }
 
     @Test
@@ -202,7 +203,8 @@ class RackStateSerializerTest {
             bpm = TEST_BPM,
             lengthBars = 2,
             isQuantizing = true,
-            quantizeTicks = TEST_QUANTIZE_TICKS
+            quantizeTicks = TEST_QUANTIZE_TICKS,
+            metronomeLevelDb = TEST_METRONOME_LEVEL_DB
         )
         val preset = RackPreset(name = TEST_PRESET_NAME, sequence = SequenceState(settings, SequenceState.encodeEvents(packed), autoLengthBars = 3))
 

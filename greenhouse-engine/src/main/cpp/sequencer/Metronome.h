@@ -6,7 +6,9 @@
 namespace aaphost
 {
 
-constexpr float METRONOME_GAIN = 0.3f;
+// Click peak at 0 dB: -12 dBFS, so the highest level (+12 dB) peaks at full scale
+constexpr float METRONOME_GAIN = 0.25f;
+constexpr float METRONOME_SILENT_GAIN = 0.0f;
 constexpr float METRONOME_BEAT_FREQUENCY_HZ = 1000.0f;
 constexpr float METRONOME_ACCENT_FREQUENCY_HZ = 1600.0f;
 constexpr float METRONOME_CLICK_SECONDS = 0.03f;
@@ -26,8 +28,8 @@ public:
     /** Queues a click at a frame of the current block. Clicks must be scheduled in time order. */
     void schedule(int32_t frameOffset, bool isAccent);
 
-    /** Adds the clicks to interleaved stereo and clears the queue. */
-    void render(float* interleaved, int32_t frames, int32_t sampleRate);
+    /** Adds the clicks to interleaved stereo and clears the queue. gain: linear, for the clicks starting in this block. */
+    void render(float* interleaved, int32_t frames, int32_t sampleRate, float gain);
 
 private:
     struct Click
@@ -36,7 +38,7 @@ private:
         bool mIsAccent{false};
     };
 
-    void startClick(bool isAccent, int32_t sampleRate);
+    void startClick(bool isAccent, int32_t sampleRate, float gain);
 
     std::array<Click, MAX_PENDING_CLICKS> mPending{};
     int32_t mPendingCount{0};

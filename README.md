@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/meteaurestudios/greenhouse/actions/workflows/build.yml/badge.svg)](https://github.com/meteaurestudios/greenhouse/actions/workflows/build.yml)
 
-**Greenhouse** is an open-source Android host application for testing and playing **[Android Audio Plugins (AAP)](https://github.com/atsushieno/aap-core)** in real time.
+**Greenhouse** is an open-source Android host application for testing and playing **[Audio Plugins for Android (AAP)](https://github.com/atsushieno/aap-core)** in real time.
 
 <p align="center">
   <img src="./docs/images/greenhouse.png" alt="Greenhouse Screenshot" width="360" />

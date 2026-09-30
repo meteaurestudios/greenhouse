@@ -14,7 +14,9 @@ data class SequencerSettings(
     val lengthBars: Int = MidiSequencer.AUTO_LENGTH_BARS,
     /** Quantize note starts to [quantizeTicks] on playback. Recorded timing is kept. */
     val isQuantizing: Boolean = false,
-    val quantizeTicks: Int = MidiSequencer.DEFAULT_QUANTIZE_TICKS
+    val quantizeTicks: Int = MidiSequencer.DEFAULT_QUANTIZE_TICKS,
+    /** Metronome level in dB, up to [MidiSequencer.MAX_METRONOME_LEVEL_DB]. [MidiSequencer.MIN_METRONOME_LEVEL_DB] mutes it. */
+    val metronomeLevelDb: Float = MidiSequencer.DEFAULT_METRONOME_LEVEL_DB
 )
 
 data class SequencerStatus(
@@ -46,6 +48,9 @@ class MidiSequencer internal constructor() {
         const val AUTO_LENGTH_BARS = 0
         /** 1/16 */
         const val DEFAULT_QUANTIZE_TICKS = PPQ / 4
+        const val MIN_METRONOME_LEVEL_DB = -30f
+        const val MAX_METRONOME_LEVEL_DB = 12f
+        const val DEFAULT_METRONOME_LEVEL_DB = 0f
 
         /** Packed events ([getEvents], [setEvents]): tick, slot, take, word count, then 4 UMP words. */
         const val EVENT_TICK = 0
@@ -59,7 +64,8 @@ class MidiSequencer internal constructor() {
         private const val SETTINGS_LENGTH_BARS = 1
         private const val SETTINGS_IS_QUANTIZING = 2
         private const val SETTINGS_QUANTIZE_TICKS = 3
-        private const val SETTINGS_SIZE = 4
+        private const val SETTINGS_METRONOME_LEVEL_DB = 4
+        private const val SETTINGS_SIZE = 5
 
         private const val STATUS_STATE = 0
         private const val STATUS_IS_RECORDING = 1
@@ -86,7 +92,8 @@ class MidiSequencer internal constructor() {
                 bpm = values[SETTINGS_BPM],
                 lengthBars = values[SETTINGS_LENGTH_BARS].toInt(),
                 isQuantizing = values[SETTINGS_IS_QUANTIZING] != 0.0,
-                quantizeTicks = values[SETTINGS_QUANTIZE_TICKS].toInt()
+                quantizeTicks = values[SETTINGS_QUANTIZE_TICKS].toInt(),
+                metronomeLevelDb = values[SETTINGS_METRONOME_LEVEL_DB].toFloat()
             )
         }
         set(value) {
@@ -95,7 +102,8 @@ class MidiSequencer internal constructor() {
                     value.bpm,
                     value.lengthBars.toDouble(),
                     value.isQuantizing.toDouble(),
-                    value.quantizeTicks.toDouble()
+                    value.quantizeTicks.toDouble(),
+                    value.metronomeLevelDb.toDouble()
                 )
             )
         }
@@ -150,7 +158,7 @@ class MidiSequencer internal constructor() {
      */
     external fun setEvents(packed: IntArray, autoLengthBars: Int)
 
-    /** The sequence as a Standard MIDI File, one track per slot. */
+    /** The sequence as it plays (quantized when quantize is on) as a Standard MIDI File, one track per slot. */
     external fun exportStandardMidiFile(): ByteArray
 
     /** Replaces the sequence and tempo with a Standard MIDI File. Returns false if it cannot be read. */
