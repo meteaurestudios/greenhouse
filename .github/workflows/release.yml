@@ -69,11 +69,17 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
+      - name: Rename APK with App Version
+        run: |
+          APP_VERSION=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)
+          mkdir -p dist
+          cp app/build/outputs/apk/release/*.apk "dist/greenhouse-$APP_VERSION.apk"
+
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
           name: greenhouse-release-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: dist/*.apk
           if-no-files-found: warn
 
       - name: Create GitHub Release
@@ -85,7 +91,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: |
-            app/build/outputs/apk/release/*.apk
+          files: dist/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
