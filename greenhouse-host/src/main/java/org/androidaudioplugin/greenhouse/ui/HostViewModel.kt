@@ -91,8 +91,9 @@ class HostViewModel(application: Application) : AndroidViewModel(application), D
             return
         }
 
-        sessions.autosave()
+        // Audio first: reading the plugin states while they render competes with the audio thread
         audio.onAppBackground()
+        sessions.autosave()
     }
 
     /** Meters and the sequencer every tick; CPU, plugin-side parameter changes and engine state changes at lower rates. */
