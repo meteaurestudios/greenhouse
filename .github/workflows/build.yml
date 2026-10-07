@@ -52,3 +52,26 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest
+
+  engine-tests:
+    name: Native Engine Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Desktop builds of the MIDI sequencer and rack, with stubs for Oboe and Android logging (no submodules, no NDK)
+      - name: Build Engine Tests
+        run: |
+          cmake -S greenhouse-engine/src/test/cpp -B build/engine-test
+          cmake --build build/engine-test --parallel
+
+      - name: Run MIDI Sequencer Tests
+        run: build/engine-test/MidiSequencerTest
+
+      - name: Run Rack Engine Tests
+        run: build/engine-test/RackEngineTest
