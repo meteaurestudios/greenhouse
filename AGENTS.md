@@ -11,8 +11,9 @@ The project is split into library modules so that downstream apps can build on t
 - **`greenhouse-engine/`** (`:greenhouse-engine`): Audio engine, no UI.
   - **`src/main/cpp/`**: Native audio engine. Includes are relative to this folder (e.g. `"engine/OboeEngine.h"`).
     - `engine/OboeEngine`: reusable base that owns the AAudio output stream (open at the device's native rate, start / stop, reopen after errors, latency tuning, ADPF, denormals). Subclasses implement `prepareToPlay` / `streamStarting` / `process` / `flushState`.
-    - `RackEngine`: the AAP plugin rack built on `OboeEngine` (instrument slot 0, then effect slots, rendered in fixed-size blocks; slots prepared at another sample rate stay silent until reloaded). Each slot also has a host level (gain) and dry / wet mix, ramped per block; the host resets them when a new plugin is added and saves them with the session.
-    - `sequencer/MidiSequencer`: MIDI sequencer owned by `RackEngine`. Records the notes played on the slots and plays them back in a loop (PPQ 960 ticks, 4/4 bars), writing sample-accurate JR-timestamped UMP straight into each slot's MIDI2 input port before `process()`; aap-core merges the queued live input into it. The audio thread reads an immutable `PlaybackBuffer` swapped through an atomic pointer (old buffers freed once `OboeEngine::hasAudioThreadPassed()`), and takes transport commands from a lock-free queue. Also the metronome (`sequencer/Metronome`) and `.mid` import / export (`sequencer/StandardMidiFile`).
+    - `RackEngine`: the rack built on `OboeEngine` (instrument slot 0, then effect slots, rendered in fixed-size blocks). Each slot runs a `SlotProcessor` and the rack keeps the rest: chain, bypass, NaN guard, meters, CPU load, sequencer. Each slot also has a host level (gain) and dry / wet mix, ramped per block; the host resets them when a new plugin is added and saves them with the session.
+    - `slot/SlotProcessor.h`: what runs in a slot (prepare, activate / deactivate, queued live UMP, `process()` over the previous slot's interleaved output). The rack owns it and destroys it once the audio thread has let go of it. `slot/AapSlotProcessor` wraps an AAP plugin instance (not owned; slots prepared at another sample rate stay silent until reloaded); DSP running inside the engine implements the same interface.
+    - `sequencer/MidiSequencer`: MIDI sequencer owned by `RackEngine`. Records the notes played on the instrument slot (`MAX_SEQUENCER_SLOTS`; events still carry a slot index) and plays them back in a loop (PPQ 960 ticks, 4/4 bars), handing each slot processor sample-accurate JR-timestamped UMP for its block (`AapSlotProcessor` writes it into the plugin's MIDI2 input port, where aap-core merges the queued live input). The audio thread reads an immutable `PlaybackBuffer` swapped through an atomic pointer (old buffers freed once `OboeEngine::hasAudioThreadPassed()`), and takes transport commands from a lock-free queue. Also the metronome (`sequencer/Metronome`) and `.mid` import / export (`sequencer/StandardMidiFile`).
     - `RackEngineJni.cpp` / `MidiSequencerJni.cpp`: JNI bindings to a single process-wide `RackEngine` (no native handles cross JNI).
     - `utils/AudioSimd.h`: NEON helpers. `utils/Logging.h`: log macros.
   - **`greenhouse/core/AapHostEngine.kt`**: Connects to AAP services and instantiates `NativeRemotePluginInstance`.
@@ -57,10 +58,10 @@ Always specify `JAVA_HOME` using Android Studio's bundled JDK when invoking Grad
 JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleDebug
 ```
 
-The native MIDI sequencer has desktop tests (no Android needed), with stubs for the Oboe engine and logging:
+The native MIDI sequencer and rack have desktop tests (no Android needed), with stubs for the Oboe engine and logging and fake slot processors:
 
 ```bash
-cmake -S greenhouse-engine/src/test/cpp -B build/sequencer-test && cmake --build build/sequencer-test && build/sequencer-test/MidiSequencerTest
+cmake -S greenhouse-engine/src/test/cpp -B build/engine-test && cmake --build build/engine-test && build/engine-test/MidiSequencerTest && build/engine-test/RackEngineTest
 ```
 
 > **Note**: Gradle requires network loopback socket permissions for its daemon process. When running Gradle in sandbox environments, run with unsandboxed execution (`BypassSandbox: true`).

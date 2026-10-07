@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <algorithm>
 #include "RackEngineJni.h"
+#include "slot/AapSlotProcessor.h"
 
 // One engine per process. It is intentionally never destroyed: tearing it down during static
 // destruction could touch plugin instances aap-core has already freed. The stream and plugin
@@ -110,7 +111,8 @@ JNIEXPORT void JNICALL
 Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeSetSlotPlugin(
         JNIEnv* env, jclass clazz, jint slotIndex, jlong nativeClient, jint instanceId, jint sampleRate)
 {
-    getEngine().setSlotPlugin(slotIndex, reinterpret_cast<aap::PluginClient*>(nativeClient), instanceId, sampleRate);
+    auto client = reinterpret_cast<aap::PluginClient*>(nativeClient);
+    getEngine().setSlotProcessor(slotIndex, aaphost::AapSlotProcessor::create(client, instanceId, sampleRate));
 }
 
 JNIEXPORT void JNICALL

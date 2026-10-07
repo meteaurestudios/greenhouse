@@ -2,23 +2,22 @@
 
 #include "engine/OboeEngine.h"
 #include "sequencer/MidiSequencer.h"
-#include <aap/core/host/plugin-instance.h>
-#include <aap/core/host/plugin-host.h>
+#include "slot/SlotProcessor.h"
 #include <array>
+#include <memory>
 
 namespace aaphost
 {
 
 constexpr int32_t MAX_RACK_SLOTS = 16;
-static_assert(MAX_RACK_SLOTS <= MAX_SEQUENCER_SLOTS, "the sequencer must cover every rack slot");
 constexpr int32_t INSTRUMENT_SLOT_INDEX = 0;
+// The sequencer ignores the other slots
+static_assert(INSTRUMENT_SLOT_INDEX < MAX_SEQUENCER_SLOTS, "the sequencer must cover the instrument slot");
 constexpr int32_t MIN_DSP_BLOCK_FRAMES = 1;
 // Plugins are prepared with this many frames (MAX_HOST_BUFFER_FRAMES on the Kotlin side)
 constexpr int32_t MAX_DSP_BLOCK_FRAMES = 4096;
 constexpr int32_t DEFAULT_FRAMES_PER_CALLBACK = 256;
 constexpr int32_t BUFFER_SIZE_SAFETY_FACTOR = 2;
-// 0 = no host-imposed deadline for the remote process() call
-constexpr int32_t PLUGIN_PROCESS_TIMEOUT_NS = 0;
 constexpr double NANOS_PER_SECOND = 1e9;
 constexpr double DSP_LOAD_EMA_PREVIOUS_WEIGHT = 0.85;
 constexpr double DSP_LOAD_EMA_CURRENT_WEIGHT = 1.0 - DSP_LOAD_EMA_PREVIOUS_WEIGHT;
@@ -34,26 +33,13 @@ constexpr float MAX_SLOT_GAIN = 4.0f; // about +12 dB
 constexpr float DRY_ONLY_MIX = 0.0f;
 constexpr float WET_ONLY_MIX = 1.0f;
 
-/** Indices of the first two audio input / output ports of a plugin, and of its MIDI2 input. */
-struct AudioPorts
-{
-    int32_t mIn[STEREO_CHANNEL_COUNT]{-1, -1};
-    int32_t mOut[STEREO_CHANNEL_COUNT]{-1, -1};
-    int32_t mInCount{0};  // capped at STEREO_CHANNEL_COUNT
-    int32_t mOutCount{0}; // capped at STEREO_CHANNEL_COUNT
-    // The first MIDI2 input, where aap-core also merges the queued live input; -1 if none
-    int32_t mMidiIn{-1};
-};
-
 struct RackSlot
 {
-    // Published to the audio thread. mPorts is only written while mInstance is null and the
-    // audio thread is quiescent, so the audio thread always sees ports matching the instance.
-    std::atomic<aap::PluginInstance*> mInstance{nullptr};
-    AudioPorts mPorts;
-    int32_t mPreparedSampleRate{0};
+    // Owned by the control thread, published to the audio thread through mProcessor
+    std::unique_ptr<SlotProcessor> mOwnedProcessor;
+    std::atomic<SlotProcessor*> mProcessor{nullptr};
     std::atomic<bool> mIsBypassed{false};
-    // Host settings of the slot, set by the host (setSlotPlugin leaves them alone). The audio thread ramps to them over a block.
+    // Host settings of the slot, set by the host (setSlotProcessor leaves them alone). The audio thread ramps to them over a block.
     std::atomic<float> mGain{UNITY_GAIN};
     std::atomic<float> mMix{WET_ONLY_MIX};
 
@@ -71,8 +57,9 @@ struct RackSlot
 };
 
 /**
- * Serial rack of AAP plugins: the instrument in slot 0, then effect slots that process its output
- * in place. Plugins render in fixed-size blocks that are independent of the device burst size.
+ * Serial rack of slot processors (AAP plugins or DSP running in the engine): the instrument in
+ * slot 0, then effect slots that process its output in place. Slots render in fixed-size blocks
+ * that are independent of the device burst size.
  */
 class RackEngine : public OboeEngine
 {
@@ -83,17 +70,16 @@ public:
     /** Empties every slot and reopens the stream (not started), so getSampleRate() is known before plugins are prepared. */
     void configure(int32_t framesPerCallback, int32_t numSlots);
 
-    /** Closes the stream and empties every slot, releasing the audio device and all plugin references. */
+    /** Closes the stream and empties every slot, releasing the audio device and destroying every slot processor. */
     void shutdown();
 
     void setFramesPerCallback(int32_t framesPerCallback);
 
     /**
-     * Blocks until the audio thread no longer uses the previous instance, so it can be destroyed.
-     * sampleRate is the rate the plugin was prepared at: the slot stays silent while it differs from
-     * the stream's, until the host reloads the plugin at getSampleRate().
+     * Replaces the slot's processor; null empties the slot. Blocks until the audio thread no longer
+     * uses the previous processor, then destroys it. Bypass is turned off; level and mix are kept.
      */
-    void setSlotPlugin(int32_t slotIndex, aap::PluginClient* client, int32_t instanceId, int32_t sampleRate);
+    void setSlotProcessor(int32_t slotIndex, std::unique_ptr<SlotProcessor> processor);
     void setSlotBypassed(int32_t slotIndex, bool bypassed);
     /** Linear gain applied to the slot's output, clamped to [SILENT_GAIN, MAX_SLOT_GAIN]. */
     void setSlotGain(int32_t slotIndex, float gain);
@@ -126,8 +112,6 @@ private:
 
     void renderBlock(int32_t frames);
     bool renderSlot(int32_t slotIndex, int32_t frames);
-    void writeSequencerEvents(int32_t slotIndex, const AudioPorts& ports, aap_buffer_t* buffer);
-    void setSequencerCapacityLocked(int32_t slotIndex, aap::PluginInstance* instance);
 
     std::array<RackSlot, MAX_RACK_SLOTS> mSlots;
     MidiSequencer mSequencer{*this};

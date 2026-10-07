@@ -14,6 +14,7 @@ add_library(aaphostnative
     sequencer/Metronome.cpp
     sequencer/MidiSequencer.cpp
     sequencer/StandardMidiFile.cpp
+    slot/AapSlotProcessor.cpp
     RackEngine.cpp
     RackEngineJni.cpp
     MidiSequencerJni.cpp

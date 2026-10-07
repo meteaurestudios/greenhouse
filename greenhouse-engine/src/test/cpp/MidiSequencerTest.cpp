@@ -28,7 +28,6 @@ constexpr uint32_t FULL_VELOCITY = 0xFFFF0000u;
 constexpr uint32_t HALF_VALUE = 0x80000000u;
 constexpr uint32_t CC_VOLUME = 7;
 constexpr uint32_t CC_ALL_NOTES_OFF = 123;
-constexpr int32_t SLOT_COUNT = 3;
 
 int gFailures = 0;
 
@@ -558,23 +557,21 @@ void testStandardMidiFile()
 {
     constexpr double FILE_BPM = 97.0;
     auto controlChange = makePacket(MIDI2_CONTROL_CHANGE | (CC_VOLUME << ump::NOTE_SHIFT), HALF_VALUE);
-    auto onSlot1 = event(BEAT, controlChange);
-    onSlot1.mSlot = 1;
-    auto bytes = smf::write({event(0, noteOn(60)), event(BEAT / 2, noteOff(60)), onSlot1}, FILE_BPM, BAR);
+    auto bytes = smf::write({event(0, noteOn(60)), event(BEAT / 2, noteOff(60)), event(BEAT, controlChange)}, FILE_BPM, BAR);
 
     smf::ImportedSequence imported;
-    CHECK(smf::read(bytes.data(), static_cast<int32_t>(bytes.size()), SLOT_COUNT, imported));
+    CHECK(smf::read(bytes.data(), static_cast<int32_t>(bytes.size()), MAX_SEQUENCER_SLOTS, imported));
     CHECK(std::fabs(imported.mBpm - FILE_BPM) < 1e-2);
     CHECK(imported.mEvents.size() == 3);
 
     if (imported.mEvents.size() == 3) {
         CHECK(imported.mEvents[0].mTick == 0 && imported.mEvents[0].mPacket.mWords[1] == FULL_VELOCITY);
         CHECK(imported.mEvents[1].mTick == BEAT / 2 && !isNoteOn(imported.mEvents[1].mPacket.mWords[0]));
-        CHECK(imported.mEvents[2].mSlot == 1 && imported.mEvents[2].mPacket.mWords[1] == HALF_VALUE);
+        CHECK(imported.mEvents[2].mTick == BEAT && imported.mEvents[2].mPacket.mWords[1] == HALF_VALUE);
     }
 
     std::vector<uint8_t> junk{1, 2, 3, 4, 5, 6, 7, 8, 9};
-    CHECK(!smf::read(junk.data(), static_cast<int32_t>(junk.size()), SLOT_COUNT, imported));
+    CHECK(!smf::read(junk.data(), static_cast<int32_t>(junk.size()), MAX_SEQUENCER_SLOTS, imported));
 
     // Imported in AUTO: the loop fits the file
     Harness harness(AUTO_LENGTH_BARS);
@@ -587,7 +584,7 @@ void testStandardMidiFile()
     offGrid.mSequencer.setEvents({event(OFF_GRID_TICK, noteOn(60)), event(OFF_GRID_TICK + BEAT / 2, noteOff(60))}, 0);
     auto exportedTick = [&offGrid, &imported]() {
         auto exported = offGrid.mSequencer.exportStandardMidiFile();
-        return smf::read(exported.data(), static_cast<int32_t>(exported.size()), SLOT_COUNT, imported) && !imported.mEvents.empty()
+        return smf::read(exported.data(), static_cast<int32_t>(exported.size()), MAX_SEQUENCER_SLOTS, imported) && !imported.mEvents.empty()
             ? imported.mEvents[0].mTick
             : -1;
     };
@@ -606,7 +603,7 @@ void testStandardMidiFile()
     late.mSequencer.setEvents({event(LATE_TICK, noteOn(60)), event(LATE_TICK + LATE_LENGTH, noteOff(60))}, 0);
     late.mSequencer.setSettings(settings);
     auto lateExported = late.mSequencer.exportStandardMidiFile();
-    CHECK(smf::read(lateExported.data(), static_cast<int32_t>(lateExported.size()), SLOT_COUNT, imported));
+    CHECK(smf::read(lateExported.data(), static_cast<int32_t>(lateExported.size()), MAX_SEQUENCER_SLOTS, imported));
     CHECK(imported.mEvents.size() == 2);
 
     if (imported.mEvents.size() == 2) {

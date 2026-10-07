@@ -22,7 +22,9 @@ constexpr double SECONDS_PER_MINUTE = 60.0;
 constexpr int32_t AUTO_LENGTH_BARS = 0;
 constexpr int32_t MAX_SEQUENCE_LENGTH_BARS = 999;
 constexpr int32_t MAX_SEQUENCE_EVENTS = 65536;
-constexpr int32_t MAX_SEQUENCER_SLOTS = 16;
+// Slots the sequencer records and plays. Only the instrument slot gets notes; events, sessions and
+// .mid files keep a slot index so this can grow (e.g. for automation on effect slots).
+constexpr int32_t MAX_SEQUENCER_SLOTS = 1;
 
 constexpr int32_t NO_TAKE = -1;
 constexpr int32_t DEFAULT_QUANTIZE_TICKS = SEQUENCER_PPQ / 4; // 1/16

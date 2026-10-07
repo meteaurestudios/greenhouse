@@ -1,7 +1,6 @@
 #include "RackEngine.h"
 #include "utils/AudioSimd.h"
 #include "utils/Logging.h"
-#include <aap/ext/midi.h>
 #include <algorithm>
 #include <cstring>
 
@@ -12,50 +11,6 @@ namespace
 {
 
 using Clock = std::chrono::steady_clock;
-
-bool isActive(aap::PluginInstance* instance)
-{
-    return instance->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_ACTIVE;
-}
-
-bool isInactive(aap::PluginInstance* instance)
-{
-    return instance->getInstanceState() == aap::PluginInstantiationState::PLUGIN_INSTANTIATION_STATE_INACTIVE;
-}
-
-AudioPorts findAudioPorts(aap::PluginInstance* instance)
-{
-    AudioPorts ports;
-    auto numPorts = instance->getNumPorts();
-
-    for (int32_t i = 0; i < numPorts; i++) {
-        auto port = instance->getPort(i);
-
-        if (port == nullptr) {
-            continue;
-        }
-
-        if (port->getContentType() == AAP_CONTENT_TYPE_MIDI2) {
-            if (port->getPortDirection() == AAP_PORT_DIRECTION_INPUT && ports.mMidiIn < 0) {
-                ports.mMidiIn = i;
-            }
-
-            continue;
-        }
-
-        if (port->getContentType() != AAP_CONTENT_TYPE_AUDIO) {
-            continue;
-        }
-
-        if (port->getPortDirection() == AAP_PORT_DIRECTION_INPUT && ports.mInCount < STEREO_CHANNEL_COUNT) {
-            ports.mIn[ports.mInCount++] = i;
-        } else if (port->getPortDirection() == AAP_PORT_DIRECTION_OUTPUT && ports.mOutCount < STEREO_CHANNEL_COUNT) {
-            ports.mOut[ports.mOutCount++] = i;
-        }
-    }
-
-    return ports;
-}
 
 double smoothLoad(double previous, Clock::duration elapsed, double blockDurationNs)
 {
@@ -115,9 +70,8 @@ void RackEngine::clearSlotsLocked()
 {
     // Only called with the stream closed, so no quiescence wait is needed
     for (auto& slot : mSlots) {
-        slot.mInstance.store(nullptr);
-        slot.mPorts = AudioPorts{};
-        slot.mPreparedSampleRate = 0;
+        slot.mProcessor.store(nullptr);
+        slot.mOwnedProcessor.reset();
         slot.mIsBypassed.store(false, std::memory_order_relaxed);
         slot.mGain.store(UNITY_GAIN, std::memory_order_relaxed);
         slot.mMix.store(WET_ONLY_MIX, std::memory_order_relaxed);
@@ -147,7 +101,7 @@ void RackEngine::updateMinimumBufferSizeLocked()
     setMinimumBufferSize(std::max(getFramesPerBurst(), blockFrames) * BUFFER_SIZE_SAFETY_FACTOR);
 }
 
-void RackEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* client, int32_t instanceId, int32_t sampleRate)
+void RackEngine::setSlotProcessor(int32_t slotIndex, std::unique_ptr<SlotProcessor> processor)
 {
     std::lock_guard<std::mutex> lock(mControlMutex);
 
@@ -156,35 +110,37 @@ void RackEngine::setSlotPlugin(int32_t slotIndex, aap::PluginClient* client, int
     }
 
     auto& slot = mSlots[slotIndex];
-    auto instance = (client != nullptr && instanceId >= 0) ? client->getInstanceById(instanceId) : nullptr;
 
-    // Unpublish the old instance and wait for the audio thread to let go of it: the caller
-    // destroys it as soon as we return
-    slot.mInstance.store(nullptr);
+    // Unpublish the old processor and wait for the audio thread to let go of it before destroying it.
+    // An AAP plugin instance is destroyed by the host as soon as we return.
+    slot.mProcessor.store(nullptr);
     waitForAudioThreadQuiescence();
+    slot.mOwnedProcessor = std::move(processor);
     slot.mIsBypassed.store(false, std::memory_order_relaxed);
     slot.mInvalidBlocks.store(0, std::memory_order_relaxed);
 
-    if (instance == nullptr) {
-        slot.mPorts = AudioPorts{};
-        slot.mPreparedSampleRate = 0;
+    auto newProcessor = slot.mOwnedProcessor.get();
+
+    if (newProcessor == nullptr) {
         mSequencer.setSlotEventCapacity(slotIndex, MAX_SLOT_EVENT_WORDS);
         LOGI("Slot %d cleared", slotIndex);
         return;
     }
 
-    slot.mPorts = findAudioPorts(instance);
-    slot.mPreparedSampleRate = sampleRate;
-    setSequencerCapacityLocked(slotIndex, instance);
+    mSequencer.setSlotEventCapacity(slotIndex, newProcessor->getEventCapacityWords());
 
-    if (isStreaming() && isInactive(instance)) {
-        instance->activate();
+    // Before the first open, prepareToPlay() prepares it with the rest of the rack
+    if (getSampleRate() > 0) {
+        newProcessor->prepareToPlay(getSampleRate(), MAX_DSP_BLOCK_FRAMES);
     }
 
-    slot.mInstance.store(instance);
-    LOGI("Slot %d plugin set: instanceId=%d, sampleRate=%d, audioIn=%d, audioOut=%d, state=%d",
-         slotIndex, instanceId, sampleRate, slot.mPorts.mInCount, slot.mPorts.mOutCount,
-         static_cast<int>(instance->getInstanceState()));
+    if (isStreaming()) {
+        newProcessor->activate();
+    }
+
+    slot.mProcessor.store(newProcessor);
+    LOGI("Slot %d processor set: audioIn=%d, audioOut=%d", slotIndex,
+         newProcessor->getAudioInputCount(), newProcessor->getAudioOutputCount());
 }
 
 void RackEngine::setSlotBypassed(int32_t slotIndex, bool bypassed)
@@ -214,23 +170,15 @@ void RackEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, int32_t s
         return;
     }
 
-    // Held so the instance cannot be swapped out and destroyed while events are queued on it
+    // Held so the processor cannot be swapped out and destroyed while events are queued on it
     std::lock_guard<std::mutex> lock(mControlMutex);
-    auto instance = mSlots[slotIndex].mInstance.load();
+    auto processor = mSlots[slotIndex].mProcessor.load();
 
-    // aap-core queues the events (lock-free) and merges them at the next process(). Inactive instances
-    // queue them too, so values set while paused (e.g. a session restore) apply once playing.
-    if (instance == nullptr || !(isActive(instance) || isInactive(instance))) {
+    if (processor == nullptr || !processor->queueEvents(data, size)) {
         return;
     }
 
-    // The queue holds a fixed number of inputs until the next process(): what does not fit is dropped
-    if (!instance->tryAddEventUmpInput(data, size)) {
-        LOGW("Slot %d: plugin input queue full, %d bytes of UMP dropped", slotIndex, size);
-        return;
-    }
-
-    // Recorded where the plugin receives it: at the start of the next block
+    // Recorded where the processor receives it: at the start of the next block
     mSequencer.recordInput(slotIndex, data, size);
 }
 
@@ -280,6 +228,14 @@ void RackEngine::prepareToPlay(int32_t sampleRate, int32_t framesPerBurst)
 {
     mRenderSampleRate = sampleRate;
     updateMinimumBufferSizeLocked();
+
+    for (auto& slot : mSlots) {
+        auto processor = slot.mProcessor.load();
+
+        if (processor != nullptr) {
+            processor->prepareToPlay(sampleRate, MAX_DSP_BLOCK_FRAMES);
+        }
+    }
 }
 
 void RackEngine::streamStarting()
@@ -287,10 +243,10 @@ void RackEngine::streamStarting()
     auto numSlots = mNumSlots.load();
 
     for (int32_t i = 0; i < numSlots; i++) {
-        auto instance = mSlots[i].mInstance.load();
+        auto processor = mSlots[i].mProcessor.load();
 
-        if (instance != nullptr && isInactive(instance)) {
-            instance->activate();
+        if (processor != nullptr) {
+            processor->activate();
         }
 
         mSlots[i].mSmoothedLoad = 0.0;
@@ -308,10 +264,10 @@ void RackEngine::flushState()
         slot.mPeakR.store(0.0f, std::memory_order_relaxed);
         slot.mCpuLoad.store(0.0f, std::memory_order_relaxed);
 
-        auto instance = slot.mInstance.load();
+        auto processor = slot.mProcessor.load();
 
-        if (instance != nullptr && isActive(instance)) {
-            instance->deactivate();
+        if (processor != nullptr) {
+            processor->deactivate();
         }
     }
 
@@ -348,9 +304,9 @@ int32_t RackEngine::estimateWorkload() const
     auto numSlots = mNumSlots.load(std::memory_order_relaxed);
 
     for (int32_t i = 0; i < numSlots; i++) {
-        auto instance = mSlots[i].mInstance.load();
+        auto processor = mSlots[i].mProcessor.load();
 
-        if (instance != nullptr && !mSlots[i].mIsBypassed.load(std::memory_order_relaxed) && isActive(instance)) {
+        if (processor != nullptr && !mSlots[i].mIsBypassed.load(std::memory_order_relaxed) && processor->isActive()) {
             workload += ADPF_WORKLOAD_PER_ACTIVE_SLOT;
         }
     }
@@ -405,7 +361,7 @@ void RackEngine::renderBlock(int32_t frames)
 }
 
 /**
- * Runs one slot over mBlockBuffer in place. Returns true if the plugin output replaced the buffer;
+ * Runs one slot over mBlockBuffer in place. Returns true if the processor output replaced the buffer;
  * false leaves it untouched (empty, bypassed or failed slots, and blocks with NaN or infinite
  * samples, pass the signal through).
  */
@@ -413,51 +369,23 @@ bool RackEngine::renderSlot(int32_t slotIndex, int32_t frames)
 {
     auto& slot = mSlots[slotIndex];
     auto isInstrument = slotIndex == INSTRUMENT_SLOT_INDEX;
-    auto instance = slot.mInstance.load();
+    auto processor = slot.mProcessor.load();
     auto isBypassed = slot.mIsBypassed.load(std::memory_order_relaxed);
 
     if (!isBypassed) {
         slot.mWasBypassed = false;
     }
 
-    // The first bypassed block the plugin can run still runs it, to end the notes the sequencer plays on it
+    // The first bypassed block the processor can run still runs it, to end the notes the sequencer plays on it
     auto isBypassStarting = isBypassed && !slot.mWasBypassed;
 
-    if (instance == nullptr || (isBypassed && !isBypassStarting) || !isActive(instance)) {
+    if (processor == nullptr || (isBypassed && !isBypassStarting) || !processor->canProcess(frames, mRenderSampleRate)) {
         return false;
     }
-
-    // Prepared for another device's rate: it would play at the wrong pitch until the host reloads it
-    if (slot.mPreparedSampleRate != mRenderSampleRate) {
-        return false;
-    }
-
-    const auto& ports = slot.mPorts;
 
     // An effect without audio in and out cannot sit in the chain; an instrument may be MIDI-only
-    if (!isInstrument && (ports.mInCount == 0 || ports.mOutCount == 0)) {
+    if (!isInstrument && (processor->getAudioInputCount() == 0 || processor->getAudioOutputCount() == 0)) {
         return false;
-    }
-
-    auto buffer = instance->getAudioPluginBuffer();
-
-    if (buffer == nullptr || buffer->num_frames(buffer) < frames) {
-        return false;
-    }
-
-    if (ports.mInCount == STEREO_CHANNEL_COUNT) {
-        auto inL = static_cast<float*>(buffer->get_buffer(buffer, ports.mIn[0]));
-        auto inR = static_cast<float*>(buffer->get_buffer(buffer, ports.mIn[1]));
-
-        if (inL != nullptr && inR != nullptr) {
-            simd::deinterleaveStereo(mBlockBuffer.data(), inL, inR, frames);
-        }
-    } else if (ports.mInCount == 1) {
-        auto inMono = static_cast<float*>(buffer->get_buffer(buffer, ports.mIn[0]));
-
-        if (inMono != nullptr) {
-            simd::deinterleaveStereoToMono(mBlockBuffer.data(), inMono, frames);
-        }
     }
 
     if (isBypassStarting) {
@@ -465,28 +393,19 @@ bool RackEngine::renderSlot(int32_t slotIndex, int32_t frames)
         slot.mWasBypassed = true;
     }
 
-    writeSequencerEvents(slotIndex, ports, buffer);
-    instance->process(frames, PLUGIN_PROCESS_TIMEOUT_NS);
+    int32_t eventWordCount = 0;
+    auto events = mSequencer.getSlotEvents(slotIndex, eventWordCount);
+    SlotOutput out;
+    auto hasOutput = processor->process(mBlockBuffer.data(), frames, events, eventWordCount, out);
 
     // Once bypassed, its output is not used
-    if (isBypassStarting || !isActive(instance)) {
+    if (isBypassStarting || !hasOutput) {
         return false;
     }
 
-    if (ports.mOutCount == 0) {
-        return false;
-    }
-
-    auto outL = static_cast<const float*>(buffer->get_buffer(buffer, ports.mOut[0]));
-    auto outR = ports.mOutCount == STEREO_CHANNEL_COUNT ? static_cast<const float*>(buffer->get_buffer(buffer, ports.mOut[1])) : outL;
-
-    if (outL == nullptr || outR == nullptr) {
-        return false;
-    }
-
-    // A plugin can output NaN or infinite samples (e.g. Odin2's first block after a session reload).
+    // A processor can output NaN or infinite samples (e.g. Odin2's first block after a session reload).
     // Passed on, they click, and a NaN can get stuck in the next slots' filters and delay lines for good.
-    if (!simd::allFinite(outL, frames) || !simd::allFinite(outR, frames)) {
+    if (!simd::allFinite(out.mLeft, frames) || !simd::allFinite(out.mRight, frames)) {
         slot.mInvalidBlocks.fetch_add(1, std::memory_order_relaxed);
         return false;
     }
@@ -497,12 +416,12 @@ bool RackEngine::renderSlot(int32_t slotIndex, int32_t frames)
     auto isUnityWet = slot.mCurrentGain == UNITY_GAIN && targetGain == UNITY_GAIN &&
                       slot.mCurrentMix == WET_ONLY_MIX && targetMix == WET_ONLY_MIX;
 
-    if (isUnityWet && outR == outL) {
-        simd::interleaveMonoToStereo(outL, mBlockBuffer.data(), frames);
+    if (isUnityWet && out.mRight == out.mLeft) {
+        simd::interleaveMonoToStereo(out.mLeft, mBlockBuffer.data(), frames);
     } else if (isUnityWet) {
-        simd::interleaveStereo(outL, outR, mBlockBuffer.data(), frames);
+        simd::interleaveStereo(out.mLeft, out.mRight, mBlockBuffer.data(), frames);
     } else {
-        simd::mixStereo(outL, outR, mBlockBuffer.data(), frames,
+        simd::mixStereo(out.mLeft, out.mRight, mBlockBuffer.data(), frames,
                         (WET_ONLY_MIX - slot.mCurrentMix) * slot.mCurrentGain, (WET_ONLY_MIX - targetMix) * targetGain,
                         slot.mCurrentMix * slot.mCurrentGain, targetMix * targetGain);
     }
@@ -510,51 +429,6 @@ bool RackEngine::renderSlot(int32_t slotIndex, int32_t frames)
     slot.mCurrentGain = targetGain;
     slot.mCurrentMix = targetMix;
     return true;
-}
-
-/** Lets the sequencer fit its events of a block into the MIDI2 input of the slot's new plugin. */
-void RackEngine::setSequencerCapacityLocked(int32_t slotIndex, aap::PluginInstance* instance)
-{
-    auto buffer = instance->getAudioPluginBuffer();
-    auto midiIn = mSlots[slotIndex].mPorts.mMidiIn;
-    auto wordCount = 0;
-
-    if (buffer != nullptr && midiIn >= 0) {
-        // aap-core merges the queued live input with the port's events within its own event buffer,
-        // which can be smaller than the port: more events than that would be cut by the merge
-        auto portBytes = buffer->get_buffer_size(buffer, midiIn) - static_cast<int32_t>(sizeof(AAPMidiBufferHeader));
-        auto bytes = std::min(portBytes, aap::DEFAULT_EVENT_MIDI2_INPUT_BUFFER_SIZE);
-        wordCount = std::max(0, bytes / static_cast<int32_t>(sizeof(uint32_t)));
-    }
-
-    mSequencer.setSlotEventCapacity(slotIndex, wordCount);
-}
-
-/**
- * Writes the sequencer's events for this block into the slot's MIDI2 input. The plugin clears the
- * port after each process(); within process(), aap-core merges the queued live input into it,
- * ordered by the JR timestamps.
- */
-void RackEngine::writeSequencerEvents(int32_t slotIndex, const AudioPorts& ports, aap_buffer_t* buffer)
-{
-    int32_t wordCount = 0;
-    auto words = mSequencer.getSlotEvents(slotIndex, wordCount);
-
-    if (wordCount == 0 || ports.mMidiIn < 0) {
-        return;
-    }
-
-    auto header = static_cast<AAPMidiBufferHeader*>(buffer->get_buffer(buffer, ports.mMidiIn));
-    auto byteCount = wordCount * static_cast<int32_t>(sizeof(uint32_t));
-    auto capacity = buffer->get_buffer_size(buffer, ports.mMidiIn) - static_cast<int32_t>(sizeof(AAPMidiBufferHeader));
-
-    if (header == nullptr || byteCount > capacity) {
-        return;
-    }
-
-    header->time_options = 0;
-    header->length = static_cast<uint32_t>(byteCount);
-    std::memcpy(header + 1, words, static_cast<size_t>(byteCount));
 }
 
 } // namespace aaphost
