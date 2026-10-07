@@ -52,7 +52,9 @@ data class RackSlotData(
     val isLoading: Boolean = false,
     val loadingPluginName: String? = null,
     /** The device died (e.g. its plugin's process): [device] and the parameter values are kept so it can be reloaded. */
-    val isCrashed: Boolean = false
+    val isCrashed: Boolean = false,
+    /** Bumped when the device's parameter list changes, so views showing it update. */
+    val parametersRevision: Int = 0
 ) {
     val presetNames: List<String>
         get() = presets.map { it.name }

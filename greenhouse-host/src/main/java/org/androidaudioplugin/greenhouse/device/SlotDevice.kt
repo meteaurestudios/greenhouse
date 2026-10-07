@@ -50,7 +50,10 @@ class SavedDeviceState(
 interface SlotDevice {
     val info: DeviceInfo
 
-    /** Parameters to show and save. Known once the device is created; values are keyed by [ParameterInformation.id]. */
+    /**
+     * Parameters to show and save, in the device's order; values are keyed by [ParameterInformation.id].
+     * Known once the device is created, and may change afterwards: see [onParametersChanged].
+     */
     val parameters: List<ParameterInformation>
 
     /** Number of presets; the Presets view is shown when there is more than one. */
@@ -61,6 +64,9 @@ interface SlotDevice {
 
     /** Called when the device stops working on its own (e.g. its process died), on any thread. */
     var onDied: (() -> Unit)?
+
+    /** Called on the main thread when [parameters] changed on the device side (e.g. a plugin rebuilt its parameter list). */
+    var onParametersChanged: (() -> Unit)?
 
     /** Main thread. Puts its processor in the slot of the native rack. */
     fun attach(engine: RackEngine, slotIndex: Int)

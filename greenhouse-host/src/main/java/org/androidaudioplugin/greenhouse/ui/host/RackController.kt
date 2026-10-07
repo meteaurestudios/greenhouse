@@ -517,6 +517,34 @@ class RackController(
     }
 
     /**
+     * The parameter list of [device], loaded in the slot, changed (e.g. a plugin rebuilt it): shows the
+     * new list with its current values. Values of parameters that are still there are kept by the device.
+     */
+    private fun onDeviceParametersChanged(slotIndex: Int, device: SlotDevice) {
+        if (slots[slotIndex].device !== device || !slots[slotIndex].isLoaded) {
+            return
+        }
+
+        scope.launch {
+            val values = withContext(Dispatchers.IO) {
+                device.readParameterValues()
+            }
+
+            // Unloaded or replaced while the values were read
+            if (slots[slotIndex].device !== device || !slots[slotIndex].isLoaded) {
+                return@launch
+            }
+
+            val ui = slotUi[slotIndex]
+            ui.parameterValues.keys.retainAll(values.keys)
+            ui.parameterValues.putAll(values)
+            ui.lastPluginValues.keys.retainAll(values.keys)
+            ui.lastPluginValues.putAll(values)
+            slots[slotIndex] = slots[slotIndex].copy(parametersRevision = slots[slotIndex].parametersRevision + 1)
+        }
+    }
+
+    /**
      * Picks up parameter changes made on the device side (a plugin's own UI, presets, automation).
      * Reads the devices on the calling thread; publishes changed values on Main.
      */
@@ -581,6 +609,7 @@ class RackController(
     /** Once the slot is cleared in the native rack. */
     private fun releaseDevice(slotIndex: Int, device: SlotDevice) {
         device.onDied = null
+        device.onParametersChanged = null
 
         try {
             device.release()
@@ -621,6 +650,10 @@ class RackController(
             scope.launch(Dispatchers.Main) {
                 onDeviceDied(slotIndex, device)
             }
+        }
+
+        device.onParametersChanged = {
+            onDeviceParametersChanged(slotIndex, device)
         }
 
         device.attach(audio.engine, slotIndex)

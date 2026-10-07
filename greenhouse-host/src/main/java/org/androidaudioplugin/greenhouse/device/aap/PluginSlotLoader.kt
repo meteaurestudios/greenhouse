@@ -1,6 +1,7 @@
 package org.androidaudioplugin.greenhouse.device.aap
 
 import android.util.Log
+import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.core.AapHostEngine
 import org.androidaudioplugin.greenhouse.device.DevicePreset
@@ -120,15 +121,15 @@ internal object PluginSlotLoader {
     }
 
     /**
-     * Current value of every known parameter. Parameters the instance doesn't expose at runtime
-     * (declared only in `aap_metadata.xml`) report their default, because `getParameterValue`
-     * swallows errors and returns 0.0 for indices it doesn't know.
+     * Current value of each of [parameters], the instance's parameters in its order. Parameters the
+     * instance doesn't expose at runtime (declared only in `aap_metadata.xml`) report their default,
+     * because `getParameterValue` swallows errors and returns 0.0 for indices it doesn't know.
      */
-    fun readParameterValues(plugin: PluginInformation, instance: NativeRemotePluginInstance): Map<Int, Double> {
+    fun readParameterValues(parameters: List<ParameterInformation>, instance: NativeRemotePluginInstance): Map<Int, Double> {
         val runtimeCount = queryIfAlive(instance, 0) { instance.getParameterCount() }
         val values = mutableMapOf<Int, Double>()
 
-        for ((i, param) in plugin.parameters.withIndex()) {
+        for ((i, param) in parameters.withIndex()) {
             values[param.id] = if (i < runtimeCount) {
                 queryIfAlive(instance, param.defaultValue) { instance.getParameterValue(i) }
             } else {
