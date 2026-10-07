@@ -120,7 +120,7 @@ object RackStateSerializer {
 
                     if (slotObj != null) {
                         val slotIndex = slotObj.optInt(KEY_SLOT_INDEX, i)
-                        val slotType = slotObj.optString(KEY_SLOT_TYPE, if (slotIndex == 0) "Instrument" else "Effect")
+                        val slotType = slotObj.optString(KEY_SLOT_TYPE, if (slotIndex == 0) SlotType.INSTRUMENT else SlotType.EFFECT)
                         val pluginId = if (slotObj.has(KEY_PLUGIN_ID) && !slotObj.isNull(KEY_PLUGIN_ID)) {
                             slotObj.optString(KEY_PLUGIN_ID).ifBlank { null }
                         } else {

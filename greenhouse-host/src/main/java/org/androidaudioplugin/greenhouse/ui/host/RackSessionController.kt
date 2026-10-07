@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import org.androidaudioplugin.greenhouse.data.RackPreset
 import org.androidaudioplugin.greenhouse.data.RackPresetHeader
 import org.androidaudioplugin.greenhouse.data.RackSessionManager
+import org.androidaudioplugin.greenhouse.data.SlotPlacement
 import java.io.File
 
 /** Saved sessions on disk, the currently open session, autosave, and restoring a session into the rack. */
@@ -309,13 +310,14 @@ class RackSessionController(
             }
 
             rack.unloadAll()
-            rack.restoreHostSettings(preset.slots)
+            val savedSlots = SlotPlacement.place(preset.slots, rack.slotTypes)
+            rack.restoreHostSettings(savedSlots)
 
             sequencer.restore(preset.sequence)
 
             var anyError = false
 
-            for (slotState in preset.slots) {
+            for (slotState in savedSlots) {
                 if (!rack.isValidSlot(slotState.slotIndex) || !slotState.isLoaded || slotState.pluginId.isNullOrBlank()) {
                     continue
                 }

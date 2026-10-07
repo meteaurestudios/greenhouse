@@ -22,7 +22,7 @@ The project is split into library modules so that downstream apps can build on t
   - **`greenhouse/core/MidiControllerManager.kt`**: Hardware MIDI input and MIDI 1.0 → UMP stream parser.
   - Manifest declares audio permissions and the AAP service `<queries>`; `consumer-rules.pro` carries the JNI / AAP R8 keep rules.
 - **`greenhouse-host/`** (`:greenhouse-host`): Host state and logic, no screens.
-  - **`greenhouse/data/`**: `PluginRepository` (discovers AAP services via `AudioPluginHostHelper`), `.ghrack` session models, serializer, and storage.
+  - **`greenhouse/data/`**: `PluginRepository` (discovers AAP services via `AudioPluginHostHelper`), `.ghrack` session models, serializer, and storage. `SlotPlacement` restores saved slots by role (`SlotType`) and order rather than index, so sessions survive rack layout changes.
   - **`greenhouse/ui/HostViewModel.kt`**: Thin composition root. Wires the controllers below, runs the engine monitor loop, and handles app lifecycle. Screens access controllers directly (`viewModel.rack`, `viewModel.audio`, …).
   - **`greenhouse/ui/RackModels.kt`**: Rack UI models (`RackSlotData`, `SlotUiState`, `StudioRackViewMode`, …).
   - **`greenhouse/ui/host/`**: Feature controllers owned by `HostViewModel`:

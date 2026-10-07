@@ -21,6 +21,7 @@ import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.core.AapHostEngine
 import org.androidaudioplugin.greenhouse.data.SlotHostSettings
 import org.androidaudioplugin.greenhouse.data.SlotState
+import org.androidaudioplugin.greenhouse.data.SlotType
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.SlotUiState
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
@@ -52,9 +53,9 @@ class RackController(
     val slots = mutableStateListOf<RackSlotData>().apply {
         for (i in 0 until NUM_RACK_SLOTS) {
             val slotType = if (i == INSTRUMENT_SLOT_INDEX) {
-                "Instrument"
+                SlotType.INSTRUMENT
             } else {
-                "Effect"
+                SlotType.EFFECT
             }
 
             add(RackSlotData(i, "Slot ${i + 1}", slotType))
@@ -62,6 +63,10 @@ class RackController(
     }
 
     val slotUi = List(NUM_RACK_SLOTS) { SlotUiState() }
+
+    /** Role of each slot, in rack order. */
+    val slotTypes: List<String>
+        get() = slots.map { it.slotType }
 
     private val loadErrorEvents = Channel<String>(Channel.BUFFERED)
 
