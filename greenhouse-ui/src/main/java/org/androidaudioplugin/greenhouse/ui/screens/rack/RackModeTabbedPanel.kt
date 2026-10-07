@@ -106,7 +106,7 @@ fun ModeTabbedPanel(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val modes = remember(activeSlot.pluginInfo, activeSlot.hasCustomUi, activeSlot.presetCount) {
+    val modes = remember(activeSlot.device, activeSlot.hasCustomUi, activeSlot.presetCount) {
         val list = mutableListOf(StudioRackViewMode.PARAMETERS)
 
         if (activeSlot.hasCustomUi) {
@@ -119,7 +119,7 @@ fun ModeTabbedPanel(
 
         list
     }
-    val hasTabs = showTabs && activeSlot.pluginInfo != null && !activeSlot.isLoading
+    val hasTabs = showTabs && activeSlot.device != null && !activeSlot.isLoading
 
     // The selected tab, relative to the panel: the outline is drawn around it
     var panelOrigin by remember { mutableStateOf(Offset.Zero) }

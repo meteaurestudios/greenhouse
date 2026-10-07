@@ -40,6 +40,9 @@ object SlotHostSettings {
 data class SlotState(
     val slotIndex: Int,
     val slotType: String,
+    /** Source of the device in the slot (`SlotDeviceSource.id`); sessions saved before sources existed hold AAP plugins. */
+    val source: String = DEFAULT_SOURCE,
+    /** ID of the device within its source (the AAP plugin ID). */
     val pluginId: String? = null,
     val packageName: String? = null,
     val displayName: String? = null,
@@ -53,6 +56,10 @@ data class SlotState(
 ) {
     val isLoaded: Boolean
         get() = !pluginId.isNullOrBlank()
+
+    companion object {
+        const val DEFAULT_SOURCE = "aap"
+    }
 }
 
 /** The MIDI sequence of a session and its sequencer settings. */

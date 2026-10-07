@@ -17,24 +17,25 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.androidaudioplugin.ParameterInformation
-import org.androidaudioplugin.PluginInformation
-import org.androidaudioplugin.greenhouse.core.AapHostEngine
 import org.androidaudioplugin.greenhouse.data.SlotHostSettings
 import org.androidaudioplugin.greenhouse.data.SlotState
 import org.androidaudioplugin.greenhouse.data.SlotType
+import org.androidaudioplugin.greenhouse.device.DeviceInfo
+import org.androidaudioplugin.greenhouse.device.SavedDeviceState
+import org.androidaudioplugin.greenhouse.device.SlotDevice
+import org.androidaudioplugin.greenhouse.device.SlotDeviceSource
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.SlotUiState
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
-import org.androidaudioplugin.hosting.InstanceState
-import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 import kotlin.math.abs
 
 /**
- * The rack's slots (slot 0: instrument, slots 1..N-1: effects): plugin lifecycle per slot,
- * parameter / preset edits, and which slot and view the rack is showing.
+ * The rack's slots (slot 0: instrument, slots 1..N-1: effects): device lifecycle per slot (AAP
+ * plugins or devices from the app's other sources), parameter / preset edits, and which slot and view
+ * the rack is showing.
  */
 class RackController(
-    private val hostEngine: AapHostEngine,
+    sources: List<SlotDeviceSource>,
     private val audio: AudioEngineController,
     private val scope: CoroutineScope,
     private val postStatus: (String) -> Unit
@@ -44,11 +45,13 @@ class RackController(
         const val NUM_RACK_SLOTS = 3
         const val INSTRUMENT_SLOT_INDEX = 0
         const val NO_PRESET_SELECTED = -1
-        // aap-core reflects host edits in getParameterValue() right away (see cacheHostValue()); this
+        // AAP plugins report host edits back right away (see SlotDevice.onHostParameterChange()); this
         // only covers plugins that echo the values they processed while a gesture is still going on
         const val HOST_EDIT_IGNORE_MS = 200L
         const val PARAM_SYNC_EPSILON = 1e-4
     }
+
+    private val sources = sources.associateBy { it.id }
 
     val slots = mutableStateListOf<RackSlotData>().apply {
         for (i in 0 until NUM_RACK_SLOTS) {
@@ -96,26 +99,15 @@ class RackController(
         get() = slots[activeSlotIndex]
 
     val isEmpty: Boolean
-        get() = slots.all { it.pluginInfo == null }
-
-    init {
-        hostEngine.onSlotPluginDied = { slotIndex, instance ->
-            // Right away: the main thread may be about to query the dead instance (e.g. an autosave),
-            // and a Binder call already sent to it is not interrupted by aap-core's reply timeout
-            PluginSlotLoader.abandon(instance)
-
-            scope.launch(Dispatchers.Main) {
-                onPluginProcessDied(slotIndex, instance)
-            }
-        }
-    }
+        get() = slots.all { it.device == null }
 
     fun isValidSlot(slotIndex: Int): Boolean {
         return slotIndex in 0 until NUM_RACK_SLOTS
     }
 
-    fun hasPluginsPreparedAtOtherRate(sampleRate: Int): Boolean {
-        return slots.any { it.isLoaded && it.preparedSampleRate != sampleRate }
+    /** Whether a loaded device has to be created again to play at [sampleRate]. */
+    fun hasDevicesToReloadAt(sampleRate: Int): Boolean {
+        return slots.any { it.isLoaded && it.device?.needsReloadAt(sampleRate) == true }
     }
 
     fun selectActiveSlot(slotIndex: Int) {
@@ -131,8 +123,8 @@ class RackController(
         currentViewMode = mode
     }
 
-    /** Starts loading [plugin] into the slot; returns false if the rack is busy and nothing was started. */
-    fun loadPlugin(slotIndex: Int, plugin: PluginInformation): Boolean {
+    /** Starts loading [info] into the slot; returns false if the rack is busy and nothing was started. */
+    fun loadDevice(slotIndex: Int, info: DeviceInfo): Boolean {
         if (!isValidSlot(slotIndex)) {
             return false
         }
@@ -143,39 +135,39 @@ class RackController(
 
         activeSlotIndex = slotIndex
         isInstantiating = true
-        postStatus("Instantiating ${plugin.displayName} in ${slots[slotIndex].title}...")
-        releaseSlot(slotIndex, loadingPluginName = plugin.displayName)
-        // A newly added plugin starts from the default level, fully wet
+        postStatus("Instantiating ${info.displayName} in ${slots[slotIndex].title}...")
+        releaseSlot(slotIndex, loadingPluginName = info.displayName)
+        // A newly added device starts from the default level, fully wet
         applyHostSettings(slotIndex, SlotHostSettings.DEFAULT_LEVEL_DB, SlotHostSettings.INITIAL_MIX)
 
         scope.launch {
             try {
-                val loaded = withContext(Dispatchers.IO) {
-                    PluginSlotLoader.instantiate(hostEngine, slotIndex, plugin, audio.sampleRate, audio.framesPerCallback)
-                }
+                val created = createDevice(slotIndex, info, saved = null)
 
-                if (loaded == null) {
-                    reportLoadFailure(slotIndex, plugin)
+                if (created == null) {
+                    reportLoadFailure(slotIndex, info)
                     return@launch
                 }
 
-                attachLoadedPlugin(
+                val (device, values) = created
+
+                attachDevice(
                     slotIndex = slotIndex,
-                    plugin = plugin,
-                    loaded = loaded,
+                    device = device,
+                    readValues = values,
                     isBypassed = false,
                     selectedPresetIndex = NO_PRESET_SELECTED,
-                    displayedValues = loaded.parameterValues
+                    displayedValues = values
                 )
 
                 activeSlotIndex = slotIndex
                 coerceViewModeToActiveSlot()
                 markChanged()
                 audio.ensureRunning()
-                postStatus("Loaded ${plugin.displayName} into ${slots[slotIndex].title} (${slots[slotIndex].slotType})")
+                postStatus("Loaded ${info.displayName} into ${slots[slotIndex].title} (${slots[slotIndex].slotType})")
             } catch (e: Throwable) {
-                Log.e(TAG, "Failed to load plugin ${plugin.displayName}", e)
-                reportLoadFailure(slotIndex, plugin)
+                Log.e(TAG, "Failed to load ${info.displayName}", e)
+                reportLoadFailure(slotIndex, info)
             } finally {
                 isInstantiating = false
             }
@@ -185,56 +177,71 @@ class RackController(
     }
 
     /**
-     * Re-creates a saved slot: instantiates [plugin], applies the saved state chunk and preset,
-     * then pushes the saved parameter values. Returns false if the plugin couldn't be instantiated.
+     * Re-creates a saved slot: creates [info] with the saved state and preset, then pushes the saved
+     * parameter values. Returns false if the device couldn't be created.
      */
-    suspend fun restoreSlot(state: SlotState, plugin: PluginInformation): Boolean {
+    suspend fun restoreSlot(state: SlotState, info: DeviceInfo): Boolean {
         val slotIndex = state.slotIndex
-        slots[slotIndex] = slots[slotIndex].copy(isLoading = true, loadingPluginName = plugin.displayName)
+        slots[slotIndex] = slots[slotIndex].copy(isLoading = true, loadingPluginName = info.displayName)
 
         try {
-            val loaded = withContext(Dispatchers.IO) {
-                PluginSlotLoader.instantiate(hostEngine, slotIndex, plugin, audio.sampleRate, audio.framesPerCallback) { instance ->
-                    applySavedState(slotIndex, instance, state)
-                }
-            }
+            val savedState = state.stateDataBase64?.let { decodeState(slotIndex, it) }
+            val created = createDevice(slotIndex, info, SavedDeviceState(savedState, state.selectedPresetIndex))
 
-            if (loaded == null) {
-                reportLoadFailure(slotIndex, plugin)
+            if (created == null) {
+                reportLoadFailure(slotIndex, info)
                 return false
             }
 
-            attachLoadedPlugin(
+            val (device, values) = created
+
+            attachDevice(
                 slotIndex = slotIndex,
-                plugin = plugin,
-                loaded = loaded,
+                device = device,
+                readValues = values,
                 isBypassed = state.isBypassed,
                 selectedPresetIndex = state.selectedPresetIndex,
-                displayedValues = state.parameters.ifEmpty { loaded.parameterValues }
+                displayedValues = state.parameters.ifEmpty { values }
             )
 
             val savedValues = state.parameters.mapNotNull { (paramId, value) ->
-                plugin.parameters.find { it.id == paramId }?.let { it to value }
+                device.parameters.find { it.id == paramId }?.let { it to value }
             }
 
             for ((param, value) in savedValues) {
-                cacheHostValue(slotIndex, plugin, param, value)
+                device.onHostParameterChange(param, value)
             }
 
             // One send per parameter would overflow aap-core's input queue on plugins with many parameters
-            audio.engine.setParameterValues(slotIndex, savedValues)
+            device.setParameterValues(audio.engine, slotIndex, savedValues)
 
             return true
         } catch (e: Throwable) {
-            Log.e(TAG, "Failed to instantiate plugin for slot $slotIndex during session restore", e)
-            reportLoadFailure(slotIndex, plugin)
+            Log.e(TAG, "Failed to create ${info.displayName} for slot $slotIndex during session restore", e)
+            reportLoadFailure(slotIndex, info)
             return false
         }
     }
 
-    /** Takes [slotIndex] out of its loading state and tells the user [plugin] couldn't be loaded. */
-    private fun reportLoadFailure(slotIndex: Int, plugin: PluginInformation) {
-        val message = "${plugin.displayName} failed to load"
+    /** Creates the device and reads its parameter values; null if its source is gone or fails to create it. */
+    private suspend fun createDevice(slotIndex: Int, info: DeviceInfo, saved: SavedDeviceState?): Pair<SlotDevice, Map<Int, Double>>? {
+        val source = sources[info.sourceId]
+
+        if (source == null) {
+            Log.w(TAG, "No source ${info.sourceId} for ${info.displayName}")
+            return null
+        }
+
+        return withContext(Dispatchers.IO) {
+            source.instantiate(info, slotIndex, audio.sampleRate, saved)?.let { device ->
+                device to device.readParameterValues()
+            }
+        }
+    }
+
+    /** Takes [slotIndex] out of its loading state and tells the user [info] couldn't be loaded. */
+    private fun reportLoadFailure(slotIndex: Int, info: DeviceInfo) {
+        val message = "${info.displayName} failed to load"
         postStatus(message)
         loadErrorEvents.trySend(message)
         slots[slotIndex] = slots[slotIndex].copy(isLoading = false, loadingPluginName = null)
@@ -278,25 +285,25 @@ class RackController(
         }
 
         val slot = slots[slotIndex]
-        val plugin = slot.pluginInfo
+        val info = slot.deviceInfo
 
-        if (!slot.isCrashed || plugin == null) {
+        if (!slot.isCrashed || info == null) {
             return false
         }
 
         // Captured before releaseSlot() resets the slot's UI state
         val state = captureSlotState(slot)
         isInstantiating = true
-        postStatus("Reloading ${plugin.displayName}...")
-        releaseSlot(slotIndex, loadingPluginName = plugin.displayName)
+        postStatus("Reloading ${info.displayName}...")
+        releaseSlot(slotIndex, loadingPluginName = info.displayName)
 
         scope.launch {
             try {
-                if (restoreSlot(state, plugin)) {
+                if (restoreSlot(state, info)) {
                     audio.ensureRunning()
-                    postStatus("Reloaded ${plugin.displayName} into ${slots[slotIndex].title}")
+                    postStatus("Reloaded ${info.displayName} into ${slots[slotIndex].title}")
                 } else {
-                    postStatus("Could not reload ${plugin.displayName}")
+                    postStatus("Could not reload ${info.displayName}")
                 }
             } finally {
                 isInstantiating = false
@@ -307,7 +314,7 @@ class RackController(
     }
 
     fun toggleSlotBypass(slotIndex: Int) {
-        if (!isValidSlot(slotIndex) || slots[slotIndex].pluginInfo == null) {
+        if (!isValidSlot(slotIndex) || slots[slotIndex].device == null) {
             return
         }
 
@@ -363,25 +370,15 @@ class RackController(
         val ui = slotUi[slotIndex]
         ui.lastHostEditTimestamps[parameter.id] = System.currentTimeMillis()
         ui.parameterValues[parameter.id] = value
-        slots[slotIndex].pluginInfo?.let { cacheHostValue(slotIndex, it, parameter, value) }
-        audio.engine.setParameterValue(slotIndex, parameter, value)
-        markChanged()
-    }
 
-    /**
-     * Records a value sent to the plugin in aap-core's value cache, so [pollPluginParameterChanges]
-     * reads it back before the plugin processes it (while paused, not until playback resumes).
-     * Main thread only, like [releaseSlot], which destroys the instance.
-     */
-    private fun cacheHostValue(slotIndex: Int, plugin: PluginInformation, parameter: ParameterInformation, value: Double) {
-        val instance = slots[slotIndex].instance
-        val index = plugin.parameters.indexOfFirst { it.id == parameter.id }
+        val device = slots[slotIndex].device
 
-        if (instance == null || index < 0 || instance.state == InstanceState.DESTROYED) {
-            return
+        if (device != null && slots[slotIndex].isLoaded) {
+            device.onHostParameterChange(parameter, value)
+            device.setParameterValues(audio.engine, slotIndex, listOf(parameter to value))
         }
 
-        instance.setCachedParameterValue(index, value)
+        markChanged()
     }
 
     fun setPreset(slotIndex: Int, nativeIndex: Int) {
@@ -395,10 +392,9 @@ class RackController(
             return
         }
 
-        val instance = slot.instance
-        val plugin = slot.pluginInfo
+        val device = slot.device
 
-        if (instance == null || plugin == null) {
+        if (device == null || !slot.isLoaded) {
             return
         }
 
@@ -410,26 +406,23 @@ class RackController(
         val request = ++presetRequestIds[slotIndex]
 
         scope.launch {
-            // FIFO lock: rapid preset taps reach the plugin in the order they were made.
+            // FIFO lock: rapid preset taps reach the device in the order they were made.
             val values = presetLocks[slotIndex].withLock {
                 withContext(Dispatchers.IO) {
-                    PluginSlotLoader.queryIfAlive(instance, Unit) {
-                        instance.setCurrentPresetIndex(targetPreset.nativeIndex)
-                    }
-                    PluginSlotLoader.readParameterValues(plugin, instance)
+                    device.selectPreset(targetPreset.nativeIndex)
                 }
             }
 
             // A newer preset was picked, or the slot was reloaded, while this one was applying.
-            if (request != presetRequestIds[slotIndex] || slots[slotIndex].instance != instance) {
+            if (request != presetRequestIds[slotIndex] || slots[slotIndex].device !== device) {
                 return@launch
             }
 
-            // Display only: the preset already set these values in the plugin. Echoing them back
+            // Display only: the preset already set these values in the device. Echoing them back
             // would clobber the preset if it applied after the read-back.
             val ui = slotUi[slotIndex]
 
-            for (param in plugin.parameters) {
+            for (param in device.parameters) {
                 val value = values[param.id] ?: continue
                 ui.parameterValues[param.id] = value
                 ui.lastPluginValues[param.id] = value
@@ -442,10 +435,10 @@ class RackController(
         return slots.map { captureSlotState(it) }
     }
 
-    /** A crashed slot keeps its plugin and parameter values, without a state chunk. */
+    /** A crashed slot keeps its device and parameter values, without a state chunk. */
     private fun captureSlotState(slot: RackSlotData): SlotState {
-        val instance = slot.instance
-        val plugin = slot.pluginInfo ?: return SlotState(
+        val device = slot.device
+        val info = device?.info ?: return SlotState(
             slotIndex = slot.index,
             slotType = slot.slotType,
             pluginId = null,
@@ -459,79 +452,79 @@ class RackController(
             parameters = emptyMap()
         )
 
+        val state = if (slot.isCrashed) {
+            null
+        } else {
+            captureStateChunk(slot.index, device)
+        }
+
         return SlotState(
             slotIndex = slot.index,
             slotType = slot.slotType,
-            pluginId = plugin.pluginId,
-            packageName = plugin.packageName,
-            displayName = plugin.displayName,
+            source = info.sourceId,
+            pluginId = info.id,
+            packageName = info.packageName,
+            displayName = info.displayName,
             isBypassed = slot.isBypassed,
             levelDb = slot.levelDb,
             mix = slot.mix,
             selectedPresetIndex = slot.selectedPresetIndex,
-            stateDataBase64 = instance?.let { captureStateChunk(slot.index, it) },
+            stateDataBase64 = state,
             parameters = slotUi[slot.index].parameterValues.toMap()
         )
     }
 
     /**
-     * The process of [instance], loaded in the slot, died. The slot goes silent and keeps its plugin
-     * and parameter values, so the user can reload it.
+     * [device], loaded in the slot, died on its own (e.g. its plugin's process). The slot goes silent
+     * and keeps the device and parameter values, so the user can reload it.
      */
-    private fun onPluginProcessDied(slotIndex: Int, instance: NativeRemotePluginInstance) {
+    private fun onDeviceDied(slotIndex: Int, device: SlotDevice) {
         val slot = slots[slotIndex]
 
         // Already unloaded or replaced while the notification was on its way
-        if (slot.instance !== instance) {
+        if (slot.device !== device || slot.isCrashed) {
             return
         }
 
-        Log.w(TAG, "Plugin process died for ${slot.pluginInfo?.displayName} in slot $slotIndex")
+        Log.w(TAG, "${device.info.displayName} died in slot $slotIndex")
         audio.engine.clearSlot(slotIndex)
-        hostEngine.unloadSlot(slotIndex)
+        releaseDevice(slotIndex, device)
 
         slots[slotIndex] = slot.copy(
-            instance = null,
             presetCount = 0,
             presets = emptyList(),
             isLoadingPresets = false,
             isCrashed = true
         )
         coerceViewModeToActiveSlot()
-        postStatus("${slot.pluginInfo?.displayName} crashed. Tap CRASHED on its slot to reload it.")
+        postStatus("${device.info.displayName} crashed. Tap CRASHED on its slot to reload it.")
     }
 
     /**
-     * Picks up parameter changes made on the plugin side (its own UI, presets, automation).
-     * Reads the instances on the calling thread; publishes changed values on Main.
+     * Picks up parameter changes made on the device side (a plugin's own UI, presets, automation).
+     * Reads the devices on the calling thread; publishes changed values on Main.
      */
-    suspend fun pollPluginParameterChanges() {
+    suspend fun pollDeviceParameterChanges() {
         val now = System.currentTimeMillis()
         val updates = mutableListOf<Triple<Int, Int, Double>>()
 
         for (slot in slots.toList()) {
-            val instance = slot.instance
-            val plugin = slot.pluginInfo
+            val device = slot.device
 
-            if (instance == null || plugin == null) {
+            if (device == null || !slot.isLoaded) {
                 continue
             }
 
             val ui = slotUi[slot.index]
 
-            for ((i, param) in plugin.parameters.withIndex()) {
+            for ((i, param) in device.parameters.withIndex()) {
                 val lastEdit = ui.lastHostEditTimestamps[param.id] ?: 0L
 
                 if (now - lastEdit < HOST_EDIT_IGNORE_MS) {
                     continue
                 }
 
-                val currentVal = try {
-                    PluginSlotLoader.queryIfAlive<Double?>(instance, null) { instance.getParameterValue(i) }
-                } catch (e: Throwable) {
-                    null
-                } ?: continue
-
+                val currentVal = device.readParameterValue(i) ?: continue
                 val previousVal = ui.lastPluginValues[param.id]
 
                 if (previousVal == null) {
@@ -555,60 +548,70 @@ class RackController(
         }
     }
 
-    /** Detaches and destroys whatever is in the slot and resets its UI state. */
+    /** Detaches and releases whatever is in the slot and resets its UI state. */
     private fun releaseSlot(slotIndex: Int, loadingPluginName: String?) {
-        val currentInstance = slots[slotIndex].instance
+        val device = slots[slotIndex].device
         audio.engine.setSlotBypassed(slotIndex, false)
         audio.engine.clearSlot(slotIndex)
 
-        if (currentInstance != null) {
-            try {
-                PluginSlotLoader.destroy(currentInstance)
-            } catch (e: Throwable) {
-                Log.e(TAG, "Error destroying plugin instance in slot $slotIndex", e)
-            }
+        if (device != null && !slots[slotIndex].isCrashed) {
+            releaseDevice(slotIndex, device)
         }
 
-        hostEngine.unloadSlot(slotIndex)
         slots[slotIndex] = slots[slotIndex].cleared(loadingPluginName)
         slotUi[slotIndex].reset()
     }
 
-    private fun attachLoadedPlugin(
+    /** Once the slot is cleared in the native rack. */
+    private fun releaseDevice(slotIndex: Int, device: SlotDevice) {
+        device.onDied = null
+
+        try {
+            device.release()
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error releasing ${device.info.displayName} in slot $slotIndex", e)
+        }
+    }
+
+    private fun attachDevice(
         slotIndex: Int,
-        plugin: PluginInformation,
-        loaded: LoadedPlugin,
+        device: SlotDevice,
+        readValues: Map<Int, Double>,
         isBypassed: Boolean,
         selectedPresetIndex: Int,
         displayedValues: Map<Int, Double>
     ) {
         val ui = slotUi[slotIndex]
         ui.lastPluginValues.clear()
-        ui.lastPluginValues.putAll(loaded.parameterValues)
+        ui.lastPluginValues.putAll(readValues)
         ui.parameterValues.clear()
         ui.parameterValues.putAll(displayedValues)
 
-        val hasPresetList = loaded.presetCount > 1
+        val hasPresetList = device.presetCount > 1
 
         slots[slotIndex] = slots[slotIndex].copy(
-            pluginInfo = plugin,
-            instance = loaded.instance,
+            device = device,
             isBypassed = isBypassed,
             selectedPresetIndex = selectedPresetIndex,
-            presetCount = loaded.presetCount,
+            presetCount = device.presetCount,
             presets = emptyList(),
             isLoadingPresets = hasPresetList,
             isLoading = false,
             loadingPluginName = null,
-            preparedSampleRate = loaded.sampleRate,
             isCrashed = false
         )
 
-        audio.engine.setSlotPlugin(slotIndex, loaded.instance, loaded.sampleRate)
+        device.onDied = {
+            scope.launch(Dispatchers.Main) {
+                onDeviceDied(slotIndex, device)
+            }
+        }
+
+        device.attach(audio.engine, slotIndex)
         audio.engine.setSlotBypassed(slotIndex, isBypassed)
 
         if (hasPresetList) {
-            fetchPresetNames(slotIndex, loaded.instance, loaded.presetCount)
+            fetchPresetNames(slotIndex, device)
         }
     }
 
@@ -618,60 +621,34 @@ class RackController(
         audio.engine.setSlotMix(slotIndex, mix)
     }
 
-    /** Preset names can be slow to enumerate, so they fill in after the plugin is already playing. */
-    private fun fetchPresetNames(slotIndex: Int, instance: NativeRemotePluginInstance, presetCount: Int) {
+    /** Preset names can be slow to enumerate, so they fill in after the device is already playing. */
+    private fun fetchPresetNames(slotIndex: Int, device: SlotDevice) {
         scope.launch {
             val presets = withContext(Dispatchers.IO) {
-                PluginSlotLoader.readPresets(instance, presetCount)
+                device.readPresets()
             }
 
             // The slot may have been reloaded while names were being fetched.
-            if (slots[slotIndex].instance == instance) {
+            if (slots[slotIndex].device === device) {
                 slots[slotIndex] = slots[slotIndex].copy(presets = presets, isLoadingPresets = false)
             }
         }
     }
 
-    private fun applySavedState(slotIndex: Int, instance: NativeRemotePluginInstance, state: SlotState) {
-        val stateData = state.stateDataBase64
-
-        if (!stateData.isNullOrBlank()) {
-            try {
-                val stateBytes = Base64.decode(stateData, Base64.DEFAULT)
-
-                if (stateBytes.isNotEmpty()) {
-                    instance.setState(stateBytes)
-                    Log.d(TAG, "Restored setState (${stateBytes.size} bytes) for slot $slotIndex")
-                }
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to apply setState for slot $slotIndex", e)
-            }
-        }
-
-        if (state.selectedPresetIndex >= 0) {
-            try {
-                instance.setCurrentPresetIndex(state.selectedPresetIndex)
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to restore presetIndex for slot $slotIndex", e)
-            }
+    private fun decodeState(slotIndex: Int, stateData: String): ByteArray? {
+        return try {
+            Base64.decode(stateData, Base64.DEFAULT).takeIf { it.isNotEmpty() }
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "Saved state of slot $slotIndex is not valid Base64", e)
+            null
         }
     }
 
-    private fun captureStateChunk(slotIndex: Int, instance: NativeRemotePluginInstance): String? {
+    private fun captureStateChunk(slotIndex: Int, device: SlotDevice): String? {
         return try {
-            PluginSlotLoader.queryUnlessDied<String?>(instance, null) {
-                val stateSize = instance.getStateSize()
-
-                if (stateSize > 0) {
-                    val stateBuffer = ByteArray(stateSize)
-                    instance.getState(stateBuffer)
-                    Base64.encodeToString(stateBuffer, Base64.NO_WRAP)
-                } else {
-                    null
-                }
-            }
+            device.captureState()?.let { Base64.encodeToString(it, Base64.NO_WRAP) }
         } catch (e: Throwable) {
-            Log.w(TAG, "Failed to capture getState for slot $slotIndex", e)
+            Log.w(TAG, "Failed to capture the state of slot $slotIndex", e)
             null
         }
     }

@@ -12,6 +12,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import org.androidaudioplugin.greenhouse.device.aap.AapSlotDevice
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
 import org.androidaudioplugin.greenhouse.ui.screens.rack.*
@@ -32,7 +33,7 @@ fun StudioRackScreen(
     val density = LocalDensity.current
     val currentSlotIndex = viewModel.rack.activeSlotIndex
     val activeSlot = viewModel.rack.slots[currentSlotIndex]
-    val activePlugin = activeSlot.pluginInfo
+    val activeDevice = activeSlot.device
     var isRackFolded by remember { mutableStateOf(false) }
     var showSessionDialog by remember { mutableStateOf(false) }
 
@@ -111,14 +112,14 @@ fun StudioRackScreen(
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            key(activeSlot.index, activePlugin?.pluginId, activePlugin?.parameters?.size, activeSlot.isLoading) {
+            key(activeSlot.index, activeDevice?.info?.key, activeSlot.parameters.size, activeSlot.isLoading) {
 
                 if (activeSlot.isLoading) {
                     PluginLoadingView(
                         slot = activeSlot,
                         pluginName = activeSlot.loadingPluginName
                     )
-                } else if (activePlugin == null) {
+                } else if (activeDevice == null) {
                     NoPluginInSlotView(
                         slot = activeSlot,
                         isProcessing = viewModel.audio.isProcessing,
@@ -132,8 +133,8 @@ fun StudioRackScreen(
                         StudioRackViewMode.PARAMETERS -> {
                             ParameterControlRack(
                                 slotIndex = activeSlot.index,
-                                pluginId = activePlugin.pluginId ?: "",
-                                parameters = activePlugin.parameters,
+                                pluginId = activeDevice.info.key,
+                                parameters = activeDevice.parameters,
                                 parameterValues = viewModel.rack.slotUi[activeSlot.index].parameterValues,
                                 gridState = viewModel.rack.slotUi[activeSlot.index].parameterGridState,
                                 onValueChange = { param, valDouble ->
@@ -155,13 +156,16 @@ fun StudioRackScreen(
                         }
 
                         StudioRackViewMode.NATIVE_SURFACE -> {
-                            NativePluginSurfaceContainer(
-                                viewModel = viewModel,
-                                slot = activeSlot,
-                                plugin = activePlugin,
-                                isRackFolded = isRackFolded,
-                                onToggleFoldRack = { isRackFolded = !isRackFolded }
-                            )
+                            // Only AAP plugins have a UI to show here for now
+                            if (activeDevice is AapSlotDevice) {
+                                NativePluginSurfaceContainer(
+                                    viewModel = viewModel,
+                                    slot = activeSlot,
+                                    device = activeDevice,
+                                    isRackFolded = isRackFolded,
+                                    onToggleFoldRack = { isRackFolded = !isRackFolded }
+                                )
+                            }
                         }
 
                         StudioRackViewMode.PRESETS -> {

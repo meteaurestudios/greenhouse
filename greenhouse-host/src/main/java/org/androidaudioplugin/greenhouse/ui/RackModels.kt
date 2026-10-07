@@ -6,11 +6,11 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import org.androidaudioplugin.PluginInformation
+import org.androidaudioplugin.ParameterInformation
 import org.androidaudioplugin.greenhouse.data.SlotHostSettings
-import org.androidaudioplugin.hosting.NativeRemotePluginInstance
-
-private const val GUI_EXTENSION_URI_PREFIX = "urn://androidaudioplugin.org/extensions/gui"
+import org.androidaudioplugin.greenhouse.device.DeviceInfo
+import org.androidaudioplugin.greenhouse.device.DevicePreset
+import org.androidaudioplugin.greenhouse.device.SlotDevice
 
 enum class StudioRackViewMode(val title: String) {
     PARAMETERS("Parameters"),
@@ -34,23 +34,12 @@ class SlotNativeUiZoomState {
     }
 }
 
-val PluginInformation.hasCustomUi: Boolean
-    get() = !uiViewFactory.isNullOrBlank() ||
-            !uiWeb.isNullOrBlank() ||
-            !uiActivity.isNullOrBlank() ||
-            extensions.any { it.uri?.startsWith(GUI_EXTENSION_URI_PREFIX) == true }
-
-data class PluginPreset(
-    val nativeIndex: Int,
-    val name: String
-)
-
 data class RackSlotData(
     val index: Int,
     val title: String,
     val slotType: String,
-    val pluginInfo: PluginInformation? = null,
-    val instance: NativeRemotePluginInstance? = null,
+    /** What fills the slot. Kept when it crashed ([isCrashed]), already released, so it can be reloaded. */
+    val device: SlotDevice? = null,
     val isBypassed: Boolean = false,
     /** Host level applied to the slot's output; back to its default when a new plugin is added. */
     val levelDb: Float = SlotHostSettings.DEFAULT_LEVEL_DB,
@@ -58,24 +47,29 @@ data class RackSlotData(
     val mix: Float = SlotHostSettings.INITIAL_MIX,
     val selectedPresetIndex: Int = -1,
     val presetCount: Int = 0,
-    val presets: List<PluginPreset> = emptyList(),
+    val presets: List<DevicePreset> = emptyList(),
     val isLoadingPresets: Boolean = false,
     val isLoading: Boolean = false,
     val loadingPluginName: String? = null,
-    /** Sample rate [instance] was prepared at. */
-    val preparedSampleRate: Int = 0,
-    /** The plugin's process died: [pluginInfo] and the parameter values are kept so it can be reloaded. */
+    /** The device died (e.g. its plugin's process): [device] and the parameter values are kept so it can be reloaded. */
     val isCrashed: Boolean = false
 ) {
     val presetNames: List<String>
         get() = presets.map { it.name }
 
-    /** A crashed plugin has no instance to show its UI. */
-    val hasCustomUi: Boolean
-        get() = pluginInfo?.hasCustomUi == true && !isCrashed
+    val deviceInfo: DeviceInfo?
+        get() = device?.info
 
+    val parameters: List<ParameterInformation>
+        get() = device?.parameters ?: emptyList()
+
+    /** A crashed device has nothing left to show its UI. */
+    val hasCustomUi: Boolean
+        get() = device?.hasCustomUi == true && !isCrashed
+
+    /** Holds a working device (not crashed). */
     val isLoaded: Boolean
-        get() = instance != null && pluginInfo != null
+        get() = device != null && !isCrashed
 
     /** The same slot with no plugin in it (host level and mix kept, e.g. to reload a crashed plugin), optionally showing [loadingPluginName] as being loaded. */
     fun cleared(loadingPluginName: String? = null): RackSlotData {

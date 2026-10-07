@@ -2,6 +2,7 @@
 // processor lifecycle and MIDI routing. Fake processors stand in for plugins. See CMakeLists.txt.
 
 #include "RackEngine.h"
+#include "slot/SlotEvents.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -421,6 +422,41 @@ void testSequencerEvents()
     CHECK(instrument.mNoteOffs == 1);
 }
 
+void testSlotEvents()
+{
+    // What the Kotlin host sends for a parameter (UmpHelper.aapUmpSysex8ParameterPlain()): ID 42 at half its range
+    constexpr uint32_t PARAMETER_ID = 42;
+    constexpr uint32_t HALF_TRANSPORT_VALUE = 0x80000000u;
+    constexpr double MIN_VALUE = 20.0;
+    constexpr double MAX_VALUE = 220.0;
+    constexpr double HALF_PLAIN_VALUE = 120.0;
+    constexpr double VALUE_TOLERANCE = 1e-6;
+    // SysEx8 in group 0 with the universal ID, then 0x7F on channel 0
+    constexpr uint32_t PARAMETER_WORD0 = 0x5000007Eu;
+    constexpr uint32_t PARAMETER_WORD1 = 0x7F000000u;
+    const uint32_t parameterWords[] = {PARAMETER_WORD0, PARAMETER_WORD1, PARAMETER_ID, HALF_TRANSPORT_VALUE};
+    ParameterChange change;
+
+    CHECK(ump::getWordCount(parameterWords[0]) == PARAMETER_SYSEX8_WORD_COUNT);
+    CHECK(readParameterChange(parameterWords, PARAMETER_SYSEX8_WORD_COUNT, change));
+    CHECK(change.mParameterId == PARAMETER_ID);
+    CHECK(std::fabs(toPlainValue(change.mNormalizedValue, MIN_VALUE, MAX_VALUE) - HALF_PLAIN_VALUE) < VALUE_TOLERANCE);
+
+    const uint32_t noteOnWords[] = {MIDI2_NOTE_ON | (TEST_NOTE << ump::NOTE_SHIFT), FULL_VELOCITY};
+    CHECK(!readParameterChange(noteOnWords, ump::getWordCount(noteOnWords[0]), change));
+    CHECK(!isJrTimestamp(noteOnWords[0]));
+
+    // As the sequencer writes them, 100 frames into a block. JR ticks are exact to about 1.5 frames at 48 kHz.
+    constexpr int32_t FRAME_OFFSET = 100;
+    constexpr int32_t FRAME_TOLERANCE = 2;
+    auto ticks = static_cast<uint32_t>(FRAME_OFFSET * ump::JR_TIMESTAMP_TICKS_PER_SECOND / DEFAULT_SAMPLE_RATE);
+    auto timestamp = ump::makeJrTimestamp(ticks);
+
+    CHECK(isJrTimestamp(timestamp));
+    CHECK(getJrTimestampTicks(timestamp) == ticks);
+    CHECK(std::abs(jrTicksToFrames(ticks, DEFAULT_SAMPLE_RATE) - FRAME_OFFSET) <= FRAME_TOLERANCE);
+}
+
 } // namespace
 
 int main()
@@ -434,6 +470,7 @@ int main()
     testLifecycle();
     testLiveEvents();
     testSequencerEvents();
+    testSlotEvents();
 
     if (gFailures > 0) {
         std::printf("%d failure(s)\n", gFailures);

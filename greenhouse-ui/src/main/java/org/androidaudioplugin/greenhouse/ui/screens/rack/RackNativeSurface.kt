@@ -67,6 +67,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.androidaudioplugin.PluginInformation
+import org.androidaudioplugin.greenhouse.device.aap.AapSlotDevice
 import org.androidaudioplugin.greenhouse.ui.GreenhouseSurfaceControlHost
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
@@ -577,14 +578,16 @@ fun NativeUiErrorFallbackCard(
 fun NativePluginSurfaceContainer(
     viewModel: HostViewModel,
     slot: RackSlotData,
-    plugin: PluginInformation,
+    device: AapSlotDevice,
     isRackFolded: Boolean,
     onToggleFoldRack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val instance = slot.instance
+    val plugin = device.plugin
+    // A crashed plugin's instance is gone
+    val instance = device.instance.takeIf { !slot.isCrashed }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM && instance != null) {
         var surfaceHost by remember { mutableStateOf<GreenhouseSurfaceControlHost?>(null) }
@@ -684,7 +687,7 @@ fun NativePluginSurfaceContainer(
                     retryCount++
                 },
                 onReloadPlugin = {
-                    viewModel.loadPluginIntoSlot(slot.index, plugin)
+                    viewModel.loadDeviceIntoSlot(slot.index, device.info)
                 },
                 modifier = modifier.fillMaxSize()
             )

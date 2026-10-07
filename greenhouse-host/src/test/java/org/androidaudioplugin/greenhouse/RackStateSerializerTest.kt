@@ -31,6 +31,7 @@ class RackStateSerializerTest {
         private const val TEST_NOTE_OFF_TICK = 480
         private const val TEST_QUANTIZE_TICKS = 240
         private const val TEST_METRONOME_LEVEL_DB = -12f
+        private const val TEST_SOURCE = "embedded"
     }
 
     @Test
@@ -224,5 +225,25 @@ class RackStateSerializerTest {
         assertNull(parsed!!.sequence)
         assertEquals(0, SequenceState.decodeEvents(null).size)
         assertNull(SequenceState.encodeEvents(IntArray(0)))
+    }
+
+    @Test
+    fun testSlotSourceRoundtrip() {
+        val slot = SlotState(slotIndex = 0, slotType = "Instrument", source = TEST_SOURCE, pluginId = TEST_PLUGIN_SYNTH_ID)
+
+        val parsed = RackStateSerializer.deserializeFromJson(RackStateSerializer.serializeToJson(RackPreset(name = TEST_PRESET_NAME, slots = listOf(slot))))
+
+        assertEquals(TEST_SOURCE, parsed!!.slots.single().source)
+    }
+
+    @Test
+    fun testSlotWithoutSourceHoldsAnAapPlugin() {
+        // As saved before there were several device sources
+        val json = """{"name": "$TEST_PRESET_NAME", "slots": [{"slotIndex": 0, "slotType": "Instrument", "pluginId": "$TEST_PLUGIN_SYNTH_ID"}]}"""
+
+        val parsed = RackStateSerializer.deserializeFromJson(json)
+
+        assertEquals(SlotState.DEFAULT_SOURCE, parsed!!.slots.single().source)
+        assertEquals(TEST_PLUGIN_SYNTH_ID, parsed.slots.single().pluginId)
     }
 }

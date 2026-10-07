@@ -110,7 +110,7 @@ fun PluginPresetsView(
         ) {
             items(
                 presets.size,
-                key = { idx -> "${slot.index}_${slot.pluginInfo?.pluginId ?: ""}_preset_${presets[idx].nativeIndex}" }
+                key = { idx -> "${slot.index}_${slot.deviceInfo?.key ?: ""}_preset_${presets[idx].nativeIndex}" }
             ) { idx ->
                 val preset = presets[idx]
                 val isPresetSelected = slot.selectedPresetIndex >= 0 && preset.nativeIndex == slot.selectedPresetIndex

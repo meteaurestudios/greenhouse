@@ -35,8 +35,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.data.PluginCategory
+import org.androidaudioplugin.greenhouse.device.DeviceInfo
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.host.PluginBrowserController
 import org.androidaudioplugin.greenhouse.ui.components.ControlButton
@@ -106,7 +106,7 @@ fun PluginBrowserScreen(
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                    text = "${targetSlot.slotType} Slot • ${viewModel.browser.filteredPlugins.size} plugin(s) available",
+                    text = "${targetSlot.slotType} Slot • ${viewModel.browser.filteredDevices.size} plugin(s) available",
                     fontSize = 11.sp,
                     color = TextSecondary,
                     maxLines = 1,
@@ -163,7 +163,7 @@ fun PluginBrowserScreen(
                 viewModel.browser.selectedDeveloper != PluginBrowserController.ALL_DEVELOPERS
 
         // Nothing for this slot: the Google Play button goes with the explanation instead of floating
-        val isNothingInstalled = viewModel.browser.filteredPlugins.isEmpty() && !isFiltering
+        val isNothingInstalled = viewModel.browser.filteredDevices.isEmpty() && !isFiltering
 
         // The list, with the Google Play button floating over its bottom
         Box(
@@ -173,13 +173,13 @@ fun PluginBrowserScreen(
         ) {
             if (isNothingInstalled) {
                 NoPluginsInstalled(
-                    hasAnyPlugin = viewModel.browser.plugins.isNotEmpty(),
+                    hasAnyPlugin = viewModel.browser.devices.isNotEmpty(),
                     slotType = targetSlot.slotType,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(bottom = navigationBarPadding)
                 )
-            } else if (viewModel.browser.filteredPlugins.isEmpty()) {
+            } else if (viewModel.browser.filteredDevices.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -209,14 +209,14 @@ fun PluginBrowserScreen(
                     contentPadding = PaddingValues(bottom = bottomClearance),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(viewModel.browser.filteredPlugins, key = { it.pluginId ?: it.displayName }) { plugin ->
+                    items(viewModel.browser.filteredDevices, key = { it.key }) { plugin ->
                         val isSlotLoading = targetSlot.isLoading || viewModel.rack.isInstantiating
 
                         PluginCard(
                             plugin = plugin,
                             isEnabled = !isSlotLoading,
                             onLoad = {
-                                viewModel.loadPluginIntoSlot(viewModel.browser.targetSlotIndex, plugin)
+                                viewModel.loadDeviceIntoSlot(viewModel.browser.targetSlotIndex, plugin)
                                 onNavigateToRack()
                             }
                         )
@@ -348,11 +348,11 @@ private fun GetPluginsLink(modifier: Modifier = Modifier) {
 
 @Composable
 private fun PluginCard(
-    plugin: PluginInformation,
+    plugin: DeviceInfo,
     isEnabled: Boolean = true,
     onLoad: () -> Unit
 ) {
-    val catLower = plugin.category?.lowercase() ?: ""
+    val catLower = plugin.categoryLabel?.lowercase() ?: ""
     val tagColor = when {
         catLower.contains("synth") || catLower.contains("instrument") -> BlossomCoral
         catLower.contains("effect") || catLower.contains("delay") || catLower.contains("reverb") || catLower.contains("chorus") -> PeriwinkleBlue
@@ -393,7 +393,7 @@ private fun PluginCard(
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = (plugin.category ?: "plugin").lowercase(Locale.US),
+                            text = (plugin.categoryLabel ?: "plugin").lowercase(Locale.US),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,
                             color = tagColor

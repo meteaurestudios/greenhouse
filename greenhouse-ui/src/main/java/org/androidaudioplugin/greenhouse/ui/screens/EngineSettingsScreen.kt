@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.androidaudioplugin.greenhouse.core.MidiControllerManager
 import org.androidaudioplugin.greenhouse.core.OutputStreamMode
+import org.androidaudioplugin.greenhouse.device.aap.AapSlotDevice
 import org.androidaudioplugin.greenhouse.ui.HostViewModel
 import org.androidaudioplugin.greenhouse.ui.components.CONTROL_LABEL_FONT_SIZE
 import org.androidaudioplugin.greenhouse.ui.components.CONTROL_SPACING
@@ -269,7 +270,7 @@ fun EngineSettingsScreen(
                     InfoRow(
                         label = "${slot.title} (${slot.slotType.lowercase(Locale.US)})",
                         value = when {
-                            slot.pluginInfo == null -> "Empty"
+                            slot.device == null -> "Empty"
                             slot.isBypassed -> "Bypassed"
                             !isProcessing -> "Paused"
                             else -> formatPercent(slotCpu)
@@ -287,9 +288,9 @@ fun EngineSettingsScreen(
         // The active slot's plugin
         SettingsSection(title = "Active plugin", icon = { SectionIcon(Icons.Default.Info) }) {
             val activeSlot = viewModel.rack.activeSlot
-            val activePlugin = activeSlot.pluginInfo
+            val activeDevice = activeSlot.device
 
-            if (activePlugin == null) {
+            if (activeDevice == null) {
                 Text(
                     text = "No plugin loaded in ${activeSlot.title}.",
                     fontSize = ROW_FONT_SIZE,
@@ -297,17 +298,20 @@ fun EngineSettingsScreen(
                 )
             } else {
                 InfoRow(label = "Slot", value = "${activeSlot.title} (${activeSlot.slotType.lowercase(Locale.US)})")
-                InfoRow(label = "Plugin", value = activePlugin.displayName)
-                InfoRow(label = "Developer", value = activePlugin.developer ?: "Unknown")
-                InfoRow(label = "Category", value = activePlugin.category ?: "Unspecified")
-                InfoRow(label = "Plugin ID", value = activePlugin.pluginId ?: "N/A", isMonospace = true)
-                InfoRow(label = "Package", value = activePlugin.packageName, isMonospace = true)
-                InfoRow(label = "Parameters", value = "${activePlugin.parameters.size}")
+                val info = activeDevice.info
+                InfoRow(label = "Plugin", value = info.displayName)
+                InfoRow(label = "Developer", value = info.developer ?: "Unknown")
+                InfoRow(label = "Category", value = info.categoryLabel ?: "Unspecified")
+                InfoRow(label = "Plugin ID", value = info.id, isMonospace = true)
+                InfoRow(label = "Package", value = info.packageName ?: "N/A", isMonospace = true)
+                InfoRow(label = "Parameters", value = "${activeDevice.parameters.size}")
                 InfoRow(label = "Factory presets", value = "${activeSlot.presets.size}")
 
-                if (activePlugin.ports.isNotEmpty()) {
-                    Subsection(title = "Audio and MIDI ports (${activePlugin.ports.size})") {
-                        activePlugin.ports.forEach { port ->
+                val ports = (activeDevice as? AapSlotDevice)?.plugin?.ports.orEmpty()
+
+                if (ports.isNotEmpty()) {
+                    Subsection(title = "Audio and MIDI ports (${ports.size})") {
+                        ports.forEach { port ->
                             val direction = if (port.direction == 0) {
                                 "In"
                             } else {

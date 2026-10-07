@@ -1,6 +1,5 @@
 package org.androidaudioplugin.greenhouse.ui.host
 
-import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -10,13 +9,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.data.PluginCategory
-import org.androidaudioplugin.greenhouse.data.PluginRepository
+import org.androidaudioplugin.greenhouse.device.DeviceInfo
+import org.androidaudioplugin.greenhouse.device.SlotDeviceSource
 
-/** The installed-plugin catalog and the browser's slot target, developer filter, and search. */
+/** The catalog of devices from every source, and the browser's slot target, developer filter, and search. */
 class PluginBrowserController(
-    private val context: Context,
+    private val sources: List<SlotDeviceSource>,
     private val scope: CoroutineScope,
     private val postStatus: (String) -> Unit
 ) {
@@ -25,13 +24,12 @@ class PluginBrowserController(
         const val ALL_DEVELOPERS = "ALL"
         const val UNKNOWN_DEVELOPER = "Unknown"
 
-        private val PluginInformation.developerName: String
+        private val DeviceInfo.developerName: String
             get() = developer?.ifBlank { null } ?: UNKNOWN_DEVELOPER
     }
 
-    private val repository = PluginRepository()
-
-    var plugins by mutableStateOf<List<PluginInformation>>(emptyList())
+    /** Every device the sources offer, in source order. */
+    var devices by mutableStateOf<List<DeviceInfo>>(emptyList())
         private set
 
     /** The rack slot the browser is picking a plugin for; decides instrument vs effect filtering. */
@@ -45,7 +43,7 @@ class PluginBrowserController(
 
     val availableDevelopers: List<String>
         get() {
-            val developers = plugins
+            val developers = devices
                 .filter { isAllowedInSlot(it, targetSlotIndex) }
                 .map { it.developerName }
                 .distinct()
@@ -54,17 +52,17 @@ class PluginBrowserController(
             return listOf(ALL_DEVELOPERS) + developers
         }
 
-    val filteredPlugins: List<PluginInformation>
+    val filteredDevices: List<DeviceInfo>
         get() {
-            return plugins.filter { plugin ->
-                val developer = plugin.developerName
+            return devices.filter { device ->
+                val developer = device.developerName
                 val matchesDeveloper = selectedDeveloper == ALL_DEVELOPERS || developer == selectedDeveloper
                 val matchesSearch = searchQuery.isBlank() ||
-                        plugin.displayName.contains(searchQuery, ignoreCase = true) ||
+                        device.displayName.contains(searchQuery, ignoreCase = true) ||
                         developer.contains(searchQuery, ignoreCase = true) ||
-                        (plugin.pluginId?.contains(searchQuery, ignoreCase = true) == true)
+                        device.id.contains(searchQuery, ignoreCase = true)
 
-                isAllowedInSlot(plugin, targetSlotIndex) && matchesDeveloper && matchesSearch
+                isAllowedInSlot(device, targetSlotIndex) && matchesDeveloper && matchesSearch
             }
         }
 
@@ -86,15 +84,22 @@ class PluginBrowserController(
     fun refresh(onComplete: (() -> Unit)? = null) {
         scope.launch(Dispatchers.IO) {
             try {
-                val found = repository.queryPlugins(context)
+                val found = sources.flatMap { source ->
+                    try {
+                        source.listDevices()
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "Failed to list the devices of ${source.id}", e)
+                        emptyList()
+                    }
+                }
 
                 withContext(Dispatchers.Main) {
-                    plugins = found
-                    postStatus("Found ${found.size} AAP plugin(s) on system.")
+                    devices = found
+                    postStatus("Found ${found.size} plugin(s).")
                     onComplete?.invoke()
                 }
             } catch (e: Throwable) {
-                Log.e(TAG, "Failed to query plugins", e)
+                Log.e(TAG, "Failed to list devices", e)
 
                 withContext(Dispatchers.Main) {
                     postStatus("Error querying plugins: ${e.message}")
@@ -103,14 +108,15 @@ class PluginBrowserController(
         }
     }
 
-    /** Resolves a saved plugin reference against what's installed now. */
-    fun findInstalledPlugin(pluginId: String?, packageName: String?, displayName: String?): PluginInformation? {
-        return plugins.find { it.pluginId == pluginId }
-            ?: plugins.find { it.packageName == packageName && it.displayName == displayName }
+    /** Resolves a saved device reference against what the sources offer now. */
+    fun findDevice(sourceId: String, id: String?, packageName: String?, displayName: String?): DeviceInfo? {
+        val fromSource = devices.filter { it.sourceId == sourceId }
+        return fromSource.find { it.id == id }
+            ?: fromSource.find { it.packageName != null && it.packageName == packageName && it.displayName == displayName }
     }
 
-    private fun isAllowedInSlot(plugin: PluginInformation, slotIndex: Int): Boolean {
-        val category = repository.getPluginCategory(plugin)
+    private fun isAllowedInSlot(device: DeviceInfo, slotIndex: Int): Boolean {
+        val category = device.category
 
         if (category == PluginCategory.OTHER) {
             return true

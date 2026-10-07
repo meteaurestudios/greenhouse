@@ -44,7 +44,7 @@ android {
         prefabPublishing = true
     }
 
-    // Native engine API (EngineApi.h) for other modules' C++ code, e.g. DSP running in a rack slot:
+    // Native engine API (EngineApi.h, slot/SlotEvents.h) for other modules' C++ code, e.g. DSP running in a rack slot:
     // find_package(greenhouse-engine REQUIRED CONFIG), then link greenhouse-engine::greenhouse-engine
     prefab {
         create(nativeLibraryName) {
@@ -71,11 +71,11 @@ dependencies {
     testImplementation(libs.junit)
 }
 
-// The prefab package takes a directory of headers only: copy the public ones (EngineApi.h and what it
-// includes) out of the native sources, keeping their layout
+// The prefab package takes a directory of headers only: copy the public ones (the API, the event
+// helpers and what they include) out of the native sources, keeping their layout
 val copyPrefabHeaders = tasks.register<Sync>("copyPrefabHeaders") {
     from(nativeSourcesDir) {
-        include("EngineApi.h", "slot/SlotProcessor.h")
+        include("EngineApi.h", "slot/SlotProcessor.h", "slot/SlotEvents.h", "sequencer/Ump.h")
     }
     into(prefabHeadersDir)
 }

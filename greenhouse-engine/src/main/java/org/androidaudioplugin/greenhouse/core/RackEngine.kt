@@ -146,8 +146,6 @@ class RackEngine(
         nativeSetFramesPerCallback(frames)
     }
 
-    private val slotInstances = Array<NativeRemotePluginInstance?>(numSlots) { null }
-
     /** Whether audio is running. Turns false on its own if the stream cannot be restarted after a device error. */
     val isProcessing: Boolean
         get() = nativeIsStreaming()
@@ -185,15 +183,16 @@ class RackEngine(
      */
     fun setSlotPlugin(slotIndex: Int, instance: NativeRemotePluginInstance, sampleRate: Int) {
         if (slotIndex in 0 until numSlots) {
-            slotInstances[slotIndex] = instance
             nativeSetSlotPlugin(slotIndex, instance.client, instance.instanceId, sampleRate)
         }
     }
 
-    /** Empties the slot. Returns once the audio thread has let go of its instance, so it can be destroyed. */
+    /**
+     * Empties the slot, whatever processor it holds (an AAP plugin or one installed natively). Returns
+     * once the audio thread has let go of it, so it can be destroyed.
+     */
     fun clearSlot(slotIndex: Int) {
         if (slotIndex in 0 until numSlots) {
-            slotInstances[slotIndex] = null
             nativeSetSlotPlugin(slotIndex, 0L, -1, 0)
         }
     }
@@ -248,14 +247,11 @@ class RackEngine(
         Log.d(TAG, "Output stream closed")
     }
 
+    /** To every slot: empty ones drop it. */
     fun allNotesOff() {
         for (slotIndex in 0 until numSlots) {
-
-            if (slotInstances[slotIndex] != null) {
-                sendControlChange(slotIndex, MIDI_CC_ALL_SOUND_OFF, 0.0f)
-                sendControlChange(slotIndex, MIDI_CC_ALL_NOTES_OFF, 0.0f)
-            }
-
+            sendControlChange(slotIndex, MIDI_CC_ALL_SOUND_OFF, 0.0f)
+            sendControlChange(slotIndex, MIDI_CC_ALL_NOTES_OFF, 0.0f)
         }
     }
 
@@ -310,10 +306,6 @@ class RackEngine(
         val data32 = (value.coerceIn(0.0f, 1.0f).toDouble() * MIDI2_32BIT_MAX.toDouble()).toLong().coerceIn(0L, MIDI2_32BIT_MAX)
         val ump = Ump(UmpFactory.midi2CC(0, 0, controller, data32))
         sendUmpToSlot(slotIndex, ump.toPlatformNativeBytes())
-    }
-
-    fun setParameterValue(slotIndex: Int, parameter: ParameterInformation, value: Double) {
-        sendUmpToSlot(slotIndex, parameterChangeBytes(parameter, value))
     }
 
     /** Sends many values (e.g. a session restore) packed into as few UMP inputs as fit. */

@@ -28,8 +28,7 @@ class SlotPluginHost(
     /** Returns null if the plugin service can't be bound or fails to create the instance. */
     suspend fun instantiatePlugin(
         pluginInfo: PluginInformation,
-        sampleRate: Int,
-        framesPerCallback: Int
+        sampleRate: Int
     ): Pair<AudioPluginClientBase, NativeRemotePluginInstance>? = withContext(Dispatchers.IO) {
         close()
 
@@ -96,11 +95,10 @@ class AapHostEngine(
     suspend fun instantiatePluginForSlot(
         slotIndex: Int,
         pluginInfo: PluginInformation,
-        sampleRate: Int,
-        framesPerCallback: Int
+        sampleRate: Int
     ): Pair<AudioPluginClientBase, NativeRemotePluginInstance>? {
         require(slotIndex in 0 until numSlots) { "Invalid slotIndex: $slotIndex" }
-        return slotHosts[slotIndex].instantiatePlugin(pluginInfo, sampleRate, framesPerCallback)
+        return slotHosts[slotIndex].instantiatePlugin(pluginInfo, sampleRate)
     }
 
     fun unloadSlot(slotIndex: Int) {

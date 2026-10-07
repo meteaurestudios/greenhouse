@@ -138,7 +138,7 @@ fun SignalRackHeader(
     ) {
         slots.forEachIndexed { index, slot ->
             val isSelected = slot.index == activeSlotIndex
-            val isLoaded = slot.pluginInfo != null
+            val isLoaded = slot.device != null
             val isLoading = slot.isLoading
             val slotLevel = slotLevels.getOrNull(slot.index) ?: SlotLevel()
 
@@ -283,7 +283,7 @@ fun SignalRackHeader(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = slot.pluginInfo?.displayName ?: "Empty Slot",
+                                        text = slot.deviceInfo?.displayName ?: "Empty Slot",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary,
@@ -415,10 +415,10 @@ fun SignalRackHeader(
 
             if (index < slots.lastIndex) {
                 val isUpstreamActive = isProcessing && (slots.firstOrNull()?.let { slot0 ->
-                    slot0.pluginInfo != null && !slot0.isBypassed
+                    slot0.device != null && !slot0.isBypassed
                 } ?: false)
                 val hasDownstreamLoaded = slots.drop(index + 1).any { nextSlot ->
-                    nextSlot.pluginInfo != null
+                    nextSlot.device != null
                 }
                 val isCurrentSlotActive = isProcessing && isLoaded && !slot.isBypassed
                 val isFlowActive = isCurrentSlotActive || (isUpstreamActive && hasDownstreamLoaded)

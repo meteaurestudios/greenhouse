@@ -322,17 +322,17 @@ class RackSessionController(
                     continue
                 }
 
-                val plugin = browser.findInstalledPlugin(slotState.pluginId, slotState.packageName, slotState.displayName)
+                val device = browser.findDevice(slotState.source, slotState.pluginId, slotState.packageName, slotState.displayName)
 
-                if (plugin == null) {
+                if (device == null) {
                     val missingName = slotState.displayName ?: slotState.pluginId
-                    Log.w(TAG, "Plugin $missingName not found on device")
-                    postStatus("Plugin $missingName not installed on this device")
+                    Log.w(TAG, "$missingName (${slotState.source}) not available")
+                    postStatus("$missingName is not available on this device")
                     anyError = true
                     continue
                 }
 
-                if (!rack.restoreSlot(slotState, plugin)) {
+                if (!rack.restoreSlot(slotState, device)) {
                     anyError = true
                 }
             }

@@ -21,6 +21,7 @@ object RackStateSerializer {
 
     private const val KEY_SLOT_INDEX = "slotIndex"
     private const val KEY_SLOT_TYPE = "slotType"
+    private const val KEY_SOURCE = "source"
     private const val KEY_PLUGIN_ID = "pluginId"
     private const val KEY_PACKAGE_NAME = "packageName"
     private const val KEY_DISPLAY_NAME = "displayName"
@@ -55,6 +56,7 @@ object RackStateSerializer {
             val slotObj = JSONObject()
             slotObj.put(KEY_SLOT_INDEX, slot.slotIndex)
             slotObj.put(KEY_SLOT_TYPE, slot.slotType)
+            slotObj.put(KEY_SOURCE, slot.source)
             slotObj.put(KEY_PLUGIN_ID, slot.pluginId ?: JSONObject.NULL)
             slotObj.put(KEY_PACKAGE_NAME, slot.packageName ?: JSONObject.NULL)
             slotObj.put(KEY_DISPLAY_NAME, slot.displayName ?: JSONObject.NULL)
@@ -121,6 +123,8 @@ object RackStateSerializer {
                     if (slotObj != null) {
                         val slotIndex = slotObj.optInt(KEY_SLOT_INDEX, i)
                         val slotType = slotObj.optString(KEY_SLOT_TYPE, if (slotIndex == 0) SlotType.INSTRUMENT else SlotType.EFFECT)
+                        // Absent from sessions saved before there were several device sources
+                        val source = slotObj.optString(KEY_SOURCE, SlotState.DEFAULT_SOURCE).ifBlank { SlotState.DEFAULT_SOURCE }
                         val pluginId = if (slotObj.has(KEY_PLUGIN_ID) && !slotObj.isNull(KEY_PLUGIN_ID)) {
                             slotObj.optString(KEY_PLUGIN_ID).ifBlank { null }
                         } else {
@@ -186,6 +190,7 @@ object RackStateSerializer {
                             SlotState(
                                 slotIndex = slotIndex,
                                 slotType = slotType,
+                                source = source,
                                 pluginId = pluginId,
                                 packageName = packageName,
                                 displayName = displayName,

@@ -1,9 +1,9 @@
-package org.androidaudioplugin.greenhouse.ui.host
+package org.androidaudioplugin.greenhouse.device.aap
 
 import android.util.Log
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.greenhouse.core.AapHostEngine
-import org.androidaudioplugin.greenhouse.ui.PluginPreset
+import org.androidaudioplugin.greenhouse.device.DevicePreset
 import org.androidaudioplugin.hosting.InstanceState
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 import java.util.concurrent.CompletableFuture
@@ -12,10 +12,7 @@ import java.util.concurrent.Executors
 
 internal data class LoadedPlugin(
     val instance: NativeRemotePluginInstance,
-    val sampleRate: Int,
-    val presetCount: Int,
-    /** Parameter values read back from the instance after it was prepared, keyed by parameter ID. */
-    val parameterValues: Map<Int, Double>
+    val presetCount: Int
 )
 
 /**
@@ -96,18 +93,17 @@ internal object PluginSlotLoader {
 
     /**
      * Instantiates [plugin] for [slotIndex], fills in parameters / ports the plugin only exposes
-     * at runtime, lets [prepare] apply saved state, then reads back the resulting parameter values.
-     * Returns null if the plugin service fails to create the instance.
+     * at runtime, and lets [prepare] apply saved state. Returns null if the plugin service fails to
+     * create the instance.
      */
     suspend fun instantiate(
         hostEngine: AapHostEngine,
         slotIndex: Int,
         plugin: PluginInformation,
         sampleRate: Int,
-        framesPerCallback: Int,
         prepare: (NativeRemotePluginInstance) -> Unit = {}
     ): LoadedPlugin? {
-        val (_, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate, framesPerCallback)
+        val (_, instance) = hostEngine.instantiatePluginForSlot(slotIndex, plugin, sampleRate)
             ?: return null
 
         discoverDynamicPortsAndParameters(plugin, instance)
@@ -120,7 +116,7 @@ internal object PluginSlotLoader {
             0
         }
 
-        return LoadedPlugin(instance, sampleRate, presetCount, readParameterValues(plugin, instance))
+        return LoadedPlugin(instance, presetCount)
     }
 
     /**
@@ -144,7 +140,7 @@ internal object PluginSlotLoader {
     }
 
     /** Preset names sorted for browsing: named presets first, ignoring leading punctuation. */
-    fun readPresets(instance: NativeRemotePluginInstance, presetCount: Int): List<PluginPreset> {
+    fun readPresets(instance: NativeRemotePluginInstance, presetCount: Int): List<DevicePreset> {
         val presets = (0 until presetCount).map { i ->
             val name = try {
                 queryIfAlive(instance, "") { instance.getPresetName(i) }
@@ -152,11 +148,11 @@ internal object PluginSlotLoader {
                 ""
             }
 
-            PluginPreset(nativeIndex = i, name = name.ifBlank { "Preset #${i + 1}" })
+            DevicePreset(nativeIndex = i, name = name.ifBlank { "Preset #${i + 1}" })
         }
 
         return presets.sortedWith(
-            compareBy<PluginPreset> { it.name.none { ch -> ch.isLetterOrDigit() } }
+            compareBy<DevicePreset> { it.name.none { ch -> ch.isLetterOrDigit() } }
                 .thenBy(String.CASE_INSENSITIVE_ORDER) {
                     it.name.trimStart { ch -> !ch.isLetterOrDigit() }
                 }
