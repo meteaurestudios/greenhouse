@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace aaphost
+namespace greenhouse
 {
 
 namespace
@@ -218,4 +218,4 @@ void AapSlotProcessor::writeSequencerEvents(aap_buffer_t* buffer, const uint32_t
     std::memcpy(header + 1, events, static_cast<size_t>(byteCount));
 }
 
-} // namespace aaphost
+} // namespace greenhouse

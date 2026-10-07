@@ -5,7 +5,7 @@
 #include <cstring>
 #include <string>
 
-namespace aaphost::smf
+namespace greenhouse::smf
 {
 
 namespace
@@ -620,4 +620,4 @@ bool read(const uint8_t* data, int32_t size, int32_t slotCount, ImportedSequence
     return tracksRead > 0;
 }
 
-} // namespace aaphost::smf
+} // namespace greenhouse::smf

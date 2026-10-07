@@ -46,10 +46,10 @@ class RackEngine(
 
         init {
             try {
-                System.loadLibrary("aaphostnative")
-                Log.d(TAG, "Loaded aaphostnative library")
+                System.loadLibrary("greenhouse-engine")
+                Log.d(TAG, "Loaded greenhouse-engine library")
             } catch (e: Throwable) {
-                Log.e(TAG, "Failed to load aaphostnative library", e)
+                Log.e(TAG, "Failed to load greenhouse-engine library", e)
             }
         }
 

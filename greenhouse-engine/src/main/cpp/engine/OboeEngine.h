@@ -7,7 +7,7 @@
 #include <memory>
 #include <mutex>
 
-namespace aaphost
+namespace greenhouse
 {
 
 constexpr int32_t STEREO_CHANNEL_COUNT = 2;
@@ -168,4 +168,4 @@ private:
     std::atomic<uint64_t> mCallbackSequence{0};
 };
 
-} // namespace aaphost
+} // namespace greenhouse

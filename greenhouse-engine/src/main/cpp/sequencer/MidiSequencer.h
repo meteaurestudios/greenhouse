@@ -8,7 +8,7 @@
 #include <mutex>
 #include <vector>
 
-namespace aaphost
+namespace greenhouse
 {
 
 // Events the sequencer can send to one slot in one block, and the words they take with their JR timestamps
@@ -369,4 +369,4 @@ private:
     Metronome mMetronome;
 };
 
-} // namespace aaphost
+} // namespace greenhouse

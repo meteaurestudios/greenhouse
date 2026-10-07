@@ -7,7 +7,7 @@
 #include <pmmintrin.h>
 #endif
 
-namespace aaphost
+namespace greenhouse
 {
 
 class ScopedNoDenormals
@@ -59,4 +59,4 @@ private:
 #endif
 };
 
-} // namespace aaphost
+} // namespace greenhouse

@@ -6,7 +6,7 @@
 #include <array>
 #include <memory>
 
-namespace aaphost
+namespace greenhouse
 {
 
 constexpr int32_t MAX_RACK_SLOTS = 16;
@@ -128,4 +128,7 @@ private:
     std::atomic<float> mTotalCpuLoad{0.0f};
 };
 
-} // namespace aaphost
+/** The process-wide engine: the one the app drives through the JNI bindings. */
+RackEngine& getEngine();
+
+} // namespace greenhouse

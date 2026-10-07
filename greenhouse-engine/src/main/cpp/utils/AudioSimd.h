@@ -8,7 +8,7 @@
 #include <arm_neon.h>
 #endif
 
-namespace aaphost
+namespace greenhouse
 {
 
 namespace simd
@@ -221,4 +221,4 @@ inline void measureStereoPeak(const float* interleavedStereo, int32_t numFrames,
 
 } // namespace simd
 
-} // namespace aaphost
+} // namespace greenhouse

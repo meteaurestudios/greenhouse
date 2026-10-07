@@ -1,18 +1,9 @@
 #include <jni.h>
 #include <algorithm>
-#include "RackEngineJni.h"
+#include "RackEngine.h"
 #include "slot/AapSlotProcessor.h"
 
-// One engine per process. It is intentionally never destroyed: tearing it down during static
-// destruction could touch plugin instances aap-core has already freed. The stream and plugin
-// references are released explicitly through nativeShutdown().
-aaphost::RackEngine& aaphost::getEngine()
-{
-    static auto engine = new aaphost::RackEngine();
-    return *engine;
-}
-
-using aaphost::getEngine;
+using greenhouse::getEngine;
 
 extern "C" {
 
@@ -112,7 +103,7 @@ Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeSetSlotPlugin(
         JNIEnv* env, jclass clazz, jint slotIndex, jlong nativeClient, jint instanceId, jint sampleRate)
 {
     auto client = reinterpret_cast<aap::PluginClient*>(nativeClient);
-    getEngine().setSlotProcessor(slotIndex, aaphost::AapSlotProcessor::create(client, instanceId, sampleRate));
+    getEngine().setSlotProcessor(slotIndex, greenhouse::AapSlotProcessor::create(client, instanceId, sampleRate));
 }
 
 JNIEXPORT void JNICALL
@@ -189,7 +180,7 @@ Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeGetAllSlotLevels(
         return;
     }
 
-    auto slotCount = env->GetArrayLength(outLevels) / aaphost::STEREO_CHANNEL_COUNT;
+    auto slotCount = env->GetArrayLength(outLevels) / greenhouse::STEREO_CHANNEL_COUNT;
 
     if (slotCount <= 0) {
         return;

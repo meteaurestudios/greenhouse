@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace aaphost
+namespace greenhouse
 {
 
 namespace
@@ -431,4 +431,4 @@ bool RackEngine::renderSlot(int32_t slotIndex, int32_t frames)
     return true;
 }
 
-} // namespace aaphost
+} // namespace greenhouse

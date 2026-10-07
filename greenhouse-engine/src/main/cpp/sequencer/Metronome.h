@@ -3,7 +3,7 @@
 #include <array>
 #include <cstdint>
 
-namespace aaphost
+namespace greenhouse
 {
 
 // Click peak at 0 dB: -12 dBFS, so the highest level (+12 dB) peaks at full scale
@@ -50,4 +50,4 @@ private:
     float mDecay{0.0f};
 };
 
-} // namespace aaphost
+} // namespace greenhouse

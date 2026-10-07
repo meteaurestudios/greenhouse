@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace aaphost
+namespace greenhouse
 {
 
 namespace
@@ -71,4 +71,4 @@ void Metronome::render(float* interleaved, int32_t frames, int32_t sampleRate, f
     mPendingCount = 0;
 }
 
-} // namespace aaphost
+} // namespace greenhouse

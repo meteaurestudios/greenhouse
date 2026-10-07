@@ -5,7 +5,7 @@
 #include <cstring>
 
 /** Minimal Universal MIDI Packet helpers for the sequencer (words in host byte order). */
-namespace aaphost::ump
+namespace greenhouse::ump
 {
 
 constexpr int32_t MAX_PACKET_WORDS = 4;
@@ -176,4 +176,4 @@ inline bool readPacket(const uint8_t* data, int32_t size, int32_t& offset, Packe
     return true;
 }
 
-} // namespace aaphost::ump
+} // namespace greenhouse::ump

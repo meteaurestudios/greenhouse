@@ -4,7 +4,7 @@
 #include <oboe/OboeExtensions.h>
 #include <thread>
 
-namespace aaphost
+namespace greenhouse
 {
 
 namespace
@@ -287,4 +287,4 @@ void OboeEngine::applyMinimumBufferSize()
     mLatencyTuner->requestReset();
 }
 
-} // namespace aaphost
+} // namespace greenhouse

@@ -6,7 +6,7 @@
 #include <aap/core/host/plugin-host.h>
 #include <memory>
 
-namespace aaphost
+namespace greenhouse
 {
 
 // 0 = no host-imposed deadline for the remote process() call
@@ -55,4 +55,4 @@ private:
     int32_t mPreparedSampleRate;
 };
 
-} // namespace aaphost
+} // namespace greenhouse

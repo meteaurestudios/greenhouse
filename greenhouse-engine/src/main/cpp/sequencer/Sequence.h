@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace aaphost
+namespace greenhouse
 {
 
 // Musical time: ticks per quarter note (PPQ), in 4/4 bars
@@ -63,4 +63,4 @@ inline void sortByTick(std::vector<SequenceEvent>& events)
     });
 }
 
-} // namespace aaphost
+} // namespace greenhouse

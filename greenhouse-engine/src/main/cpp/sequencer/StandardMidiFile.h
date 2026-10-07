@@ -9,7 +9,7 @@
  * track with the tempo, then one track per slot, named "Slot N". MIDI 2.0 events are converted to
  * MIDI 1.0 and back; plugin parameter automation has no MIDI 1.0 form and is left out.
  */
-namespace aaphost::smf
+namespace greenhouse::smf
 {
 
 struct ImportedSequence
@@ -23,4 +23,4 @@ std::vector<uint8_t> write(const std::vector<SequenceEvent>& events, double bpm,
 /** Tracks named "Slot N" go to that slot, others to the instrument slot. Returns false if the file cannot be read. */
 bool read(const uint8_t* data, int32_t size, int32_t slotCount, ImportedSequence& result);
 
-} // namespace aaphost::smf
+} // namespace greenhouse::smf

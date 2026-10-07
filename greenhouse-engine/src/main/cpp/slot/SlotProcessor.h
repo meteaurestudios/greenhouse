@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace aaphost
+namespace greenhouse
 {
 
 /** A processor's output for the current block, non-interleaved and valid until its next process(). Mono: mRight == mLeft. */
@@ -67,4 +67,4 @@ public:
     virtual bool process(const float* input, int32_t frames, const uint32_t* events, int32_t eventWordCount, SlotOutput& out) = 0;
 };
 
-} // namespace aaphost
+} // namespace greenhouse

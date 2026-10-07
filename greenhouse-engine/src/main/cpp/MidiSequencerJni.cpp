@@ -1,7 +1,7 @@
 #include <jni.h>
 #include <algorithm>
 #include <limits>
-#include "RackEngineJni.h"
+#include "RackEngine.h"
 
 namespace
 {
@@ -28,11 +28,11 @@ constexpr int32_t EVENT_SLOT = 1;
 constexpr int32_t EVENT_TAKE = 2;
 constexpr int32_t EVENT_WORD_COUNT = 3;
 constexpr int32_t EVENT_WORDS = 4;
-constexpr int32_t EVENT_STRIDE = EVENT_WORDS + aaphost::ump::MAX_PACKET_WORDS;
+constexpr int32_t EVENT_STRIDE = EVENT_WORDS + greenhouse::ump::MAX_PACKET_WORDS;
 
-aaphost::MidiSequencer& getSequencer()
+greenhouse::MidiSequencer& getSequencer()
 {
-    return aaphost::getEngine().getSequencer();
+    return greenhouse::getEngine().getSequencer();
 }
 
 } // namespace
@@ -50,7 +50,7 @@ Java_org_androidaudioplugin_greenhouse_core_MidiSequencer_nativeSetSettings(
     jdouble v[SETTINGS_SIZE];
     env->GetDoubleArrayRegion(values, 0, SETTINGS_SIZE, v);
 
-    aaphost::SequencerSettings settings;
+    greenhouse::SequencerSettings settings;
     settings.mBpm = v[SETTINGS_BPM];
     settings.mLengthBars = static_cast<int32_t>(v[SETTINGS_LENGTH_BARS]);
     settings.mIsQuantizing = v[SETTINGS_IS_QUANTIZING] != 0.0;
@@ -177,7 +177,7 @@ Java_org_androidaudioplugin_greenhouse_core_MidiSequencer_setEvents(
 {
     auto length = packed != nullptr ? env->GetArrayLength(packed) : 0;
     std::vector<jint> values(static_cast<size_t>(length));
-    std::vector<aaphost::SequenceEvent> events;
+    std::vector<greenhouse::SequenceEvent> events;
 
     if (length > 0) {
         env->GetIntArrayRegion(packed, 0, length, values.data());
@@ -185,12 +185,12 @@ Java_org_androidaudioplugin_greenhouse_core_MidiSequencer_setEvents(
 
     // Validated by the sequencer
     for (jsize base = 0; base + EVENT_STRIDE <= length; base += EVENT_STRIDE) {
-        aaphost::SequenceEvent event;
+        greenhouse::SequenceEvent event;
         event.mTick = values[base + EVENT_TICK];
         event.mSlot = values[base + EVENT_SLOT];
         event.mTake = values[base + EVENT_TAKE];
         event.mPacket.mWordCount = values[base + EVENT_WORD_COUNT];
-        std::copy_n(values.begin() + base + EVENT_WORDS, aaphost::ump::MAX_PACKET_WORDS, event.mPacket.mWords.begin());
+        std::copy_n(values.begin() + base + EVENT_WORDS, greenhouse::ump::MAX_PACKET_WORDS, event.mPacket.mWords.begin());
         events.push_back(event);
     }
 

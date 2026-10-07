@@ -7,7 +7,7 @@
 // Stand-in for the Oboe-based engine, without a device: the tests drive the audio thread themselves
 // through renderCallback(), so it is never running when the control thread waits for it, and every
 // retired buffer can be freed at once.
-namespace aaphost
+namespace greenhouse
 {
 
 constexpr int32_t STEREO_CHANNEL_COUNT = 2;
@@ -150,4 +150,4 @@ private:
     std::atomic<int32_t> mSampleRate{0};
 };
 
-} // namespace aaphost
+} // namespace greenhouse

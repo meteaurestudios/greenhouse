@@ -5,7 +5,7 @@
 #include <limits>
 #include <unordered_map>
 
-namespace aaphost
+namespace greenhouse
 {
 
 namespace
@@ -990,4 +990,4 @@ int64_t MidiSequencer::tickToFrame(int64_t tick) const
     return std::llround(static_cast<double>(tick) * mFramesPerTick);
 }
 
-} // namespace aaphost
+} // namespace greenhouse
