@@ -49,7 +49,8 @@ internal object PluginSlotLoader {
 
     /**
      * Like [queryIfAlive], but returns [fallback] as soon as the plugin's process dies instead of
-     * waiting forever: aap-core waits for plugin replies without a timeout. Blocks the caller while
+     * waiting forever: aap-core bounds its wait for AAPXS replies, but not a Binder call already sent
+     * to a plugin that stopped responding. Blocks the caller while
      * the query runs, so it can be used where the query must not overlap other work (e.g. the main thread).
      */
     fun <T> queryUnlessDied(instance: NativeRemotePluginInstance, fallback: T, query: () -> T): T {
@@ -82,7 +83,7 @@ internal object PluginSlotLoader {
     /**
      * Marks [instance], whose plugin process died, as destroyed without calling into it, so no new
      * [queryIfAlive] call reaches it; disposing its client frees it. Does not take the lock: a call
-     * already in flight may never return (aap-core waits for plugin replies without a timeout).
+     * already in flight may never return (aap-core does not interrupt a Binder call already sent).
      */
     fun abandon(instance: NativeRemotePluginInstance) {
         instance.state = InstanceState.DESTROYED

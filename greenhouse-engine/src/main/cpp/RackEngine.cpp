@@ -218,13 +218,17 @@ void RackEngine::sendUmpToSlot(int32_t slotIndex, const uint8_t* data, int32_t s
     std::lock_guard<std::mutex> lock(mControlMutex);
     auto instance = mSlots[slotIndex].mInstance.load();
 
-    // aap-core queues the events under its own lock and merges them at the next process(). Inactive
-    // instances queue them too, so values set while paused (e.g. a session restore) apply once playing.
+    // aap-core queues the events (lock-free) and merges them at the next process(). Inactive instances
+    // queue them too, so values set while paused (e.g. a session restore) apply once playing.
     if (instance == nullptr || !(isActive(instance) || isInactive(instance))) {
         return;
     }
 
-    instance->addEventUmpInput(const_cast<uint8_t*>(data), size);
+    // The queue holds a fixed number of inputs until the next process(): what does not fit is dropped
+    if (!instance->tryAddEventUmpInput(data, size)) {
+        LOGW("Slot %d: plugin input queue full, %d bytes of UMP dropped", slotIndex, size);
+        return;
+    }
 
     // Recorded where the plugin receives it: at the start of the next block
     mSequencer.recordInput(slotIndex, data, size);
@@ -516,7 +520,10 @@ void RackEngine::setSequencerCapacityLocked(int32_t slotIndex, aap::PluginInstan
     auto wordCount = 0;
 
     if (buffer != nullptr && midiIn >= 0) {
-        auto bytes = buffer->get_buffer_size(buffer, midiIn) - static_cast<int32_t>(sizeof(AAPMidiBufferHeader));
+        // aap-core merges the queued live input with the port's events within its own event buffer,
+        // which can be smaller than the port: more events than that would be cut by the merge
+        auto portBytes = buffer->get_buffer_size(buffer, midiIn) - static_cast<int32_t>(sizeof(AAPMidiBufferHeader));
+        auto bytes = std::min(portBytes, aap::DEFAULT_EVENT_MIDI2_INPUT_BUFFER_SIZE);
         wordCount = std::max(0, bytes / static_cast<int32_t>(sizeof(uint32_t)));
     }
 

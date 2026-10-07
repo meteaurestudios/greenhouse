@@ -24,6 +24,7 @@ import org.androidaudioplugin.greenhouse.data.SlotState
 import org.androidaudioplugin.greenhouse.ui.RackSlotData
 import org.androidaudioplugin.greenhouse.ui.SlotUiState
 import org.androidaudioplugin.greenhouse.ui.StudioRackViewMode
+import org.androidaudioplugin.hosting.InstanceState
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 import kotlin.math.abs
 
@@ -42,7 +43,9 @@ class RackController(
         const val NUM_RACK_SLOTS = 3
         const val INSTRUMENT_SLOT_INDEX = 0
         const val NO_PRESET_SELECTED = -1
-        const val HOST_EDIT_IGNORE_MS = 600L
+        // aap-core reflects host edits in getParameterValue() right away (see cacheHostValue()); this
+        // only covers plugins that echo the values they processed while a gesture is still going on
+        const val HOST_EDIT_IGNORE_MS = 200L
         const val PARAM_SYNC_EPSILON = 1e-4
     }
 
@@ -93,7 +96,7 @@ class RackController(
     init {
         hostEngine.onSlotPluginDied = { slotIndex, instance ->
             // Right away: the main thread may be about to query the dead instance (e.g. an autosave),
-            // and aap-core waits for plugin replies without a timeout
+            // and a Binder call already sent to it is not interrupted by aap-core's reply timeout
             PluginSlotLoader.abandon(instance)
 
             scope.launch(Dispatchers.Main) {
@@ -205,13 +208,16 @@ class RackController(
                 displayedValues = state.parameters.ifEmpty { loaded.parameterValues }
             )
 
-            for ((paramId, value) in state.parameters) {
-                val param = plugin.parameters.find { it.id == paramId }
-
-                if (param != null) {
-                    audio.engine.setParameterValue(slotIndex, param, value)
-                }
+            val savedValues = state.parameters.mapNotNull { (paramId, value) ->
+                plugin.parameters.find { it.id == paramId }?.let { it to value }
             }
+
+            for ((param, value) in savedValues) {
+                cacheHostValue(slotIndex, plugin, param, value)
+            }
+
+            // One send per parameter would overflow aap-core's input queue on plugins with many parameters
+            audio.engine.setParameterValues(slotIndex, savedValues)
 
             return true
         } catch (e: Throwable) {
@@ -352,8 +358,25 @@ class RackController(
         val ui = slotUi[slotIndex]
         ui.lastHostEditTimestamps[parameter.id] = System.currentTimeMillis()
         ui.parameterValues[parameter.id] = value
+        slots[slotIndex].pluginInfo?.let { cacheHostValue(slotIndex, it, parameter, value) }
         audio.engine.setParameterValue(slotIndex, parameter, value)
         markChanged()
+    }
+
+    /**
+     * Records a value sent to the plugin in aap-core's value cache, so [pollPluginParameterChanges]
+     * reads it back before the plugin processes it (while paused, not until playback resumes).
+     * Main thread only, like [releaseSlot], which destroys the instance.
+     */
+    private fun cacheHostValue(slotIndex: Int, plugin: PluginInformation, parameter: ParameterInformation, value: Double) {
+        val instance = slots[slotIndex].instance
+        val index = plugin.parameters.indexOfFirst { it.id == parameter.id }
+
+        if (instance == null || index < 0 || instance.state == InstanceState.DESTROYED) {
+            return
+        }
+
+        instance.setCachedParameterValue(index, value)
     }
 
     fun setPreset(slotIndex: Int, nativeIndex: Int) {

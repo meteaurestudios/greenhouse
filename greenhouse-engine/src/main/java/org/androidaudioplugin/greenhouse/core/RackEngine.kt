@@ -37,6 +37,12 @@ class RackEngine(
         const val MIDI_CC_ALL_NOTES_OFF = 123
         // 32-bit words in a 128-bit UMP packet (SysEx8 parameter changes)
         const val UMP128_WORD_COUNT = 4
+        // aap-core's event buffer (DEFAULT_EVENT_MIDI2_INPUT_BUFFER_SIZE): the most bytes of one queued
+        // UMP input, and of a block's queued input merged with the sequencer's events
+        const val AAP_EVENT_BUFFER_BYTES = 8192
+        // aap-core queues a fixed number of inputs per slot until the next process() and drops the rest,
+        // so many values are sent in as few inputs as possible, leaving half the merge room to the sequencer
+        const val MAX_UMP_INPUT_BYTES = AAP_EVENT_BUFFER_BYTES / 2
 
         init {
             try {
@@ -307,6 +313,30 @@ class RackEngine(
     }
 
     fun setParameterValue(slotIndex: Int, parameter: ParameterInformation, value: Double) {
+        sendUmpToSlot(slotIndex, parameterChangeBytes(parameter, value))
+    }
+
+    /** Sends many values (e.g. a session restore) packed into as few UMP inputs as fit. */
+    fun setParameterValues(slotIndex: Int, values: List<Pair<ParameterInformation, Double>>) {
+        val pending = mutableListOf<Byte>()
+
+        for ((parameter, value) in values) {
+            val bytes = parameterChangeBytes(parameter, value)
+
+            if (pending.size + bytes.size > MAX_UMP_INPUT_BYTES) {
+                sendUmpToSlot(slotIndex, pending.toByteArray())
+                pending.clear()
+            }
+
+            pending.addAll(bytes.asList())
+        }
+
+        if (pending.isNotEmpty()) {
+            sendUmpToSlot(slotIndex, pending.toByteArray())
+        }
+    }
+
+    private fun parameterChangeBytes(parameter: ParameterInformation, value: Double): ByteArray {
         val ints = UmpHelper.aapUmpSysex8ParameterPlain(parameter.id.toUInt(), parameter.minimumValue, parameter.maximumValue, value)
         val umps = ints.filterIndexed { i, _ ->
             i % UMP128_WORD_COUNT == 0
@@ -314,7 +344,7 @@ class RackEngine(
             val start = i * UMP128_WORD_COUNT
             Ump(v, ints[start + 1], ints[start + 2], ints[start + 3]).toPlatformNativeBytes().asList()
         }
-        sendUmpToSlot(slotIndex, umps.toByteArray())
+        return umps.toByteArray()
     }
 
     private fun sendUmpToSlot(slotIndex: Int, bytes: ByteArray) {

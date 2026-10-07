@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.androidaudioplugin.AudioPluginException
 import org.androidaudioplugin.PluginInformation
 import org.androidaudioplugin.hosting.AudioPluginClientBase
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
@@ -24,7 +25,7 @@ class SlotPluginHost(
     val client: AudioPluginClientBase?
         get() = currentClient
 
-    /** Returns null if the plugin service fails to create the instance. */
+    /** Returns null if the plugin service can't be bound or fails to create the instance. */
     suspend fun instantiatePlugin(
         pluginInfo: PluginInformation,
         sampleRate: Int,
@@ -35,16 +36,16 @@ class SlotPluginHost(
         val newClient = AudioPluginClientBase(context)
         currentClient = newClient
 
-        Log.d(tag, "Connecting to plugin service: ${pluginInfo.packageName}")
-        newClient.connectToPluginService(pluginInfo.packageName)
+        // aap-core throws when the service can't be bound (or times out) and when the service
+        // fails to create the instance
+        val instance = try {
+            Log.d(tag, "Connecting to plugin service: ${pluginInfo.packageName}")
+            newClient.connectToPluginService(pluginInfo.packageName)
 
-        Log.d(tag, "Instantiating native plugin: ${pluginInfo.pluginId}")
-        val instance = newClient.instantiateNativePlugin(pluginInfo)
-
-        // aap-core reports a failed instantiation as a negative id, and its JNI calls dereference
-        // the missing instance (SIGSEGV in prepare), so stop before touching it
-        if (instance.instanceId < 0) {
-            Log.e(tag, "Plugin service ${pluginInfo.packageName} failed to instantiate ${pluginInfo.pluginId}")
+            Log.d(tag, "Instantiating native plugin: ${pluginInfo.pluginId}")
+            newClient.instantiateNativePlugin(pluginInfo)
+        } catch (e: AudioPluginException) {
+            Log.e(tag, "Plugin service ${pluginInfo.packageName} failed to instantiate ${pluginInfo.pluginId}", e)
             close()
             return@withContext null
         }
