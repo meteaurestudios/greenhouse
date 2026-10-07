@@ -30,7 +30,7 @@ The project is split into library modules so that downstream apps can build on t
   - **`greenhouse/ui/HostConfig.kt`**: How an app configures the host (its device sources, AAP only by default), given through `HostViewModel.factory(config)`.
   - **`greenhouse/ui/RackModels.kt`**: Rack UI models (`RackSlotData`, `SlotUiState`, `StudioRackViewMode`, …).
   - **`greenhouse/ui/host/`**: Feature controllers owned by `HostViewModel`:
-    - `RackController`: multi-slot rack (Instrument slot 0, Effect slots 1 & 2), device load / unload / restore through the sources, bypass, parameters, presets, device-side parameter sync, crashed devices.
+    - `RackController`: multi-slot rack (Instrument slot 0, Effect slots 1 & 2), device load / unload / restore through the sources, bypass, parameters, presets, device-side parameter sync, crashed devices. A slot restored with a saved state gets that state alone (it holds the preset and parameter values, and the saved ones may be stale: aap-core does not always learn of changes made inside a plugin); without one, the saved preset is selected and the saved parameter values are pushed.
     - `AudioEngineController`: `RackEngine` transport, buffer sizing, background / foreground pause and resume.
     - `RackMeters`: per-slot levels and CPU load.
     - `PluginBrowserController`: device catalog from every source, slot-target filtering, developer filter, search, saved device lookup.

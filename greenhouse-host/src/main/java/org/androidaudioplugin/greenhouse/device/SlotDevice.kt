@@ -33,9 +33,9 @@ data class DevicePreset(
 
 /** Saved state to apply to a device as it is created. */
 class SavedDeviceState(
-    /** Opaque state from [SlotDevice.captureState]. */
+    /** Opaque state from [SlotDevice.captureState]: everything, including the current preset and parameter values. */
     val state: ByteArray?,
-    /** Native index of the preset that was selected, or a negative value if none. */
+    /** Native index of a preset to select after [state], or a negative value if none. */
     val presetIndex: Int
 )
 

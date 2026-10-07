@@ -177,16 +177,26 @@ class RackController(
     }
 
     /**
-     * Re-creates a saved slot: creates [info] with the saved state and preset, then pushes the saved
-     * parameter values. Returns false if the device couldn't be created.
+     * Re-creates a saved slot: creates [info] with its saved state or, without one (e.g. reloading a
+     * crashed plugin), with the saved preset and parameter values. Returns false if the device
+     * couldn't be created.
      */
     suspend fun restoreSlot(state: SlotState, info: DeviceInfo): Boolean {
         val slotIndex = state.slotIndex
         slots[slotIndex] = slots[slotIndex].copy(isLoading = true, loadingPluginName = info.displayName)
 
         try {
+            // A saved state holds everything, and the saved preset and values may be stale: aap-core does
+            // not always learn of changes made inside a plugin (e.g. by its presets), and selecting the
+            // preset again would undo the edits made since it was picked
             val savedState = state.stateDataBase64?.let { decodeState(slotIndex, it) }
-            val created = createDevice(slotIndex, info, SavedDeviceState(savedState, state.selectedPresetIndex))
+            val presetIndex = if (savedState == null) {
+                state.selectedPresetIndex
+            } else {
+                NO_PRESET_SELECTED
+            }
+
+            val created = createDevice(slotIndex, info, SavedDeviceState(savedState, presetIndex))
 
             if (created == null) {
                 reportLoadFailure(slotIndex, info)
@@ -204,16 +214,9 @@ class RackController(
                 displayedValues = state.parameters.ifEmpty { values }
             )
 
-            val savedValues = state.parameters.mapNotNull { (paramId, value) ->
-                device.parameters.find { it.id == paramId }?.let { it to value }
+            if (savedState == null) {
+                pushSavedValues(slotIndex, device, state.parameters)
             }
-
-            for ((param, value) in savedValues) {
-                device.onHostParameterChange(param, value)
-            }
-
-            // One send per parameter would overflow aap-core's input queue on plugins with many parameters
-            device.setParameterValues(audio.engine, slotIndex, savedValues)
 
             return true
         } catch (e: Throwable) {
@@ -221,6 +224,19 @@ class RackController(
             reportLoadFailure(slotIndex, info)
             return false
         }
+    }
+
+    private fun pushSavedValues(slotIndex: Int, device: SlotDevice, savedParameters: Map<Int, Double>) {
+        val savedValues = savedParameters.mapNotNull { (paramId, value) ->
+            device.parameters.find { it.id == paramId }?.let { it to value }
+        }
+
+        for ((param, value) in savedValues) {
+            device.onHostParameterChange(param, value)
+        }
+
+        // One send per parameter would overflow aap-core's input queue on plugins with many parameters
+        device.setParameterValues(audio.engine, slotIndex, savedValues)
     }
 
     /** Creates the device and reads its parameter values; null if its source is gone or fails to create it. */
