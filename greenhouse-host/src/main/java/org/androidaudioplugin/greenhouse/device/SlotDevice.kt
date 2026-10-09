@@ -112,6 +112,10 @@ interface SlotDeviceSource : AutoCloseable {
     /** The devices that can be loaded now. */
     fun listDevices(): List<DeviceInfo>
 
+    /** [listener] is called on the main thread when [listDevices] may return something else; null stops it. */
+    fun setOnDevicesChanged(listener: (() -> Unit)?) {
+    }
+
     /**
      * Creates [info] for [slotIndex], ready to play at [sampleRate], with [saved] applied. Null if it
      * could not be created.

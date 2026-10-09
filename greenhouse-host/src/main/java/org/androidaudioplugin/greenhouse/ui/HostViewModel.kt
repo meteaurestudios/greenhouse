@@ -60,9 +60,6 @@ class HostViewModel(application: Application, config: HostConfig) : AndroidViewM
 
     private val postStatus: (String) -> Unit = { statusMessage = it }
 
-    /** Set when the app goes to the background, so the plugin list is rescanned when it comes back. */
-    private var wasInBackground = false
-
     private val sources = config.createSources(application, RackController.NUM_RACK_SLOTS)
 
     val audio = AudioEngineController(RackController.NUM_RACK_SLOTS, postStatus)
@@ -79,6 +76,12 @@ class HostViewModel(application: Application, config: HostConfig) : AndroidViewM
         browser.refresh {
             sessions.restoreAutosaveIfRackEmpty()
         }
+
+        // Plugins installed or removed meanwhile, e.g. from the catalog link, show up without a restart
+        for (source in sources) {
+            source.setOnDevicesChanged { browser.refreshAfterDevicesChanged() }
+        }
+
         startMonitoring()
     }
 
@@ -99,12 +102,6 @@ class HostViewModel(application: Application, config: HostConfig) : AndroidViewM
 
     override fun onStart(owner: LifecycleOwner) {
         audio.onAppForeground()
-
-        // Plugins may have been installed or removed meanwhile (e.g. from the catalog link); the first start is covered by init
-        if (wasInBackground) {
-            wasInBackground = false
-            browser.refresh()
-        }
     }
 
     override fun onStop(owner: LifecycleOwner) {
@@ -117,7 +114,6 @@ class HostViewModel(application: Application, config: HostConfig) : AndroidViewM
         // Audio first: reading the plugin states while they render competes with the audio thread
         audio.onAppBackground()
         sessions.autosave()
-        wasInBackground = true
     }
 
     /** Meters and the sequencer every tick; CPU, plugin-side parameter changes and engine state changes at lower rates. */

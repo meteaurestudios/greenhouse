@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.androidaudioplugin.greenhouse.data.PluginCategory
@@ -24,6 +26,9 @@ class PluginBrowserController(
         const val ALL_DEVELOPERS = "ALL"
         const val UNKNOWN_DEVELOPER = "Unknown"
 
+        /** How long package changes must stop before listing again: an update removes, adds, then replaces its package. */
+        const val DEVICES_CHANGED_SETTLE_MS = 500L
+
         private val DeviceInfo.developerName: String
             get() = developer?.ifBlank { null } ?: UNKNOWN_DEVELOPER
     }
@@ -40,6 +45,8 @@ class PluginBrowserController(
 
     var searchQuery by mutableStateOf("")
         private set
+
+    private var pendingRefresh: Job? = null
 
     val availableDevelopers: List<String>
         get() {
@@ -79,6 +86,15 @@ class PluginBrowserController(
 
     fun updateSearchQuery(query: String) {
         searchQuery = query
+    }
+
+    /** Main thread. Lists the devices again once a burst of changes reported by the sources has settled. */
+    fun refreshAfterDevicesChanged() {
+        pendingRefresh?.cancel()
+        pendingRefresh = scope.launch {
+            delay(DEVICES_CHANGED_SETTLE_MS)
+            refresh()
+        }
     }
 
     fun refresh(onComplete: (() -> Unit)? = null) {

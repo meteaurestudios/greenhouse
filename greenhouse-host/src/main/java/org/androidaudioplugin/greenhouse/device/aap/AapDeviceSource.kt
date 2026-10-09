@@ -12,6 +12,7 @@ import org.androidaudioplugin.greenhouse.device.DeviceInfo
 import org.androidaudioplugin.greenhouse.device.SavedDeviceState
 import org.androidaudioplugin.greenhouse.device.SlotDevice
 import org.androidaudioplugin.greenhouse.device.SlotDeviceSource
+import org.androidaudioplugin.hosting.InstalledPluginsMonitor
 import org.androidaudioplugin.hosting.InstanceState
 import org.androidaudioplugin.hosting.NativeRemotePluginInstance
 import java.util.concurrent.atomic.AtomicReferenceArray
@@ -22,6 +23,7 @@ class AapDeviceSource(context: Context, numSlots: Int) : SlotDeviceSource {
         /** Sessions saved before there were several sources hold AAP plugins. */
         const val ID = SlotState.DEFAULT_SOURCE
         private const val TAG = "AapDeviceSource"
+        private const val AAP_LIBRARY_NAME = "androidaudioplugin"
     }
 
     override val id = ID
@@ -37,7 +39,18 @@ class AapDeviceSource(context: Context, numSlots: Int) : SlotDeviceSource {
     /** The device created in each slot, until it is released. */
     private val slotDevices = AtomicReferenceArray<AapSlotDevice?>(numSlots)
 
+    @Volatile
+    private var onDevicesChanged: (() -> Unit)? = null
+
+    /** Any package may be reported, not only plugins: a hint to list again. */
+    private val packagesChangedListener: (String) -> Unit = { onDevicesChanged?.invoke() }
+
     init {
+        // The monitor's receiver calls into aap-core's library, which is otherwise loaded only with the first plugin client
+        System.loadLibrary(AAP_LIBRARY_NAME)
+        InstalledPluginsMonitor.register(this.context)
+        InstalledPluginsMonitor.onInstalledPluginsChangedListeners.add(packagesChangedListener)
+
         hostEngine.onSlotPluginDied = { slotIndex, instance ->
             val device = slotDevices.get(slotIndex)
 
@@ -74,7 +87,12 @@ class AapDeviceSource(context: Context, numSlots: Int) : SlotDeviceSource {
         return device
     }
 
+    override fun setOnDevicesChanged(listener: (() -> Unit)?) {
+        onDevicesChanged = listener
+    }
+
     override fun close() {
+        InstalledPluginsMonitor.onInstalledPluginsChangedListeners.remove(packagesChangedListener)
         hostEngine.close()
     }
 
