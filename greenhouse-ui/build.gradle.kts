@@ -30,11 +30,11 @@ dependencies {
 
     api(platform(libs.compose.bom))
     api(libs.compose.ui)
-    implementation(libs.ui.tooling.preview)
+    implementation(libs.compose.ui.tooling.preview)
     api(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
     api(libs.navigation.compose)
     implementation(libs.compose.audio.controls)
 
-    debugImplementation(libs.ui.tooling)
+    debugImplementation(libs.compose.ui.tooling)
 }
