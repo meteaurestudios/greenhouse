@@ -10,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.androidaudioplugin.greenhouse.data.PluginCategory
 import org.androidaudioplugin.greenhouse.device.DeviceInfo
@@ -47,6 +49,8 @@ class PluginBrowserController(
         private set
 
     private var pendingRefresh: Job? = null
+
+    private val refreshLock = Mutex()
 
     val availableDevelopers: List<String>
         get() {
@@ -99,26 +103,29 @@ class PluginBrowserController(
 
     fun refresh(onComplete: (() -> Unit)? = null) {
         scope.launch(Dispatchers.IO) {
-            try {
-                val found = sources.flatMap { source ->
-                    try {
-                        source.listDevices()
-                    } catch (e: Throwable) {
-                        Log.e(TAG, "Failed to list the devices of ${source.id}", e)
-                        emptyList()
+            // One listing at a time, in request order: a slower, older one must not land last
+            refreshLock.withLock {
+                try {
+                    val found = sources.flatMap { source ->
+                        try {
+                            source.listDevices()
+                        } catch (e: Throwable) {
+                            Log.e(TAG, "Failed to list the devices of ${source.id}", e)
+                            emptyList()
+                        }
                     }
-                }
 
-                withContext(Dispatchers.Main) {
-                    devices = found
-                    postStatus("Found ${found.size} plugin(s).")
-                    onComplete?.invoke()
-                }
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to list devices", e)
+                    withContext(Dispatchers.Main) {
+                        devices = found
+                        postStatus("Found ${found.size} plugin(s).")
+                        onComplete?.invoke()
+                    }
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Failed to list devices", e)
 
-                withContext(Dispatchers.Main) {
-                    postStatus("Error querying plugins: ${e.message}")
+                    withContext(Dispatchers.Main) {
+                        postStatus("Error querying plugins: ${e.message}")
+                    }
                 }
             }
         }

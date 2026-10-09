@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -211,6 +212,8 @@ class RackController(
                 readValues = values,
                 isBypassed = state.isBypassed,
                 selectedPresetIndex = state.selectedPresetIndex,
+                // Not the values read back: aap-core's value cache does not learn of what setState() set,
+                // so it holds the defaults until the plugin reports its values
                 displayedValues = state.parameters.ifEmpty { values }
             )
 
@@ -248,10 +251,20 @@ class RackController(
             return null
         }
 
-        return withContext(Dispatchers.IO) {
-            source.instantiate(info, slotIndex, audio.sampleRate, saved)?.let { device ->
-                device to device.readParameterValues()
+        var created: SlotDevice? = null
+
+        try {
+            // Not cancelled halfway: a device created and then dropped would never be released
+            return withContext(Dispatchers.IO + NonCancellable) {
+                source.instantiate(info, slotIndex, audio.sampleRate, saved)?.let { device ->
+                    created = device
+                    device to device.readParameterValues()
+                }
             }
+        } catch (e: Throwable) {
+            // Created, but the load was cancelled meanwhile or reading its values failed
+            created?.let { releaseDevice(slotIndex, it) }
+            throw e
         }
     }
 

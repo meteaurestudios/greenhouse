@@ -56,7 +56,18 @@ class AapSlotDevice internal constructor(
                 plugin.extensions.any { it.uri?.startsWith(GUI_EXTENSION_URI_PREFIX) == true }
 
     @Volatile
+    private var hasDied = false
+
+    /** Called right away if the plugin already died, e.g. while the rack was still setting up the slot. */
+    @Volatile
     override var onDied: (() -> Unit)? = null
+        set(value) {
+            field = value
+
+            if (value != null && hasDied) {
+                value()
+            }
+        }
 
     override var onParametersChanged: (() -> Unit)? = null
 
@@ -154,6 +165,8 @@ class AapSlotDevice internal constructor(
      */
     internal fun onProcessDied() {
         PluginSlotLoader.abandon(instance)
+        // Before reading onDied: a listener set meanwhile sees it (the rack ignores a second report)
+        hasDied = true
         onDied?.invoke()
     }
 }

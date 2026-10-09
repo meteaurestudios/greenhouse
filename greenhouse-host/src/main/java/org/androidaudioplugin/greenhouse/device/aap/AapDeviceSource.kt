@@ -84,6 +84,12 @@ class AapDeviceSource(context: Context, numSlots: Int) : SlotDeviceSource {
         }
 
         slotDevices.set(slotIndex, device)
+
+        // Its process died before the device was there to hear of it: only the instance was abandoned
+        if (loaded.instance.state == InstanceState.DESTROYED) {
+            device.onProcessDied()
+        }
+
         return device
     }
 

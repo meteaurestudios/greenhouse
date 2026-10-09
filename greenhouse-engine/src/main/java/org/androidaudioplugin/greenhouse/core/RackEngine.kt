@@ -37,12 +37,18 @@ class RackEngine(
         const val MIDI_CC_ALL_NOTES_OFF = 123
         // 32-bit words in a 128-bit UMP packet (SysEx8 parameter changes)
         const val UMP128_WORD_COUNT = 4
-        // aap-core's event buffer (DEFAULT_EVENT_MIDI2_INPUT_BUFFER_SIZE): the most bytes of one queued
-        // UMP input, and of a block's queued input merged with the sequencer's events
-        const val AAP_EVENT_BUFFER_BYTES = 8192
         // aap-core queues a fixed number of inputs per slot until the next process() and drops the rest,
         // so many values are sent in as few inputs as possible, leaving half the merge room to the sequencer
-        const val MAX_UMP_INPUT_BYTES = AAP_EVENT_BUFFER_BYTES / 2
+        const val UMP_INPUT_SHARE_OF_EVENT_BUFFER = 2
+
+        /**
+         * aap-core's event buffer (DEFAULT_EVENT_MIDI2_INPUT_BUFFER_SIZE): the most bytes of one queued
+         * UMP input, and of a block's queued input merged with the sequencer's events.
+         */
+        val aapEventBufferBytes: Int by lazy { nativeGetAapEventBufferBytes() }
+
+        val maxUmpInputBytes: Int
+            get() = aapEventBufferBytes / UMP_INPUT_SHARE_OF_EVENT_BUFFER
 
         init {
             try {
@@ -118,6 +124,9 @@ class RackEngine(
 
         @JvmStatic
         private external fun nativeGetAllSlotLevels(outLevels: FloatArray)
+
+        @JvmStatic
+        private external fun nativeGetAapEventBufferBytes(): Int
     }
 
     /**
@@ -315,7 +324,7 @@ class RackEngine(
         for ((parameter, value) in values) {
             val bytes = parameterChangeBytes(parameter, value)
 
-            if (pending.size + bytes.size > MAX_UMP_INPUT_BYTES) {
+            if (pending.size + bytes.size > maxUmpInputBytes) {
                 sendUmpToSlot(slotIndex, pending.toByteArray())
                 pending.clear()
             }

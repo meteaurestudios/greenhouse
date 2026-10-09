@@ -197,4 +197,10 @@ Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeGetAllSlotLevels(
     env->ReleasePrimitiveArrayCritical(outLevels, levels, 0);
 }
 
+JNIEXPORT jint JNICALL
+Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeGetAapEventBufferBytes(JNIEnv* env, jclass clazz)
+{
+    return aap::DEFAULT_EVENT_MIDI2_INPUT_BUFFER_SIZE;
+}
+
 } // extern "C"
