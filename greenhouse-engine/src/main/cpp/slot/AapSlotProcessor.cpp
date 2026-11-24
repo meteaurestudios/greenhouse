@@ -23,32 +23,27 @@ bool isInactiveInstance(aap::PluginInstance* instance)
 
 AudioPorts findAudioPorts(aap::PluginInstance* instance)
 {
+    // A slot uses the main buses only, up to stereo.
     AudioPorts ports;
-    auto numPorts = instance->getNumPorts();
+    ports.mMidiIn = instance->getMainEventPortIndex(AAP_PORT_DIRECTION_INPUT);
 
-    for (int32_t i = 0; i < numPorts; i++) {
-        auto port = instance->getPort(i);
+    auto in = instance->getBus(AAP_BUS_KIND_AUDIO, AAP_PORT_DIRECTION_INPUT, 0);
 
-        if (port == nullptr) {
-            continue;
+    if (in != nullptr) {
+        ports.mInCount = std::min(in->getChannelCount(), STEREO_CHANNEL_COUNT);
+
+        for (int32_t ch = 0; ch < ports.mInCount; ch++) {
+            ports.mIn[ch] = in->getPortIndex(ch);
         }
+    }
 
-        if (port->getContentType() == AAP_CONTENT_TYPE_MIDI2) {
-            if (port->getPortDirection() == AAP_PORT_DIRECTION_INPUT && ports.mMidiIn < 0) {
-                ports.mMidiIn = i;
-            }
+    auto out = instance->getBus(AAP_BUS_KIND_AUDIO, AAP_PORT_DIRECTION_OUTPUT, 0);
 
-            continue;
-        }
+    if (out != nullptr) {
+        ports.mOutCount = std::min(out->getChannelCount(), STEREO_CHANNEL_COUNT);
 
-        if (port->getContentType() != AAP_CONTENT_TYPE_AUDIO) {
-            continue;
-        }
-
-        if (port->getPortDirection() == AAP_PORT_DIRECTION_INPUT && ports.mInCount < STEREO_CHANNEL_COUNT) {
-            ports.mIn[ports.mInCount++] = i;
-        } else if (port->getPortDirection() == AAP_PORT_DIRECTION_OUTPUT && ports.mOutCount < STEREO_CHANNEL_COUNT) {
-            ports.mOut[ports.mOutCount++] = i;
+        for (int32_t ch = 0; ch < ports.mOutCount; ch++) {
+            ports.mOut[ch] = out->getPortIndex(ch);
         }
     }
 
@@ -57,9 +52,9 @@ AudioPorts findAudioPorts(aap::PluginInstance* instance)
 
 } // namespace
 
-std::unique_ptr<AapSlotProcessor> AapSlotProcessor::create(aap::PluginClient* client, int32_t instanceId, int32_t sampleRate)
+std::unique_ptr<AapSlotProcessor> AapSlotProcessor::create(aap::PluginClient* client, const char* pluginId, int32_t instanceId, int32_t sampleRate)
 {
-    auto instance = (client != nullptr && instanceId >= 0) ? client->getInstanceById(instanceId) : nullptr;
+    auto instance = (client != nullptr && pluginId != nullptr && instanceId >= 0) ? client->getInstance(pluginId, instanceId) : nullptr;
 
     if (instance == nullptr) {
         return nullptr;

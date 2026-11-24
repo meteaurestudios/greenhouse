@@ -99,7 +99,7 @@ class RackEngine(
         private external fun nativeIsMMapUsed(): Boolean
 
         @JvmStatic
-        private external fun nativeSetSlotPlugin(slotIndex: Int, nativeClient: Long, instanceId: Int, sampleRate: Int)
+        private external fun nativeSetSlotPlugin(slotIndex: Int, nativeClient: Long, pluginId: String, instanceId: Int, sampleRate: Int)
 
         @JvmStatic
         private external fun nativeSetSlotBypassed(slotIndex: Int, bypassed: Boolean)
@@ -192,7 +192,7 @@ class RackEngine(
      */
     fun setSlotPlugin(slotIndex: Int, instance: NativeRemotePluginInstance, sampleRate: Int) {
         if (slotIndex in 0 until numSlots) {
-            nativeSetSlotPlugin(slotIndex, instance.client, instance.instanceId, sampleRate)
+            nativeSetSlotPlugin(slotIndex, instance.client, instance.pluginId, instance.instanceId, sampleRate)
         }
     }
 
@@ -202,7 +202,7 @@ class RackEngine(
      */
     fun clearSlot(slotIndex: Int) {
         if (slotIndex in 0 until numSlots) {
-            nativeSetSlotPlugin(slotIndex, 0L, -1, 0)
+            nativeSetSlotPlugin(slotIndex, 0L, "", -1, 0)
         }
     }
 

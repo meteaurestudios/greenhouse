@@ -100,10 +100,17 @@ Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeIsMMapUsed(
 
 JNIEXPORT void JNICALL
 Java_org_androidaudioplugin_greenhouse_core_RackEngine_nativeSetSlotPlugin(
-        JNIEnv* env, jclass clazz, jint slotIndex, jlong nativeClient, jint instanceId, jint sampleRate)
+        JNIEnv* env, jclass clazz, jint slotIndex, jlong nativeClient, jstring pluginId, jint instanceId, jint sampleRate)
 {
     auto client = reinterpret_cast<aap::PluginClient*>(nativeClient);
-    getEngine().setSlotProcessor(slotIndex, greenhouse::AapSlotProcessor::create(client, instanceId, sampleRate));
+    auto pluginIdChars = pluginId != nullptr ? env->GetStringUTFChars(pluginId, nullptr) : nullptr;
+    auto processor = greenhouse::AapSlotProcessor::create(client, pluginIdChars, instanceId, sampleRate);
+
+    if (pluginIdChars != nullptr) {
+        env->ReleaseStringUTFChars(pluginId, pluginIdChars);
+    }
+
+    getEngine().setSlotProcessor(slotIndex, std::move(processor));
 }
 
 JNIEXPORT void JNICALL

@@ -31,7 +31,7 @@ class AapSlotProcessor final : public SlotProcessor
 {
 public:
     /** sampleRate: the rate the plugin was prepared at. Null if the client has no such instance. */
-    static std::unique_ptr<AapSlotProcessor> create(aap::PluginClient* client, int32_t instanceId, int32_t sampleRate);
+    static std::unique_ptr<AapSlotProcessor> create(aap::PluginClient* client, const char* pluginId, int32_t instanceId, int32_t sampleRate);
 
     AapSlotProcessor(aap::PluginInstance* instance, int32_t sampleRate);
 
